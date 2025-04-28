@@ -5,12 +5,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Check-In Summary</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
     <div class="sidebar">
-        <a href="{{ url_for('home') }}">Home</a>
-        <a href="{{ url_for('checkin') }}">Check-In</a>
-        <a href="{{ url_for('view_checkins') }}">View Check-Ins</a>
+        <div class="sidebar-header">
+            <h3>Linda Vista Motel</h3>
+            {% if role == 'admin' %}
+            <p class="user-role">Admin Mode</p>
+            {% elif role == 'employee' %}
+            <p class="user-role">Employee Mode</p>
+            {% endif %}
+        </div>
+        {% if role == 'admin' %}
+        <a href="{{ url_for('home') }}"><i class="fas fa-home"></i> Dashboard</a>
+        {% endif %}
+        <a href="{{ url_for('checkin') }}" class="active"><i class="fas fa-clipboard-check"></i> Check-In</a>
+        {% if role == 'admin' %}
+        <a href="{{ url_for('view_checkins') }}"><i class="fas fa-list"></i> View Check-Ins</a>
+        {% endif %}
+        {% if logged_in %}
+        <a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> Logout</a>
+        {% else %}
+        <a href="{{ url_for('login') }}"><i class="fas fa-sign-in-alt"></i> Login</a>
+        {% endif %}
     </div>
 
     <div class="content">

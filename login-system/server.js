@@ -4,9 +4,12 @@ const passport = require('passport');
 const LocalStrategy = require('passport-local').Strategy;
 const bcrypt = require('bcrypt');
 const bodyParser = require('body-parser');
+const path = require('path');
+const fs = require('fs');
+const { authenticateUser } = require('./auth/auth');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -18,11 +21,25 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Dummy data for users
-const users = [
-  { id: 1, username: 'employee', password: '$2b$10$somethinghashed', role: 'employee' },
-  { id: 2, username: 'admin', password: '$2b$10$somethinghashed', role: 'admin' }
-];
+// Serve static files
+app.use(express.static(path.join(__dirname, 'public')));
+app.use('/templates', express.static(path.join(__dirname, '..', 'templates')));
+
+// Read actual users from users.json
+let users = [];
+try {
+  const usersData = fs.readFileSync(path.join(__dirname, 'users.json'), 'utf8');
+  users = JSON.parse(usersData);
+  // Add id property if not present
+  users = users.map((user, index) => ({ ...user, id: index + 1 }));
+} catch (error) {
+  console.error('Error reading users.json:', error);
+  // Fallback to dummy users
+  users = [
+    { id: 1, username: 'employee', password: '$2b$10$thD2lJjCcBMu.Pyct9dhJOD8jO5./ZkB3tFMNSmeo2AxluLptZHPy', role: 'employee' },
+    { id: 2, username: 'admin', password: '$2b$10$R.88jj4JBgNRZmdLe95iM.HtjBRtSvSrL/9SFxN09HLgvDVJfmNzC', role: 'admin' }
+  ];
+}
 
 // Passport Local Strategy
 passport.use(new LocalStrategy(
@@ -56,14 +73,19 @@ app.get('/', (req, res) => {
 });
 
 // Login Route
-app.post('/login', passport.authenticate('local', {
-  successRedirect: '/dashboard',
-  failureRedirect: '/login',
-  failureFlash: false
-}));
+app.post('/login', (req, res, next) => {
+  passport.authenticate('local', (err, user, info) => {
+    if (err) { return next(err); }
+    if (!user) { return res.status(401).send('Login failed'); }
+    req.logIn(user, (err) => {
+      if (err) { return next(err); }
+      return res.send('Login successful');
+    });
+  })(req, res, next);
+});
 
 // Logout Route
-app.get('/logout', (req, res) => {
+app.get('/logout', (req, res, next) => {
   req.logout((err) => {
     if (err) { return next(err); }
     res.redirect('/');
@@ -103,6 +125,11 @@ app.get('/verify_form', isAuthenticated, checkRole('employee'), (req, res) => {
 
 app.get('/admin', isAuthenticated, checkRole('admin'), (req, res) => {
   res.send('Admin page');
+});
+
+// Add a GET route to serve the login page
+app.get('/login', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'templates', 'login.html'));
 });
 
 app.listen(PORT, () => {

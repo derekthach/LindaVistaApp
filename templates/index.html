@@ -3,35 +3,105 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Puerto Rican Motel</title>
+    <title>Linda Vista Motel</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
     <div class="sidebar">
-        <a href="{{ url_for('home') }}">Home</a>
-        <a href="{{ url_for('checkin') }}">Check-In</a>
-        <a href="{{ url_for('view_checkins') }}">View Check-Ins</a>
-        <a href="{{ url_for('login') }}">Login</a>
+        <div class="sidebar-header">
+            <h3>Linda Vista Motel</h3>
+            {% if role == 'admin' %}
+            <p class="user-role">Admin Mode</p>
+            {% elif role == 'employee' %}
+            <p class="user-role">Employee Mode</p>
+            {% endif %}
+        </div>
+        <a href="{{ url_for('home') }}" class="active"><i class="fas fa-home"></i> Dashboard</a>
+        <a href="{{ url_for('checkin') }}"><i class="fas fa-clipboard-check"></i> Check-In</a>
+        {% if role == 'admin' %}
+        <a href="{{ url_for('view_checkins') }}"><i class="fas fa-list"></i> View Check-Ins</a>
+        {% endif %}
+        {% if logged_in %}
+        <a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> Logout</a>
+        {% else %}
+        <a href="{{ url_for('login') }}"><i class="fas fa-sign-in-alt"></i> Login</a>
+        {% endif %}
     </div>
 
     <div class="content">
-        <header class="header">
+        <header>
             <h1 class="header-title">Linda Vista Motel Dashboard</h1>
+            <p class="header-subtitle">Manage your motel operations efficiently</p>
         </header>
-        <h2>Dashboard</h2>
-        <main class="dashboard">
+        
+        <div class="dashboard-stats">
             <div class="card">
-                <h2>Check-Ins</h2>
-                <p>Today's Check-Ins: {{ cars_today }}</p>
-                <p>This Week's Check-Ins: {{ cars_this_week }}</p>
+                <div class="card-icon">
+                    <i class="fas fa-car"></i>
+                </div>
+                <div class="card-content">
+                    <h2>Today's Check-Ins</h2>
+                    <div class="number">{{ cars_today }}</div>
+                    <p class="subtitle">Vehicles registered today</p>
+                </div>
             </div>
+            
             <div class="card">
-                <h2>Profit</h2>
-                <p>Today's Profit: ${{ profit_today }}</p>
-                <p>This Week's Profit: ${{ profit_this_week }}</p>
+                <div class="card-icon">
+                    <i class="fas fa-calendar-week"></i>
+                </div>
+                <div class="card-content">
+                    <h2>Weekly Check-Ins</h2>
+                    <div class="number">{{ cars_this_week }}</div>
+                    <p class="subtitle">Total vehicles this week</p>
+                </div>
             </div>
-
-        </main>
+            
+            <div class="card">
+                <div class="card-icon">
+                    <i class="fas fa-dollar-sign"></i>
+                </div>
+                <div class="card-content">
+                    <h2>Today's Revenue</h2>
+                    <div class="number">${{ profit_today }}</div>
+                    <p class="subtitle">Daily income</p>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-icon">
+                    <i class="fas fa-chart-line"></i>
+                </div>
+                <div class="card-content">
+                    <h2>Weekly Revenue</h2>
+                    <div class="number">${{ profit_this_week }}</div>
+                    <p class="subtitle">Total income this week</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="quick-actions">
+            <h2>Quick Actions</h2>
+            <div class="action-buttons">
+                <a href="{{ url_for('checkin') }}" class="button primary-button">
+                    <i class="fas fa-plus-circle"></i> New Check-In
+                </a>
+                <a href="{{ url_for('view_checkins') }}" class="button secondary-button">
+                    <i class="fas fa-eye"></i> View All Check-Ins
+                </a>
+                <a href="{{ url_for('export_checkins') }}" class="button accent-button">
+                    <i class="fas fa-file-export"></i> Export Data
+                </a>
+            </div>
+        </div>
     </div>
+
+    <script>
+        // Add any JavaScript functionality here
+        document.addEventListener('DOMContentLoaded', function() {
+            // Future JavaScript can be added here
+        });
+    </script>
 </body>
 </html> 
