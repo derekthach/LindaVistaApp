@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Check-In</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="sidebar">
+        <a href="{{ url_for('home') }}">Home</a>
+        <a href="{{ url_for('checkin') }}">Check-In</a>
+        <a href="{{ url_for('view_checkins') }}">View Check-Ins</a>
+    </div>
+
+    <div class="content">
+        <header class="header">
+            <h1 class="header-title">Linda Vista Motel Dashboard</h1>
+        </header>
+        <form method="POST" class="form-container">
+            <h1>Check-In</h1>
+            <label for="room_id">Room Number:</label>
+            <select name="room_id" id="room_id">
+                {% for room in range(1, 41) %}
+                <option value="{{ room }}" {% if room == request.args.get('room_id', '')|int %}selected{% endif %}>Room {{ room }}</option>
+                {% endfor %}
+            </select>
+            <br>
+            <label for="receipt_number">Receipt Number:</label>
+            <input type="text" id="receipt_number" name="receipt_number" value="{{ request.args.get('receipt_number', '') }}" required>
+            <br>
+            <label for="date">Date:</label>
+            <input type="date" id="date" name="date" value="{{ request.args.get('date', '') }}">
+            <br>
+            <label for="cost">Cost:</label>
+            <input type="text" id="cost" name="cost" value="{{ request.args.get('cost', '') }}" required>
+            <br>
+            <label for="payment_method">Payment Method:</label>
+            <select id="payment_method" name="payment_method" required>
+                <option value="cash" {% if request.args.get('payment_method') == 'cash' %}selected{% endif %}>Cash</option>
+                <option value="ath_mobil" {% if request.args.get('payment_method') == 'ath_mobil' %}selected{% endif %}>ATH Mobil</option>
+            </select>
+            <br>
+            <label for="time">Time:</label>
+            <input type="time" id="time" name="time" value="{{ request.args.get('time', '') }}">
+            <br>
+            <label for="car_plate">License Plate:</label>
+            <input type="text" id="car_plate" name="car_plate" value="{{ request.args.get('car_plate', '') }}" required>
+            <br>
+            <label for="car_make">Car Make:</label>
+            <input type="text" id="car_make" name="car_make" value="{{ request.args.get('car_make', '') }}" required>
+            <br>
+            <label for="car_color">Car Color:</label>
+            <select id="car_color" name="car_color" required>
+                <option value="black" {% if request.args.get('car_color') == 'black' %}selected{% endif %}>Black</option>
+                <option value="white" {% if request.args.get('car_color') == 'white' %}selected{% endif %}>White</option>
+                <option value="gray" {% if request.args.get('car_color') == 'gray' %}selected{% endif %}>Gray</option>
+                <option value="silver" {% if request.args.get('car_color') == 'silver' %}selected{% endif %}>Silver</option>
+                <option value="red" {% if request.args.get('car_color') == 'red' %}selected{% endif %}>Red</option>
+                <option value="blue" {% if request.args.get('car_color') == 'blue' %}selected{% endif %}>Blue</option>
+                <option value="brown" {% if request.args.get('car_color') == 'brown' %}selected{% endif %}>Brown</option>
+                <option value="green" {% if request.args.get('car_color') == 'green' %}selected{% endif %}>Green</option>
+                <option value="beige" {% if request.args.get('car_color') == 'beige' %}selected{% endif %}>Beige</option>
+                <option value="yellow" {% if request.args.get('car_color') == 'yellow' %}selected{% endif %}>Yellow</option>
+            </select>
+            <br>
+            <label for="staff_name">Name of Staff:</label>
+            <input type="text" id="staff_name" name="staff_name" value="{{ request.args.get('staff_name', '') }}" required>
+            <br>
+            <label for="note">Note:</label>
+            <textarea id="note" name="note">{{ request.args.get('note', '') }}</textarea>
+            <br>
+            <button type="submit" class="checkin-button">Check In</button>
+        </form>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.5.34/moment-timezone-with-data.min.js"></script>
+    <script>
+        window.onload = function() {
+            // Get current date and time in Naguabo, Puerto Rico timezone
+            var now = moment.tz("America/Puerto_Rico");
+            
+            // Set the date input
+            document.getElementById('date').value = now.format('YYYY-MM-DD');
+            
+            // Set the time input
+            document.getElementById('time').value = now.format('HH:mm');
+        };
+    </script>
+</body>
+</html> 

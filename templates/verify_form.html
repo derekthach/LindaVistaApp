@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Check-In Summary</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="sidebar">
+        <a href="{{ url_for('home') }}">Home</a>
+        <a href="{{ url_for('checkin') }}">Check-In</a>
+        <a href="{{ url_for('view_checkins') }}">View Check-Ins</a>
+    </div>
+
+    <div class="content">
+        <header class="header">
+            <h1 class="header-title">Check-In Summary</h1>
+        </header>
+        <div class="summary-container">
+            <h2>Check-In Details</h2>
+            <p><strong>Room Number:</strong> {{ room_id }}</p>
+            <p><strong>Receipt Number:</strong> {{ receipt_number }}</p>
+            <p><strong>Date:</strong> {{ date }}</p>
+            <p><strong>Cost:</strong> {{ cost }}</p>
+            <p><strong>Payment Method:</strong> {{ payment_method }}</p>
+            <p><strong>Time:</strong> {{ time }}</p>
+            <p><strong>License Plate:</strong> {{ car_plate }}</p>
+            <p><strong>Car Make:</strong> {{ car_make }}</p>
+            <p><strong>Car Color:</strong> {{ car_color }}</p>
+            <p><strong>Name of Staff:</strong> {{ staff_name }}</p>
+            <p><strong>Note:</strong> {{ note }}</p>
+        </div>
+        <form method="POST" action="{{ url_for('confirm_checkin') }}">
+            <!-- Hidden inputs to pass data -->
+            <input type="hidden" name="room_id" value="{{ room_id }}">
+            <input type="hidden" name="receipt_number" value="{{ receipt_number }}">
+            <input type="hidden" name="date" value="{{ date }}">
+            <input type="hidden" name="cost" value="{{ cost }}">
+            <input type="hidden" name="payment_method" value="{{ payment_method }}">
+            <input type="hidden" name="time" value="{{ time }}">
+            <input type="hidden" name="car_plate" value="{{ car_plate }}">
+            <input type="hidden" name="car_make" value="{{ car_make }}">
+            <input type="hidden" name="car_color" value="{{ car_color }}">
+            <input type="hidden" name="staff_name" value="{{ staff_name }}">
+            <input type="hidden" name="note" value="{{ note }}">
+            <button type="submit">Confirm Form</button>
+        </form>
+
+        <!-- Edit Button -->
+        <form method="GET" action="{{ url_for('checkin') }}">
+            <input type="hidden" name="room_id" value="{{ room_id }}">
+            <input type="hidden" name="receipt_number" value="{{ receipt_number }}">
+            <input type="hidden" name="date" value="{{ date }}">
+            <input type="hidden" name="cost" value="{{ cost }}">
+            <input type="hidden" name="payment_method" value="{{ payment_method }}">
+            <input type="hidden" name="time" value="{{ time }}">
+            <input type="hidden" name="car_plate" value="{{ car_plate }}">
+            <input type="hidden" name="car_make" value="{{ car_make }}">
+            <input type="hidden" name="car_color" value="{{ car_color }}">
+            <input type="hidden" name="staff_name" value="{{ staff_name }}">
+            <input type="hidden" name="note" value="{{ note }}">
+            <button type="submit">Edit</button>
+        </form>
+    </div>
+</body>
+</html> 

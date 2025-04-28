@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>View Check-Ins</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="sidebar">
+        <a href="{{ url_for('home') }}">Home</a>
+        <a href="{{ url_for('checkin') }}">Check-In</a>
+        <a href="{{ url_for('view_checkins') }}">View Check-Ins</a>
+    </div>
+
+    <div class="content">
+        <header class="header">
+            <h1 class="header-title">Linda Vista Motel Dashboard</h1>
+        </header>
+        <table class="table">
+            <tr>
+                <th>Check-In ID</th>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Receipt Number</th>
+                <th>Cost</th>
+                <th>Payment Method</th>
+                <th>Room ID</th>
+                <th>Staff Name</th>
+                <th>License Plate</th>
+                <th>Car Make</th>
+                <th>Car Color</th>
+                <th>Notes</th>
+                <th></th>
+            </tr>
+            {% for checkin in checkins %}
+            <tr>
+                <td>{{ checkin[0] }}</td>
+                <td>{{ checkin[2] }}</td>
+                <td>{{ checkin[3] }}</td>
+                <td>{{ checkin[1] }}</td>
+                <td>${{ checkin[5] }}</td>
+                <td>{{ checkin[6] }}</td>
+                <td>{{ checkin[4] }}</td>
+                <td>{{ checkin[7] }}</td>
+                <td>{{ checkin[8] }}</td>
+                <td>{{ checkin[9] }}</td>
+                <td>{{ checkin[10] }}</td>
+                <td>{{ checkin[11] }}</td>
+                {% if loop.first %}
+                <td rowspan="{{ checkins|length }}">
+                    <button onclick="window.location.href='{{ url_for('export_checkins') }}';" class="export-button">Export Checkins</button>
+                </td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+</body>
+</html>
