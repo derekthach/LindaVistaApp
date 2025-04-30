@@ -1,0 +1,7 @@
+Check-In ID,Date,Time,Receipt Number,Room ID,Staff Name,Car Plate,Cost,Notes
+8,2025-04-30,15:59,1831,38,Tono,67893247,120.0,testing spanish
+10,2025-04-30,16:17,10,1,Keith Thach,3838473737,200.0,testing
+11,2025-04-30,16:24,0100,18,Tonito,67893247,135.0,testing auto increment
+12,2025-04-30,16:27,0100,1,Derek Thach,192498,105.0,testing
+13,2025-04-30,16:28,1004,1,Derek Thach,12356,100.0,testing receipt number
+14,2025-04-30,16:29,0345,1,Makito,67893247,1000.0,testing receipt number

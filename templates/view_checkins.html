@@ -31,6 +31,26 @@
         <header class="header">
             <h1 class="header-title">Linda Vista Motel Dashboard</h1>
         </header>
+        
+        <!-- Date Filter Form -->
+        <div class="filter-container">
+            <form method="GET" action="{{ url_for('view_checkins') }}" class="date-filter-form">
+                <div class="filter-section">
+                    <label for="start_date">From:</label>
+                    <input type="date" id="start_date" name="start_date" value="{{ request.args.get('start_date', '') }}">
+                    
+                    <label for="end_date">To:</label>
+                    <input type="date" id="end_date" name="end_date" value="{{ request.args.get('end_date', '') }}">
+                    
+                    <button type="submit" class="filter-button">Filter</button>
+                    
+                    {% if request.args.get('start_date') or request.args.get('end_date') %}
+                    <a href="{{ url_for('view_checkins') }}" class="reset-button">Reset</a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+        
         <table class="table">
             <tr>
                 <th>Check-In ID</th>
@@ -63,7 +83,7 @@
                 <td>{{ checkin[11] }}</td>
                 {% if loop.first %}
                 <td rowspan="{{ checkins|length }}">
-                    <a href="{{ url_for('export_checkins') }}" class="export-button">Export Checkins</a>
+                    <a href="{{ url_for('export_checkins', start_date=request.args.get('start_date', ''), end_date=request.args.get('end_date', '')) }}" class="export-button">Export Checkins</a>
                 </td>
                 {% endif %}
             </tr>

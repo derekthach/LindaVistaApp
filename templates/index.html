@@ -6,6 +6,8 @@
     <title>Linda Vista Motel</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Add Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <div class="sidebar">
@@ -32,8 +34,12 @@
     <div class="content">
         <header>
             <h1 class="header-title">Linda Vista Motel Dashboard</h1>
-            <p class="header-subtitle">Manage your motel operations efficiently</p>
         </header>
+        
+        <!-- SECTION 1: SUMMARY METRICS -->
+        <div class="stats-banner">
+            <h2>Daily/Weekly Summary</h2>
+        </div>
         
         <div class="dashboard-stats">
             <div class="card">
@@ -81,6 +87,90 @@
             </div>
         </div>
         
+        <!-- SECTION 2: TREND ANALYTICS -->
+        <div class="stats-banner analytics-banner">
+            <h2>Trend Analytics</h2>
+        </div>
+        
+        <div class="dashboard-charts">
+            <!-- Time-based trend charts -->
+            <div class="chart-container">
+                <h2>Check-Ins Over Time</h2>
+                <canvas id="checkinsChart"></canvas>
+            </div>
+            
+            <div class="chart-container">
+                <h2>Revenue Overview</h2>
+                <canvas id="revenueChart"></canvas>
+            </div>
+        </div>
+        
+        <!-- SECTION 3: DETAILED ANALYTICS -->
+        <div class="stats-banner analytics-banner">
+            <h2>Detailed Analytics</h2>
+        </div>
+        
+        <div class="dashboard-charts">
+            <!-- Detailed analysis charts -->
+            <div class="chart-container">
+                <h2>Room Usage Frequency</h2>
+                <canvas id="roomUsageChart"></canvas>
+            </div>
+            
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h2>Monthly Revenue</h2>
+                    <div class="inline-filters">
+                        <select id="monthSelect" class="compact-select">
+                            <option value="1">Jan</option>
+                            <option value="2">Feb</option>
+                            <option value="3">Mar</option>
+                            <option value="4">Apr</option>
+                            <option value="5">May</option>
+                            <option value="6">Jun</option>
+                            <option value="7">Jul</option>
+                            <option value="8">Aug</option>
+                            <option value="9">Sep</option>
+                            <option value="10">Oct</option>
+                            <option value="11">Nov</option>
+                            <option value="12">Dec</option>
+                        </select>
+                        <select id="yearSelect" class="compact-select"></select>
+                        <button id="applyFilter" class="compact-button">Apply</button>
+                    </div>
+                </div>
+                <div class="monthly-summary">
+                    <div class="summary-period current">
+                        <h3 id="currentMonthTitle">Current Month</h3>
+                        <div class="summary-metrics">
+                            <div class="metric">
+                                <span class="metric-value" id="currentMonthRevenue">$0.00</span>
+                                <span class="metric-label">Revenue</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-value" id="currentMonthCars">0</span>
+                                <span class="metric-label">Check-ins</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="summary-compare">vs</div>
+                    <div class="summary-period previous">
+                        <h3 id="prevMonthTitle">Previous Month</h3>
+                        <div class="summary-metrics">
+                            <div class="metric">
+                                <span class="metric-value" id="prevMonthRevenue">$0.00</span>
+                                <span class="metric-label">Revenue</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-value" id="prevMonthCars">0</span>
+                                <span class="metric-label">Check-ins</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
         <div class="quick-actions">
             <h2>Quick Actions</h2>
             <div class="action-buttons">
@@ -98,9 +188,225 @@
     </div>
 
     <script>
-        // Add any JavaScript functionality here
+        // Add this at the bottom of your file, before the closing </body> tag
         document.addEventListener('DOMContentLoaded', function() {
-            // Future JavaScript can be added here
+            // Fetch data for charts
+            fetch('/api/dashboard-data')
+                .then(response => response.json())
+                .then(data => {
+                    // Create Check-ins Chart
+                    const checkinsCtx = document.getElementById('checkinsChart').getContext('2d');
+                    new Chart(checkinsCtx, {
+                        type: 'line',
+                        data: {
+                            labels: data.dates,
+                            datasets: [{
+                                label: 'Check-ins',
+                                data: data.checkins,
+                                backgroundColor: 'rgba(44, 110, 73, 0.2)',
+                                borderColor: 'rgba(44, 110, 73, 1)',
+                                borderWidth: 2,
+                                tension: 0.1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: {
+                                        precision: 0
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    
+                    // Create Revenue Chart
+                    const revenueCtx = document.getElementById('revenueChart').getContext('2d');
+                    new Chart(revenueCtx, {
+                        type: 'bar',
+                        data: {
+                            labels: data.dates,
+                            datasets: [{
+                                label: 'Revenue ($)',
+                                data: data.revenue,
+                                backgroundColor: 'rgba(255, 193, 7, 0.5)',
+                                borderColor: 'rgba(255, 193, 7, 1)',
+                                borderWidth: 2
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            scales: {
+                                y: {
+                                    beginAtZero: true
+                                }
+                            }
+                        }
+                    });
+                })
+                .catch(error => console.error('Error loading dashboard data:', error));
+
+            // Room usage chart
+            fetch('/api/room-usage-data')
+                .then(response => response.json())
+                .then(data => {
+                    // Create Room Usage Chart
+                    const roomCtx = document.getElementById('roomUsageChart').getContext('2d');
+                    new Chart(roomCtx, {
+                        type: 'bar',
+                        data: {
+                            labels: data.room_numbers,
+                            datasets: [{
+                                label: 'Frequency',
+                                data: data.usage_counts,
+                                backgroundColor: 'rgba(76, 149, 108, 0.6)',
+                                borderColor: 'rgba(76, 149, 108, 1)',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            indexAxis: 'y',  // Horizontal bar chart
+                            responsive: true,
+                            scales: {
+                                x: {
+                                    beginAtZero: true,
+                                    ticks: {
+                                        precision: 0
+                                    }
+                                }
+                            },
+                            plugins: {
+                                tooltip: {
+                                    callbacks: {
+                                        title: function(tooltipItems) {
+                                            return 'Room ' + tooltipItems[0].label;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                })
+                .catch(error => console.error('Error loading room usage data:', error));
+
+            // Populate the year dropdown with the current and past years
+            const yearSelect = document.getElementById('yearSelect');
+            const currentYear = new Date().getFullYear();
+            
+            // Initially add current year
+            const defaultOption = document.createElement('option');
+            defaultOption.value = currentYear;
+            defaultOption.textContent = currentYear;
+            yearSelect.appendChild(defaultOption);
+            
+            // Set current month in the month dropdown
+            const currentMonth = new Date().getMonth() + 1; // JavaScript months are 0-indexed
+            document.getElementById('monthSelect').value = currentMonth;
+            
+            // Function to load monthly revenue data
+            function loadMonthlyRevenue() {
+                // Get values from selectors
+                const selectedMonth = document.getElementById('monthSelect').value;
+                const selectedYear = document.getElementById('yearSelect').value;
+                
+                // Make sure we're using these values in the API call
+                fetch(`/api/monthly-revenue?month=${selectedMonth}&year=${selectedYear}`)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        console.log("API response:", data); // Debug to see what's coming back
+                        
+                        // Update month titles with the actual selected values
+                        document.getElementById('currentMonthTitle').textContent = 
+                            `${data.current_month.name} ${data.current_month.year}`;
+                        document.getElementById('prevMonthTitle').textContent = 
+                            `${data.prev_month.name} ${data.prev_month.year}`;
+                        
+                        // Format revenue with commas and fixed decimal places
+                        document.getElementById('currentMonthRevenue').innerHTML = 
+                            `$${parseFloat(data.current_month.total).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                        document.getElementById('prevMonthRevenue').innerHTML = 
+                            `$${parseFloat(data.prev_month.total).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                        
+                        // Update car check-in count
+                        document.getElementById('currentMonthCars').textContent = 
+                            data.current_month.car_count;
+                        document.getElementById('prevMonthCars').textContent = 
+                            data.prev_month.car_count;
+                        
+                        // Add trend indicators only if there are previous values
+                        if (data.prev_month.total > 0) {
+                            const revenueChange = data.current_month.total - data.prev_month.total;
+                            const currentRevenueElement = document.getElementById('currentMonthRevenue');
+                            if (revenueChange > 0) {
+                                currentRevenueElement.innerHTML += ' <span class="change positive">▲</span>';
+                            } else if (revenueChange < 0) {
+                                currentRevenueElement.innerHTML += ' <span class="change negative">▼</span>';
+                            }
+                        }
+                        
+                        if (data.prev_month.car_count > 0) {
+                            const carChange = data.current_month.car_count - data.prev_month.car_count;
+                            const currentCarsElement = document.getElementById('currentMonthCars');
+                            if (carChange > 0) {
+                                currentCarsElement.innerHTML += ' <span class="change positive">▲</span>';
+                            } else if (carChange < 0) {
+                                currentCarsElement.innerHTML += ' <span class="change negative">▼</span>';
+                            }
+                        }
+                        
+                        // Populate year dropdown with available years from API
+                        if (data.years_available && data.years_available.length > 0) {
+                            const yearSelect = document.getElementById('yearSelect');
+                            
+                            // Get current options to avoid recreating unchanged dropdown
+                            const currentOptions = Array.from(yearSelect.options).map(opt => opt.value);
+                            
+                            // Only update if we have different years than what's already there
+                            if (!arraysEqual(currentOptions, data.years_available)) {
+                                yearSelect.innerHTML = ''; // Clear current options
+                                
+                                data.years_available.forEach(year => {
+                                    const option = document.createElement('option');
+                                    option.value = year;
+                                    option.textContent = year;
+                                    yearSelect.appendChild(option);
+                                });
+                                
+                                // Set selected year to match what we requested
+                                yearSelect.value = selectedYear;
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error loading monthly revenue data:', error);
+                    });
+            }
+            
+            // Helper function to compare arrays
+            function arraysEqual(a, b) {
+                if (a.length !== b.length) return false;
+                for (let i = 0; i < a.length; i++) {
+                    if (a[i] !== b[i]) return false;
+                }
+                return true;
+            }
+            
+            // Make sure we're initializing the form with current date
+            const now = new Date();
+            document.getElementById('monthSelect').value = now.getMonth() + 1;
+            
+            // Load initial data
+            loadMonthlyRevenue();
+            
+            // Set up event listener for the filter button
+            document.getElementById('applyFilter').addEventListener('click', loadMonthlyRevenue);
         });
     </script>
 </body>

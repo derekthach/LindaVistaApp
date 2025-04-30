@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, send_file, session
+from flask import Flask, render_template, request, redirect, url_for, send_file, session, jsonify
 import sqlite3
 from datetime import datetime, timedelta
 import csv
@@ -34,6 +34,21 @@ def init_db():
                     note TEXT,
                     FOREIGN KEY(room_id) REFERENCES Rooms(room_id)
                 )''')
+    
+    # Create a settings table to store the next receipt number
+    c.execute('''CREATE TABLE IF NOT EXISTS Settings (
+                    setting_name TEXT PRIMARY KEY,
+                    setting_value TEXT
+                )''')
+    
+    # Check if we already have a next_receipt_number setting
+    c.execute('SELECT setting_value FROM Settings WHERE setting_name = "next_receipt_number"')
+    result = c.fetchone()
+    
+    # If not, initialize it to "0001"
+    if not result:
+        c.execute('INSERT INTO Settings (setting_name, setting_value) VALUES (?, ?)',
+                 ("next_receipt_number", "0001"))
     
     # Check if we need to insert initial rooms (only if Rooms is empty)
     c.execute('SELECT COUNT(*) FROM Rooms')
@@ -108,12 +123,27 @@ def view_checkins():
     # Employees should not have access to view all check-ins
     if session.get('role') == 'employee':
         return redirect(url_for('checkin'))
+    
+    # Get date range filter parameters from request
+    start_date = request.args.get('start_date', '')
+    end_date = request.args.get('end_date', '')
         
     conn = sqlite3.connect('motel.db')
     c = conn.cursor()
-    c.execute('SELECT * FROM CheckIns')
+    
+    # Apply date filters if they exist
+    if start_date and end_date:
+        c.execute('SELECT * FROM CheckIns WHERE date BETWEEN ? AND ? ORDER BY date DESC', (start_date, end_date))
+    elif start_date:
+        c.execute('SELECT * FROM CheckIns WHERE date >= ? ORDER BY date DESC', (start_date,))
+    elif end_date:
+        c.execute('SELECT * FROM CheckIns WHERE date <= ? ORDER BY date DESC', (end_date,))
+    else:
+        c.execute('SELECT * FROM CheckIns ORDER BY date DESC')
+        
     checkins = c.fetchall()
     conn.close()
+    
     return render_template('view_checkins.html', 
                           checkins=checkins,
                           logged_in=True,
@@ -127,20 +157,44 @@ def export_checkins():
     # Employees should not have access to export data
     if session.get('role') == 'employee':
         return redirect(url_for('checkin'))
+    
+    # Get date range filter parameters from request
+    start_date = request.args.get('start_date', '')
+    end_date = request.args.get('end_date', '')
         
     conn = sqlite3.connect('motel.db')
     c = conn.cursor()
-    c.execute('SELECT checkin_id, date, time, receipt_number, room_id, staff_name, car_plate, cost, note FROM CheckIns')
+    
+    # Apply date filters if they exist
+    if start_date and end_date:
+        c.execute('SELECT checkin_id, date, time, receipt_number, room_id, staff_name, car_plate, cost, note FROM CheckIns WHERE date BETWEEN ? AND ? ORDER BY date DESC', (start_date, end_date))
+    elif start_date:
+        c.execute('SELECT checkin_id, date, time, receipt_number, room_id, staff_name, car_plate, cost, note FROM CheckIns WHERE date >= ? ORDER BY date DESC', (start_date,))
+    elif end_date:
+        c.execute('SELECT checkin_id, date, time, receipt_number, room_id, staff_name, car_plate, cost, note FROM CheckIns WHERE date <= ? ORDER BY date DESC', (end_date,))
+    else:
+        c.execute('SELECT checkin_id, date, time, receipt_number, room_id, staff_name, car_plate, cost, note FROM CheckIns ORDER BY date DESC')
+        
     rows = c.fetchall()
     conn.close()
 
+    # Generate a filename with the date range if filtering
+    filename = 'checkins_export'
+    if start_date and end_date:
+        filename += f'_{start_date}_to_{end_date}'
+    elif start_date:
+        filename += f'_from_{start_date}'
+    elif end_date:
+        filename += f'_until_{end_date}'
+    filename += '.csv'
+
     # Write to CSV
-    with open('checkins_export.csv', 'w', newline='') as csvfile:
+    with open(filename, 'w', newline='') as csvfile:
         csvwriter = csv.writer(csvfile)
         csvwriter.writerow(['Check-In ID', 'Date', 'Time', 'Receipt Number', 'Room ID', 'Staff Name', 'Car Plate', 'Cost', 'Notes'])
         csvwriter.writerows(rows)
 
-    return send_file('checkins_export.csv', as_attachment=True)
+    return send_file(filename, as_attachment=True)
 
 def get_cars_today():
     conn = sqlite3.connect('motel.db')
@@ -210,32 +264,58 @@ def confirm_checkin():
     if not session.get('logged_in', False):
         return redirect(url_for('login'))
     
-    # Both employees and admins can confirm check-ins
-    
     # Collect form data
-    form_data = {
-        'room_id': request.form['room_id'],
-        'receipt_number': request.form['receipt_number'],
-        'date': request.form['date'],
-        'cost': request.form['cost'],
-        'payment_method': request.form['payment_method'],
-        'time': request.form['time'],
-        'car_plate': request.form['car_plate'],
-        'car_make': request.form['car_make'],
-        'car_color': request.form['car_color'],
-        'staff_name': request.form['staff_name'],
-        'note': request.form.get('note', '')
-    }
+    form_data = dict(request.form)
     
-    # Insert data into the database
+    # Format receipt number
+    if 'receipt_number' in form_data and form_data['receipt_number']:
+        # Remove non-digits and format to 4 digits
+        receipt_number = ''.join(c for c in form_data['receipt_number'] if c.isdigit())
+        form_data['receipt_number'] = receipt_number.zfill(4)
+        
+        # Calculate next receipt number (current + 1)
+        try:
+            next_receipt = str(int(receipt_number) + 1).zfill(4)
+        except:
+            next_receipt = "0001"  # Fallback
+    else:
+        # Use default if empty
+        form_data['receipt_number'] = "0001"
+        next_receipt = "0002"
+    
+    print(f"Using receipt number: {form_data['receipt_number']}")
+    print(f"Next receipt will be: {next_receipt}")
+    
+    # Update database in a transaction
     conn = sqlite3.connect('motel.db')
     c = conn.cursor()
-    c.execute('''
-        INSERT INTO CheckIns (room_id, receipt_number, date, time, cost, payment_method, car_plate, car_make, car_color, staff_name, note)
-        VALUES (:room_id, :receipt_number, :date, :time, :cost, :payment_method, :car_plate, :car_make, :car_color, :staff_name, :note)
-    ''', form_data)
-    conn.commit()
-    conn.close()
+    
+    try:
+        # Start transaction
+        c.execute('BEGIN TRANSACTION')
+        
+        # Insert check-in
+        c.execute('''
+            INSERT INTO CheckIns (room_id, receipt_number, date, time, cost, payment_method, 
+                                car_plate, car_make, car_color, staff_name, note)
+            VALUES (:room_id, :receipt_number, :date, :time, :cost, :payment_method, 
+                   :car_plate, :car_make, :car_color, :staff_name, :note)
+        ''', form_data)
+        
+        # Update next receipt number
+        c.execute('UPDATE Settings SET setting_value = ? WHERE setting_name = "next_receipt_number"',
+                 (next_receipt,))
+        
+        # Commit transaction
+        c.execute('COMMIT')
+        
+        print(f"Transaction successful. Next receipt updated to {next_receipt}")
+    except Exception as e:
+        # Rollback on error
+        c.execute('ROLLBACK')
+        print(f"Error in transaction: {e}")
+    finally:
+        conn.close()
     
     # Redirect to the checkin page
     return redirect(url_for('checkin'))
@@ -268,6 +348,215 @@ def logout():
     session.pop('username', None)
     session.pop('role', None)
     return redirect(url_for('login'))
+
+@app.route('/api/dashboard-data')
+def dashboard_data():
+    if not session.get('logged_in', False):
+        return jsonify({'error': 'Not authorized'}), 401
+    
+    # Only admins should access this data
+    if session.get('role') != 'admin':
+        return jsonify({'error': 'Not authorized'}), 403
+    
+    # Generate data for the last 7 days
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=6)  # Last 7 days including today
+    
+    dates = []
+    checkins_data = []
+    revenue_data = []
+    
+    # Generate dates in the format YYYY-MM-DD
+    current_date = start_date
+    while current_date <= end_date:
+        dates.append(current_date.strftime('%Y-%m-%d'))
+        current_date += timedelta(days=1)
+    
+    # Fetch data for each date
+    conn = sqlite3.connect('motel.db')
+    c = conn.cursor()
+    
+    for date in dates:
+        # Count check-ins for this date
+        c.execute('SELECT COUNT(*) FROM CheckIns WHERE date = ?', (date,))
+        count = c.fetchone()[0]
+        checkins_data.append(count)
+        
+        # Sum revenue for this date
+        c.execute('SELECT SUM(cost) FROM CheckIns WHERE date = ?', (date,))
+        revenue = c.fetchone()[0] or 0  # Use 0 if NULL
+        revenue_data.append(revenue)
+    
+    conn.close()
+    
+    # Format dates for display (MM/DD)
+    display_dates = [datetime.strptime(date, '%Y-%m-%d').strftime('%m/%d') for date in dates]
+    
+    return jsonify({
+        'dates': display_dates,
+        'checkins': checkins_data,
+        'revenue': revenue_data
+    })
+
+@app.route('/api/room-usage-data')
+def room_usage_data():
+    if not session.get('logged_in', False):
+        return jsonify({'error': 'Not authorized'}), 401
+    
+    # Only admins should access this data
+    if session.get('role') != 'admin':
+        return jsonify({'error': 'Not authorized'}), 403
+    
+    conn = sqlite3.connect('motel.db')
+    c = conn.cursor()
+    
+    # Get room usage frequency - top 15 rooms to keep it compact
+    c.execute('''
+        SELECT room_id, COUNT(*) as usage_count
+        FROM CheckIns
+        GROUP BY room_id
+        ORDER BY usage_count DESC
+        LIMIT 15
+    ''')
+    
+    results = c.fetchall()
+    conn.close()
+    
+    room_numbers = [f"Room {row[0]}" for row in results]
+    usage_counts = [row[1] for row in results]
+    
+    return jsonify({
+        'room_numbers': room_numbers,
+        'usage_counts': usage_counts
+    })
+
+@app.route('/api/next-receipt-number', methods=['GET'])
+def next_receipt_number():
+    if not session.get('logged_in', False):
+        return jsonify({'error': 'Not authorized'}), 401
+    
+    conn = sqlite3.connect('motel.db')
+    c = conn.cursor()
+    
+    # Get the next receipt number from settings table
+    c.execute('SELECT setting_value FROM Settings WHERE setting_name = "next_receipt_number"')
+    result = c.fetchone()
+    
+    # Default to "0001" if not found (shouldn't happen)
+    next_receipt = result[0] if result else "0001"
+    
+    conn.close()
+    
+    print(f"API returning next receipt number: {next_receipt}")
+    return jsonify({'next_receipt_number': next_receipt})
+
+@app.route('/api/monthly-revenue', methods=['GET'])
+def monthly_revenue():
+    if not session.get('logged_in', False):
+        return jsonify({'error': 'Not authorized'}), 401
+    
+    # Only admins should access this data
+    if session.get('role') != 'admin':
+        return jsonify({'error': 'Not authorized'}), 403
+    
+    # Get selected month and year from request
+    try:
+        month = int(request.args.get('month', datetime.now().month))
+        year = int(request.args.get('year', datetime.now().year))
+        
+        # Validation
+        if month < 1 or month > 12:
+            month = datetime.now().month
+        
+        # Simple validation for year (adjust range as needed)
+        current_year = datetime.now().year
+        if year < 2000 or year > current_year + 10:
+            year = current_year
+            
+    except ValueError:
+        # Default to current month/year if conversion fails
+        month = datetime.now().month
+        year = datetime.now().year
+    
+    # Calculate previous month and year
+    prev_month = month - 1
+    prev_year = year
+    
+    if prev_month == 0:
+        prev_month = 12
+        prev_year = year - 1
+    
+    conn = sqlite3.connect('motel.db')
+    c = conn.cursor()
+    
+    # Format the date ranges - IMPORTANT! Ensure proper formatting
+    current_month_start = f"{year}-{month:02d}-01"
+    
+    # Calculate the next month's start date
+    if month == 12:
+        next_month_start = f"{year+1}-01-01"
+    else:
+        next_month_start = f"{year}-{month+1:02d}-01"
+    
+    # Get total revenue for current month
+    c.execute('SELECT SUM(cost) FROM CheckIns WHERE date >= ? AND date < ?', 
+              (current_month_start, next_month_start))
+    current_month_revenue = c.fetchone()[0] or 0
+    
+    # Get car count for current month
+    c.execute('SELECT COUNT(*) FROM CheckIns WHERE date >= ? AND date < ?', 
+              (current_month_start, next_month_start))
+    current_month_cars = c.fetchone()[0]
+    
+    # Previous month data
+    prev_month_start = f"{prev_year}-{prev_month:02d}-01"
+    
+    # Get total revenue for previous month
+    c.execute('SELECT SUM(cost) FROM CheckIns WHERE date >= ? AND date < ?', 
+              (prev_month_start, current_month_start))
+    prev_month_revenue = c.fetchone()[0] or 0
+    
+    # Get car count for previous month
+    c.execute('SELECT COUNT(*) FROM CheckIns WHERE date >= ? AND date < ?', 
+              (prev_month_start, current_month_start))
+    prev_month_cars = c.fetchone()[0]
+    
+    # Get all years that have data
+    c.execute('SELECT DISTINCT substr(date, 1, 4) FROM CheckIns ORDER BY date')
+    years_data = [row[0] for row in c.fetchall()]
+    
+    # If no years found, add current year
+    if not years_data:
+        years_data = [str(datetime.now().year)]
+    
+    # Also include the selected year if it's not in the list
+    if str(year) not in years_data:
+        years_data.append(str(year))
+        years_data.sort()
+    
+    conn.close()
+    
+    # Month names for display
+    month_names = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    ]
+    
+    return jsonify({
+        'current_month': {
+            'name': month_names[month-1],
+            'year': year,
+            'total': float(current_month_revenue),
+            'car_count': current_month_cars
+        },
+        'prev_month': {
+            'name': month_names[prev_month-1],
+            'year': prev_year,
+            'total': float(prev_month_revenue),
+            'car_count': prev_month_cars
+        },
+        'years_available': years_data
+    })
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
