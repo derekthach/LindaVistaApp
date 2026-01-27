@@ -1,7 +1,4 @@
 Check-In ID,Date,Time,Receipt Number,Room ID,Staff Name,Car Plate,Cost,Notes
-18,2025-05-11,01:50,0201,38,Derek Thach,7777777777,250.0,"testing with siblings
-"
-17,2025-05-01,17:49,0200,5,Makito,394389,255.0,Testing
 8,2025-04-30,15:59,1831,38,Tono,67893247,120.0,testing spanish
 10,2025-04-30,16:17,10,1,Keith Thach,3838473737,200.0,testing
 11,2025-04-30,16:24,0100,18,Tonito,67893247,135.0,testing auto increment
@@ -14,7 +11,3 @@ Check-In ID,Date,Time,Receipt Number,Room ID,Staff Name,Car Plate,Cost,Notes
 5,2025-04-29,13:12,12,11,Benjamin (Siky),1111112,280.0,Testing
 6,2025-04-29,13:28,12,17,Luis,67893247,100.0,testing
 7,2025-04-29,15:37,1830,13,Derek Thach,12346576,240.0,testing
-1,2025-04-28,16:55,12,1,Arthur Traelnes,1111112,100.0,testing
-2,2025-04-28,16:58,12,1,Tono,1111111,100.0,testing
-3,2025-04-28,18:30,12,1,Arthur Traelnes,67893247,100.0,testing
-9,2025-03-13,16:13,1832,4,Tonito,1930943,1856.93,testing previous month
