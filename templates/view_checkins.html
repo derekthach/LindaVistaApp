@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>View Check-Ins</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h3>Linda Vista Motel</h3>
+            {% if role == 'admin' %}
+            <p class="user-role">Admin Mode</p>
+            {% elif role == 'employee' %}
+            <p class="user-role">Employee Mode</p>
+            {% endif %}
+        </div>
+        <a href="{{ url_for('home') }}"><i class="fas fa-home"></i> Dashboard</a>
+        <a href="{{ url_for('checkin') }}"><i class="fas fa-clipboard-check"></i> Check-In</a>
+        <a href="{{ url_for('view_checkins') }}" class="active"><i class="fas fa-list"></i> View Check-Ins</a>
+        {% if logged_in %}
+        <a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> Logout</a>
+        {% else %}
+        <a href="{{ url_for('login') }}"><i class="fas fa-sign-in-alt"></i> Login</a>
+        {% endif %}
+    </div>
+
+    <div class="content">
+        <header class="header">
+            <h1 class="header-title">Linda Vista Motel Dashboard</h1>
+        </header>
+        
+        <!-- Date Filter Form -->
+        <div class="filter-container">
+            <form method="GET" action="{{ url_for('view_checkins') }}" class="date-filter-form">
+                <div class="filter-section">
+                    <label for="start_date">From:</label>
+                    <input type="date" id="start_date" name="start_date" value="{{ request.args.get('start_date', '') }}">
+                    
+                    <label for="end_date">To:</label>
+                    <input type="date" id="end_date" name="end_date" value="{{ request.args.get('end_date', '') }}">
+                    
+                    <button type="submit" class="filter-button">Filter</button>
+                    
+                    {% if request.args.get('start_date') or request.args.get('end_date') %}
+                    <a href="{{ url_for('view_checkins') }}" class="reset-button">Reset</a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+        
+        <table class="table">
+            <tr>
+                <th>Check-In ID</th>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Receipt Number</th>
+                <th>Cost</th>
+                <th>Payment Method</th>
+                <th>Room ID</th>
+                <th>Staff Name</th>
+                <th>License Plate</th>
+                <th>Car Make</th>
+                <th>Car Color</th>
+                <th>Notes</th>
+                <th></th>
+            </tr>
+            {% for checkin in checkins %}
+            <tr>
+                <td>{{ checkin[0] }}</td>
+                <td>{{ checkin[2] }}</td>
+                <td>{{ checkin[3] }}</td>
+                <td>{{ checkin[1] }}</td>
+                <td>${{ checkin[5] }}</td>
+                <td>{{ checkin[6] }}</td>
+                <td>{{ checkin[4] }}</td>
+                <td>{{ checkin[7] }}</td>
+                <td>{{ checkin[8] }}</td>
+                <td>{{ checkin[9] }}</td>
+                <td>{{ checkin[10] }}</td>
+                <td>{{ checkin[11] }}</td>
+                {% if loop.first %}
+                <td rowspan="{{ checkins|length }}">
+                    <a href="{{ url_for('export_checkins', start_date=request.args.get('start_date', ''), end_date=request.args.get('end_date', '')) }}" class="export-button">Export Checkins</a>
+                </td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+</body>
+</html>

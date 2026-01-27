@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Check-In</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h3>Linda Vista Motel</h3>
+            {% if role == 'admin' %}
+            <p class="user-role">Admin Mode</p>
+            {% elif role == 'employee' %}
+            <p class="user-role">Employee Mode</p>
+            {% endif %}
+        </div>
+        {% if role == 'admin' %}
+        <a href="{{ url_for('home') }}"><i class="fas fa-home"></i> Dashboard</a>
+        {% endif %}
+        <a href="{{ url_for('checkin') }}" class="active"><i class="fas fa-clipboard-check"></i> Check-In</a>
+        {% if role == 'admin' %}
+        <a href="{{ url_for('view_checkins') }}"><i class="fas fa-list"></i> View Check-Ins</a>
+        {% endif %}
+        {% if logged_in %}
+        <a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i> Logout</a>
+        {% else %}
+        <a href="{{ url_for('login') }}"><i class="fas fa-sign-in-alt"></i> Login</a>
+        {% endif %}
+    </div>
+
+    <div class="content">
+        <header class="header">
+            <h1 class="header-title">Linda Vista Motel Dashboard</h1>
+        </header>
+        <div class="language-toggle-container">
+            <span class="language-label">English</span>
+            <label class="switch">
+                <input type="checkbox" id="languageToggle">
+                <span class="slider round"></span>
+            </label>
+            <span class="language-label">Español</span>
+        </div>
+        <form method="POST" class="form-container">
+            <h1>Check-In Form</h1>
+            <label for="room_id">Room Number:</label>
+            <select name="room_id" id="room_id">
+                {% for room in range(1, 41) %}
+                <option value="{{ room }}" {% if room == request.args.get('room_id', '')|int %}selected{% endif %}>Room {{ room }}</option>
+                {% endfor %}
+            </select>
+            <br>
+            <label for="receipt_number">Receipt Number:</label>
+            <input type="text" id="receipt_number" name="receipt_number" value="{{ request.args.get('receipt_number', '') }}" required>
+            <br>
+            <label for="date">Date:</label>
+            <input type="date" id="date" name="date" value="{{ request.args.get('date', '') }}" readonly class="readonly-field">
+            <br>
+            <label for="cost">Cost:</label>
+            <input type="text" id="cost" name="cost" value="{{ request.args.get('cost', '') }}" required>
+            <br>
+            <label for="payment_method">Payment Method:</label>
+            <select id="payment_method" name="payment_method" required>
+                <option value="cash" {% if request.args.get('payment_method') == 'cash' %}selected{% endif %}>Cash</option>
+                <option value="ath_mobil" {% if request.args.get('payment_method') == 'ath_mobil' %}selected{% endif %}>ATH Mobil</option>
+            </select>
+            <br>
+            <label for="time">Time:</label>
+            <input type="time" id="time" name="time" value="{{ request.args.get('time', '') }}" readonly class="readonly-field">
+            <br>
+            <label for="car_plate">License Plate:</label>
+            <input type="text" id="car_plate" name="car_plate" value="{{ request.args.get('car_plate', '') }}" required>
+            <br>
+            <label for="car_make">Car Make:</label>
+            <input type="text" id="car_make" name="car_make" value="{{ request.args.get('car_make', '') }}" required>
+            <br>
+            <label for="car_color">Car Color:</label>
+            <select id="car_color" name="car_color" required>
+                <option value="black" {% if request.args.get('car_color') == 'black' %}selected{% endif %}>Black</option>
+                <option value="white" {% if request.args.get('car_color') == 'white' %}selected{% endif %}>White</option>
+                <option value="gray" {% if request.args.get('car_color') == 'gray' %}selected{% endif %}>Gray</option>
+                <option value="silver" {% if request.args.get('car_color') == 'silver' %}selected{% endif %}>Silver</option>
+                <option value="red" {% if request.args.get('car_color') == 'red' %}selected{% endif %}>Red</option>
+                <option value="blue" {% if request.args.get('car_color') == 'blue' %}selected{% endif %}>Blue</option>
+                <option value="brown" {% if request.args.get('car_color') == 'brown' %}selected{% endif %}>Brown</option>
+                <option value="green" {% if request.args.get('car_color') == 'green' %}selected{% endif %}>Green</option>
+                <option value="beige" {% if request.args.get('car_color') == 'beige' %}selected{% endif %}>Beige</option>
+                <option value="yellow" {% if request.args.get('car_color') == 'yellow' %}selected{% endif %}>Yellow</option>
+            </select>
+            <br>
+            <label for="staff_name">Name of Staff:</label>
+            <select id="staff_name" name="staff_name" class="styled-select" required>
+                <option value="" disabled selected>Select staff member</option>
+                <option value="Benjamin (Siky)" {% if request.args.get('staff_name') == 'Benjamin (Siky)' %}selected{% endif %}>Benjamin (Siky)</option>
+                <option value="Luis" {% if request.args.get('staff_name') == 'Luis' %}selected{% endif %}>Luis</option>
+                <option value="Tonito" {% if request.args.get('staff_name') == 'Tonito' %}selected{% endif %}>Tonito</option>
+                <option value="Tono" {% if request.args.get('staff_name') == 'Tono' %}selected{% endif %}>Tono</option>
+                <option value="Jose (Ivan)" {% if request.args.get('staff_name') == 'Jose (Ivan)' %}selected{% endif %}>Jose (Ivan)</option>
+                <option value="Makito" {% if request.args.get('staff_name') == 'Makito' %}selected{% endif %}>Makito</option>
+                <option value="Keith Thach" {% if request.args.get('staff_name') == 'Keith Thach' %}selected{% endif %}>Keith Thach</option>
+                <option value="Duyen Thach" {% if request.args.get('staff_name') == 'Duyen Thach' %}selected{% endif %}>Duyen Thach</option>
+                <option value="Derek Thach" {% if request.args.get('staff_name') == 'Derek Thach' %}selected{% endif %}>Derek Thach</option>
+            </select>
+            <br>
+            <label for="note">Note:</label>
+            <textarea id="note" name="note">{{ request.args.get('note', '') }}</textarea>
+            <br>
+            <div class="form-buttons">
+                <button type="submit" class="checkin-button">Check In</button>
+            </div>
+        </form>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.5.34/moment-timezone-with-data.min.js"></script>
+    <script>
+        window.onload = function() {
+            // Get current date and time in Naguabo, Puerto Rico timezone
+            var now = moment.tz("America/Puerto_Rico");
+            
+            // Set the date input
+            document.getElementById('date').value = now.format('YYYY-MM-DD');
+            
+            // Set the time input
+            document.getElementById('time').value = now.format('HH:mm');
+        };
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Translation dictionary
+            const translations = {
+                english: {
+                    'room_id_label': 'Room Number:',
+                    'receipt_number_label': 'Receipt Number:',
+                    'date_label': 'Date:',
+                    'cost_label': 'Cost:',
+                    'payment_method_label': 'Payment Method:',
+                    'time_label': 'Time:',
+                    'car_plate_label': 'License Plate:',
+                    'car_make_label': 'Car Make:',
+                    'car_color_label': 'Car Color:',
+                    'staff_name_label': 'Name of Staff:',
+                    'note_label': 'Note:',
+                    'submit_button': 'Check In',
+                    // Payment method options
+                    'cash_option': 'Cash',
+                    'ath_mobil_option': 'ATH Mobil'
+                },
+                spanish: {
+                    'room_id_label': 'Número de Habitación:',
+                    'receipt_number_label': 'Número de Recibo:',
+                    'date_label': 'Fecha:',
+                    'cost_label': 'Costo:',
+                    'payment_method_label': 'Método de Pago:',
+                    'time_label': 'Hora:',
+                    'car_plate_label': 'Placa:',
+                    'car_make_label': 'Marca de Carro:',
+                    'car_color_label': 'Color de Carro:',
+                    'staff_name_label': 'Nombre del Empleado:',
+                    'note_label': 'Nota:',
+                    'submit_button': 'Registrar',
+                    // Payment method options
+                    'cash_option': 'Efectivo',
+                    'ath_mobil_option': 'ATH Móvil'
+                }
+            };
+            
+            // Get the language toggle element
+            const languageToggle = document.getElementById('languageToggle');
+            
+            // Load saved language preference
+            const savedLanguage = localStorage.getItem('preferredLanguage');
+            if (savedLanguage === 'spanish') {
+                languageToggle.checked = true;
+                setLanguage('spanish');
+            }
+            
+            // Add event listener for language toggle
+            languageToggle.addEventListener('change', function() {
+                if (this.checked) {
+                    setLanguage('spanish');
+                    localStorage.setItem('preferredLanguage', 'spanish');
+                } else {
+                    setLanguage('english');
+                    localStorage.setItem('preferredLanguage', 'english');
+                }
+            });
+            
+            // Function to set the language
+            function setLanguage(language) {
+                // Get all label elements
+                document.querySelectorAll('label').forEach(label => {
+                    const forAttribute = label.getAttribute('for');
+                    if (forAttribute && translations[language][forAttribute + '_label']) {
+                        label.textContent = translations[language][forAttribute + '_label'];
+                    }
+                });
+                
+                // Update select options
+                const paymentSelect = document.getElementById('payment_method');
+                if (paymentSelect) {
+                    for (let i = 0; i < paymentSelect.options.length; i++) {
+                        const option = paymentSelect.options[i];
+                        if (option.value === 'cash') {
+                            option.textContent = translations[language]['cash_option'];
+                        } else if (option.value === 'ath_mobil') {
+                            option.textContent = translations[language]['ath_mobil_option'];
+                        }
+                    }
+                }
+                
+                // Update submit button
+                const submitButton = document.querySelector('button[type="submit"]');
+                if (submitButton) {
+                    submitButton.textContent = translations[language]['submit_button'];
+                }
+            }
+            
+            const receiptField = document.getElementById('receipt_number');
+            
+            // Format to 4 digits when the field loses focus
+            receiptField.addEventListener('blur', function() {
+                // Only process if it contains a number
+                if (this.value && /^\d+$/.test(this.value)) {
+                    // Parse as integer to remove leading zeros, then format back to 4 digits
+                    const numValue = parseInt(this.value, 10);
+                    this.value = numValue.toString().padStart(4, '0');
+                }
+            });
+            
+            // Fetch the next receipt number
+            console.log("Fetching next receipt number...");
+            fetch('/api/next-receipt-number')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log("Received next receipt number:", data);
+                    
+                    // Only auto-fill if the field is empty
+                    if (!receiptField.value) {
+                        console.log("Setting receipt field to:", data.next_receipt_number);
+                        receiptField.value = data.next_receipt_number;
+                    } else if (/^\d+$/.test(receiptField.value)) {
+                        // If there's already a value, ensure it's formatted
+                        const numValue = parseInt(receiptField.value, 10);
+                        receiptField.value = numValue.toString().padStart(4, '0');
+                        console.log("Formatted existing receipt number to:", receiptField.value);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching next receipt number:', error);
+                });
+
+            // Get current date and time in local timezone
+            const now = new Date();
+            
+            // Format date as YYYY-MM-DD for the date input
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const formattedDate = `${year}-${month}-${day}`;
+            
+            // Format time as HH:MM for the time input
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const formattedTime = `${hours}:${minutes}`;
+            
+            // Set values to the form fields
+            document.getElementById('date').value = formattedDate;
+            document.getElementById('time').value = formattedTime;
+        });
+    </script>
+</body>
+</html> 
