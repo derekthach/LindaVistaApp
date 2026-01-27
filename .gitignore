@@ -1,61 +1,20 @@
-# Dependencies
+# Node / Next
 node_modules/
-/.pnp
-.pnp.*
-.yarn/
-
-# Next.js
-/.next/
-/out/
 .next/
-
-# Production
-/build
-
-# Misc
-.DS_Store
-*.pem
-
-# Debug
+out/
+.vercel/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Local env files
-.env*.local
-.env
-
-# Vercel
-.vercel
-
-# TypeScript
-*.tsbuildinfo
-next-env.d.ts
-
-# Python (legacy Flask)
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
+# Python
 venv/
 .venv/
-ENV/
-env/
+__pycache__/
+*.pyc
 
-# Databases
+# DB / local data
 *.db
 *.sqlite
 *.sqlite3
-*.db-shm
-*.db-wal
-/data/*.db
-/data/*.sqlite
-/data/*.db-shm
-/data/*.db-wal
-
-# CSV exports
-checkins_export*.csv
-
-# Testing
-/coverage
+data/
