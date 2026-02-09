@@ -9,11 +9,20 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^12.6.2",
+    "chart.js": "^4.5.1",
+    "firebase-admin": "^13.6.1",
+    "iron-session": "^8.0.4",
+    "luxon": "^3.7.2",
     "next": "^16.1.5",
     "react": "^19",
+    "react-chartjs-2": "^5.3.1",
     "react-dom": "^19"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/luxon": "^3.7.1",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
