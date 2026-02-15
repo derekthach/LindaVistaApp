@@ -2,10 +2,18 @@ import { getIronSession, type SessionOptions } from 'iron-session';
 import { cookies } from 'next/headers';
 import type { SessionData } from '@/types';
 
-const EMPTY_SESSION: SessionData = {
+/** Session object returned by getSession(); includes iron-session save/destroy. */
+export type Session = SessionData & {
+  save: () => Promise<void>;
+  destroy: () => Promise<void>;
+};
+
+const EMPTY_SESSION: Session = {
   username: '',
   role: 'employee',
   isLoggedIn: false,
+  save: async () => {},
+  destroy: async () => {},
 };
 
 export const sessionOptions: SessionOptions = {
@@ -21,10 +29,10 @@ export const sessionOptions: SessionOptions = {
   },
 };
 
-export async function getSession(): Promise<SessionData> {
+export async function getSession(): Promise<Session> {
   const cookieStore = await cookies();
   try {
-    return await getIronSession<SessionData>(cookieStore, sessionOptions);
+    return await getIronSession<SessionData>(cookieStore, sessionOptions) as Session;
   } catch {
     return EMPTY_SESSION;
   }
