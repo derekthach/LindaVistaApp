@@ -2,10 +2,10 @@ import { getIronSession, type SessionOptions } from 'iron-session';
 import { cookies } from 'next/headers';
 import type { SessionData } from '@/types';
 
-/** Session object returned by getSession(); includes iron-session save/destroy. */
+/** Session object returned by getSession(); matches iron-session API (destroy is sync). */
 export type Session = SessionData & {
   save: () => Promise<void>;
-  destroy: () => Promise<void>;
+  destroy: () => void;
 };
 
 const EMPTY_SESSION: Session = {
@@ -13,7 +13,7 @@ const EMPTY_SESSION: Session = {
   role: 'employee',
   isLoggedIn: false,
   save: async () => {},
-  destroy: async () => {},
+  destroy: () => {},
 };
 
 export const sessionOptions: SessionOptions = {
