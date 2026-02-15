@@ -18,12 +18,14 @@ export default async function DashboardPage() {
     metrics = await getSummaryMetrics();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    const isAuthError =
+    const isCredsError =
       message.includes('invalid_grant') ||
       message.includes('invalid_rapt') ||
-      message.includes('Getting metadata from plugin');
-    metricsError = isAuthError
-      ? 'Dashboard data unavailable: Firebase credentials need to be set or re-authenticated. For local dev, add FIREBASE_SERVICE_ACCOUNT_JSON (or FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY + GOOGLE_CLOUD_PROJECT) to .env.local, or run: gcloud auth application-default login'
+      message.includes('Getting metadata from plugin') ||
+      message.includes('Could not load the default credentials') ||
+      message.includes('default credentials');
+    metricsError = isCredsError
+      ? 'Dashboard data unavailable: Firebase credentials are missing. On Vercel: add FIREBASE_SERVICE_ACCOUNT_JSON (or FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY + GOOGLE_CLOUD_PROJECT) in Project Settings → Environment Variables. Locally: use .env.local or run gcloud auth application-default login.'
       : `Could not load dashboard data: ${message}`;
   }
 

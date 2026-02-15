@@ -10,30 +10,38 @@ function init(): void {
     process.env.FIREBASE_PROJECT_ID ||
     process.env.GCLOUD_PROJECT;
 
-  // Optional fallback for local dev only (if your org allows keys locally)
+  // Optional: full service account JSON (single line in env). If invalid, we fall through.
   const svcJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   if (svcJson) {
-    const serviceAccount = JSON.parse(svcJson) as { project_id?: string; [key: string]: unknown };
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
-      projectId: serviceAccount.project_id ?? projectId,
-    });
-    return;
+    try {
+      const serviceAccount = JSON.parse(svcJson) as { project_id?: string; [key: string]: unknown };
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
+        projectId: serviceAccount.project_id ?? projectId,
+      });
+      return;
+    } catch {
+      // Invalid JSON or cert: fall through to split credentials or ADC
+    }
   }
 
-  // Split credential fallback (local dev)
+  // Split credentials (no JSON in env)
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
   const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
   if (clientEmail && privateKey && projectId) {
-    admin.initializeApp({
-      credential: admin.credential.cert({
+    try {
+      admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId,
+          clientEmail,
+          privateKey,
+        }),
         projectId,
-        clientEmail,
-        privateKey,
-      }),
-      projectId,
-    });
-    return;
+      });
+      return;
+    } catch {
+      // Invalid key shape: fall through
+    }
   }
 
   // WIF/ADC path (preferred on Vercel — no keys). Locally this uses gcloud ADC;
