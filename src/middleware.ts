@@ -4,9 +4,25 @@ import { getIronSession } from 'iron-session';
 import { sessionOptions } from '@/server/auth/session';
 import type { SessionData } from '@/types';
 
+const EMPTY_SESSION: SessionData = {
+  username: '',
+  role: 'employee',
+  isLoggedIn: false,
+};
+
 export async function middleware(request: NextRequest) {
   const response = NextResponse.next();
-  const session = await getIronSession<SessionData>(request, response, sessionOptions);
+  // Let OPTIONS through without session (avoids 400 from toolbar/preflight)
+  if (request.method === 'OPTIONS') {
+    return response;
+  }
+
+  let session: SessionData;
+  try {
+    session = await getIronSession<SessionData>(request, response, sessionOptions);
+  } catch {
+    session = EMPTY_SESSION;
+  }
   const { pathname } = request.nextUrl;
 
   if (pathname === '/login') {

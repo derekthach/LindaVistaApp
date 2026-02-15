@@ -1,3 +1,5 @@
+import { loginAction } from '@/app/actions/auth';
+
 export default function LoginPage() {
   return (
     <div
@@ -25,7 +27,7 @@ export default function LoginPage() {
         <h1 className="page-title">Linda Vista Motel</h1>
         <p className="page-subtitle">Management System Login</p>
 
-        <form action="/api/auth/login" method="POST" style={{ display: 'grid', gap: 16 }}>
+        <form action={loginAction} style={{ display: 'grid', gap: 16 }}>
           <label>
             <div style={{ fontWeight: 600, marginBottom: 6 }}>Username</div>
             <input

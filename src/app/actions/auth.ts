@@ -5,7 +5,7 @@ import { getSession } from '@/server/auth/session';
 import { authenticateUser } from '@/server/auth/users';
 
 export async function loginAction(formData: FormData) {
-  const username = formData.get('username') as string;
+  const username = (formData.get('username') as string)?.trim();
   const password = formData.get('password') as string;
 
   if (!username || !password) {

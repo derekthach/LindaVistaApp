@@ -2,6 +2,12 @@ import { getIronSession, type SessionOptions } from 'iron-session';
 import { cookies } from 'next/headers';
 import type { SessionData } from '@/types';
 
+const EMPTY_SESSION: SessionData = {
+  username: '',
+  role: 'employee',
+  isLoggedIn: false,
+};
+
 export const sessionOptions: SessionOptions = {
   password:
     process.env.SESSION_SECRET ||
@@ -15,9 +21,13 @@ export const sessionOptions: SessionOptions = {
   },
 };
 
-export async function getSession() {
+export async function getSession(): Promise<SessionData> {
   const cookieStore = await cookies();
-  return getIronSession<SessionData>(cookieStore, sessionOptions);
+  try {
+    return await getIronSession<SessionData>(cookieStore, sessionOptions);
+  } catch {
+    return EMPTY_SESSION;
+  }
 }
 
 export async function requireAuth(requiredRole?: 'admin' | 'employee') {
