@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import bcrypt from 'bcryptjs';
+import { verifyPassword } from '@/lib/server/password';
 import type { User } from '@/types';
 
 const usersFilePath = path.join(process.cwd(), 'login-system', 'users.json');
@@ -12,10 +12,6 @@ export function getUsers(): User[] {
 
 export function findUser(username: string): User | undefined {
   return getUsers().find((user) => user.username === username);
-}
-
-export async function verifyPassword(password: string, hash: string) {
-  return bcrypt.compare(password, hash);
 }
 
 export async function authenticateUser(username: string, password: string) {
