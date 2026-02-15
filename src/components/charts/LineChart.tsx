@@ -24,14 +24,16 @@ export default function LineChart({
   label: string;
   color?: string;
 }) {
+  const safeLabels = Array.isArray(labels) ? labels : [];
+  const safeData = Array.isArray(data) ? data : [];
   return (
     <Line
       data={{
-        labels,
+        labels: safeLabels,
         datasets: [
           {
             label,
-            data,
+            data: safeData,
             backgroundColor: color.replace('1)', '0.2)'),
             borderColor: color,
             borderWidth: 2,

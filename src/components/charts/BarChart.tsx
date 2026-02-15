@@ -25,14 +25,16 @@ export default function BarChart({
   color?: string;
   horizontal?: boolean;
 }) {
+  const safeLabels = Array.isArray(labels) ? labels : [];
+  const safeData = Array.isArray(data) ? data : [];
   return (
     <Bar
       data={{
-        labels,
+        labels: safeLabels,
         datasets: [
           {
             label,
-            data,
+            data: safeData,
             backgroundColor: color.replace('1)', '0.5)'),
             borderColor: color,
             borderWidth: 1.5,
