@@ -25,6 +25,7 @@ export function normalizeCheckin(id: string, data: Record<string, unknown>): Che
   const time = dt.toFormat('HH:mm');
 
   return {
+    id,
     checkin_id: undefined,
     receipt_number: (data.receiptNumber as string) ?? '',
     date,

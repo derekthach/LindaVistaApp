@@ -7,6 +7,13 @@ import os
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # Secret key for sessions
 
+# Flask login credentials (set in production). See README or docstring below.
+# Env vars: FLASK_ADMIN_USER, FLASK_ADMIN_PASS, FLASK_EMP_USER, FLASK_EMP_PASS
+FLASK_ADMIN_USER = os.environ.get('FLASK_ADMIN_USER', 'admin')
+FLASK_ADMIN_PASS = os.environ.get('FLASK_ADMIN_PASS', 'password')
+FLASK_EMP_USER = os.environ.get('FLASK_EMP_USER', 'employee')
+FLASK_EMP_PASS = os.environ.get('FLASK_EMP_PASS', 'employee123')
+
 # Initialize the database
 def init_db():
     conn = sqlite3.connect('motel.db')
@@ -326,13 +333,13 @@ def login():
         username = request.form.get('username')
         password = request.form.get('password')
         
-        # Authentication logic for different user roles
-        if username == 'admin' and password == 'password':
+        # Authentication logic (credentials from env; defaults for local dev)
+        if username == FLASK_ADMIN_USER and password == FLASK_ADMIN_PASS:
             session['logged_in'] = True
             session['username'] = username
             session['role'] = 'admin'  # Admin role with full access
             return redirect(url_for('dashboard'))
-        elif username == 'employee' and password == 'employee123':
+        elif username == FLASK_EMP_USER and password == FLASK_EMP_PASS:
             session['logged_in'] = True
             session['username'] = username
             session['role'] = 'employee'  # Employee role with limited access

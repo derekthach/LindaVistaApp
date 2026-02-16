@@ -13,6 +13,7 @@ export interface SessionData {
 }
 
 export interface CheckIn {
+  id?: string;
   checkin_id?: number;
   receipt_number: string;
   date: string;

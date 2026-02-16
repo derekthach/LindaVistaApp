@@ -79,6 +79,11 @@ function endExclusiveISO(isoDate: string): Date {
   return dt.toJSDate();
 }
 
+/**
+ * List check-ins in a date range. Dates are YYYY-MM-DD and interpreted in America/Puerto_Rico.
+ * For a single calendar day, pass the same ISO date for both startISO and endISO
+ * (e.g. listCheckinsByDateRange('2026-02-15', '2026-02-15')).
+ */
 export async function listCheckinsByDateRange(
   startISO?: string,
   endISO?: string
@@ -100,6 +105,12 @@ export async function listCheckinsByDateRange(
     .get();
 
   return snapshot.docs.map((doc) => normalizeCheckin(doc.id, doc.data()));
+}
+
+export async function deleteCheckinById(id: string): Promise<void> {
+  const db = getAdminDb();
+  const ref = db.collection(CHECKINS_COLLECTION).doc(id);
+  await ref.delete();
 }
 
 const ZONE = 'America/Puerto_Rico';

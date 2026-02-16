@@ -4,8 +4,18 @@ import { get7DayTrends } from '@/lib/server/checkinsRepo';
 import { logError, logInfo } from '@/lib/server/log';
 import { HttpError, toErrorResponse } from '@/lib/server/httpError';
 import { requireEnvs } from '@/lib/server/requireEnv';
+import { DateTime } from 'luxon';
 
 export const runtime = 'nodejs';
+
+function empty7DayData() {
+  const endDate = DateTime.now().setZone('America/Puerto_Rico');
+  const dates: string[] = [];
+  for (let i = 6; i >= 0; i--) {
+    dates.push(endDate.minus({ days: i }).toFormat('MM/dd'));
+  }
+  return { dates, checkins: dates.map(() => 0), revenue: dates.map(() => 0) };
+}
 
 export async function GET() {
   const requestId = crypto.randomUUID();
@@ -19,9 +29,12 @@ export async function GET() {
     const data = await get7DayTrends();
     return NextResponse.json(data);
   } catch (err) {
-    const error = err instanceof HttpError ? err : new HttpError(401, 'UNAUTHORIZED');
+    if (err instanceof HttpError) {
+      logError('api.dashboard.error', { requestId, message: String(err) });
+      const { status, body } = toErrorResponse(err, requestId);
+      return NextResponse.json(body, { status });
+    }
     logError('api.dashboard.error', { requestId, message: String(err) });
-    const { status, body } = toErrorResponse(error, requestId);
-    return NextResponse.json(body, { status });
+    return NextResponse.json(empty7DayData());
   }
 }

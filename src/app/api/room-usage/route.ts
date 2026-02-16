@@ -19,9 +19,12 @@ export async function GET() {
     const data = await getRoomUsageTop15();
     return NextResponse.json(data);
   } catch (err) {
-    const error = err instanceof HttpError ? err : new HttpError(401, 'UNAUTHORIZED');
+    if (err instanceof HttpError) {
+      logError('api.room-usage.error', { requestId, message: String(err) });
+      const { status, body } = toErrorResponse(err, requestId);
+      return NextResponse.json(body, { status });
+    }
     logError('api.room-usage.error', { requestId, message: String(err) });
-    const { status, body } = toErrorResponse(error, requestId);
-    return NextResponse.json(body, { status });
+    return NextResponse.json({ room_numbers: [], usage_counts: [] });
   }
 }

@@ -3,9 +3,21 @@ import { getSummaryMetrics } from '@/lib/server/checkinsRepo';
 import AppLayout from '@/components/AppLayout';
 import DashboardCharts from '@/components/DashboardCharts';
 
+const DEFAULT_METRICS = {
+  carsToday: 0,
+  carsThisWeek: 0,
+  profitToday: 0,
+  profitThisWeek: 0,
+};
+
 export default async function DashboardPage() {
   const session = await requireAuth('admin');
-  const metrics = await getSummaryMetrics();
+  let metrics = DEFAULT_METRICS;
+  try {
+    metrics = await getSummaryMetrics();
+  } catch {
+    // Firestore/auth may be unavailable; show zeros so the page still loads
+  }
 
   return (
     <AppLayout role={session.role}>

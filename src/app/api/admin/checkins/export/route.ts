@@ -29,14 +29,19 @@ export async function GET(request: NextRequest) {
   try {
     await requireAdmin(request);
     const searchParams = request.nextUrl.searchParams;
+    const date = searchParams.get('date') ?? undefined;
     const startDate = searchParams.get('start_date') ?? undefined;
     const endDate = searchParams.get('end_date') ?? undefined;
+    const startISO = date ?? startDate;
+    const endISO = date ?? endDate;
 
-    const checkins = await listCheckinsByDateRange(startDate, endDate);
+    const checkins = await listCheckinsByDateRange(startISO, endISO);
     const csvContent = buildCsv(checkins);
 
     let filename = 'checkins_export';
-    if (startDate && endDate) {
+    if (date) {
+      filename += `_${date}`;
+    } else if (startDate && endDate) {
       filename += `_${startDate}_to_${endDate}`;
     } else if (startDate) {
       filename += `_from_${startDate}`;

@@ -7,6 +7,21 @@ import { requireEnvs } from '@/lib/server/requireEnv';
 
 export const runtime = 'nodejs';
 
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+function emptyMonthlyData(month: number, year: number) {
+  const prevMonth = month === 1 ? 12 : month - 1;
+  const prevYear = month === 1 ? year - 1 : year;
+  return {
+    current_month: { name: MONTH_NAMES[month - 1], year, total: 0, car_count: 0 },
+    prev_month: { name: MONTH_NAMES[prevMonth - 1], year: prevYear, total: 0, car_count: 0 },
+    years_available: [String(year)],
+  };
+}
+
 export async function GET(request: NextRequest) {
   const requestId = crypto.randomUUID();
   logInfo('api.monthly-revenue.start', { requestId });
@@ -22,9 +37,14 @@ export async function GET(request: NextRequest) {
     const data = await getMonthlyComparison(month, year);
     return NextResponse.json(data);
   } catch (err) {
-    const error = err instanceof HttpError ? err : new HttpError(401, 'UNAUTHORIZED');
+    if (err instanceof HttpError) {
+      logError('api.monthly-revenue.error', { requestId, message: String(err) });
+      const { status, body } = toErrorResponse(err, requestId);
+      return NextResponse.json(body, { status });
+    }
     logError('api.monthly-revenue.error', { requestId, message: String(err) });
-    const { status, body } = toErrorResponse(error, requestId);
-    return NextResponse.json(body, { status });
+    const month = parseInt(request.nextUrl.searchParams.get('month') || String(new Date().getMonth() + 1), 10);
+    const year = parseInt(request.nextUrl.searchParams.get('year') || String(new Date().getFullYear()), 10);
+    return NextResponse.json(emptyMonthlyData(month, year));
   }
 }

@@ -34,10 +34,10 @@ try {
   users = users.map((user, index) => ({ ...user, id: index + 1 }));
 } catch (error) {
   console.error('Error reading users.json:', error);
-  // Fallback to dummy users
+  // Fallback to dummy users (same hashes as login-system/users.json)
   users = [
-    { id: 1, username: 'employee', password: '$2b$10$thD2lJjCcBMu.Pyct9dhJOD8jO5./ZkB3tFMNSmeo2AxluLptZHPy', role: 'employee' },
-    { id: 2, username: 'admin', password: '$2b$10$R.88jj4JBgNRZmdLe95iM.HtjBRtSvSrL/9SFxN09HLgvDVJfmNzC', role: 'admin' }
+    { id: 1, username: 'employee', password: '$2b$10$xbE1ykczh5Ug.XsGawOTbejEW9UcH2NH06UIqPYAMSX4LwNdO6Efq', role: 'employee' },
+    { id: 2, username: 'admin', password: '$2b$10$kG6JRrsqznKY4Z4SZ0/n4e1WqZLhLEgPiC6GlMS1r0PeWSI9R.XYa', role: 'admin' }
   ];
 }
 
