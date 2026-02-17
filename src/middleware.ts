@@ -12,7 +12,7 @@ export async function middleware(request: NextRequest) {
   if (pathname === '/login') {
     if (session.isLoggedIn) {
       return NextResponse.redirect(
-        new URL(session.role === 'admin' ? '/dashboard' : '/checkin', request.url)
+        new URL(session.role === 'admin' ? '/dashboard' : '/checkins/new', request.url)
       );
     }
     return response;
@@ -23,7 +23,7 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
     return NextResponse.redirect(
-      new URL(session.role === 'admin' ? '/dashboard' : '/checkin', request.url)
+      new URL(session.role === 'admin' ? '/dashboard' : '/checkins/new', request.url)
     );
   }
 
@@ -43,7 +43,7 @@ export async function middleware(request: NextRequest) {
       pathname.startsWith('/export')
     ) {
       if (session.role !== 'admin') {
-        return NextResponse.redirect(new URL('/checkin', request.url));
+        return NextResponse.redirect(new URL('/checkins/new', request.url));
       }
     }
   }

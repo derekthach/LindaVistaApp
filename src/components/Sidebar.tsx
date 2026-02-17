@@ -8,12 +8,15 @@ import type { UserRole } from '@/types';
 export default function Sidebar({ role }: { role: UserRole }) {
   const pathname = usePathname();
 
-  const linkStyle = (href: string) => ({
-    padding: '10px 12px',
-    borderRadius: 8,
-    background: pathname === href ? '#14532d' : 'transparent',
-    color: '#fff',
-  });
+  const linkStyle = (href: string, exact?: boolean) => {
+    const isActive = exact ? pathname === href : pathname === href || pathname.startsWith(href + '/');
+    return {
+      padding: '10px 12px',
+      borderRadius: 8,
+      background: isActive ? '#14532d' : 'transparent',
+      color: '#fff',
+    };
+  };
 
   return (
     <aside
@@ -38,11 +41,11 @@ export default function Sidebar({ role }: { role: UserRole }) {
             Dashboard
           </Link>
         )}
-        <Link href="/checkin" style={linkStyle('/checkin')}>
+        <Link href="/checkins/new" style={linkStyle('/checkins/new')}>
           Check-In
         </Link>
         {role === 'admin' && (
-          <Link href="/checkins" style={linkStyle('/checkins')}>
+          <Link href="/checkins" style={linkStyle('/checkins', true)}>
             View Check-Ins
           </Link>
         )}

@@ -1,17 +1,6 @@
-import { requireAuth } from '@/server/auth/session';
-import AppLayout from '@/components/AppLayout';
-import CheckinForm from '@/components/CheckinForm';
+import { redirect } from 'next/navigation';
 
-export default async function CheckinPage() {
-  const session = await requireAuth();
-
-  return (
-    <AppLayout role={session.role}>
-      <div className="container">
-        <h1 className="page-title">Check-In</h1>
-        <p className="page-subtitle">Register a new guest check-in</p>
-        <CheckinForm />
-      </div>
-    </AppLayout>
-  );
+/** Backwards compatibility: redirect old /checkin to type selector */
+export default function CheckinPage() {
+  redirect('/checkins/new');
 }

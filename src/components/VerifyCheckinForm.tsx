@@ -11,7 +11,7 @@ export default function VerifyCheckinForm() {
   useEffect(() => {
     const data = sessionStorage.getItem('checkinData');
     if (!data) {
-      router.push('/checkin');
+      router.push('/checkins/new');
       return;
     }
     setFormData(JSON.parse(data));

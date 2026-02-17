@@ -7,11 +7,12 @@ import { HttpError, toErrorResponse } from '@/lib/server/httpError';
 export const runtime = 'nodejs';
 
 function buildCsv(checkins: Awaited<ReturnType<typeof listCheckinsByDateRange>>): string {
-  const headers = ['Receipt #', 'Date', 'Time', 'Room', 'Staff', 'Plate', 'Cost', 'Notes'];
+  const headers = ['Receipt #', 'Date', 'Time', 'Type', 'Room', 'Staff', 'Plate', 'Cost', 'Notes'];
   const rows = checkins.map((c) => [
     c.receipt_number,
     c.date,
     c.time,
+    c.checkInType ?? 'room',
     String(c.room_id),
     c.staff_name,
     c.car_plate,

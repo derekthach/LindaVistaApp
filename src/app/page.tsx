@@ -8,5 +8,5 @@ export default async function Home() {
     redirect('/login');
   }
 
-  redirect(session.role === 'admin' ? '/dashboard' : '/checkin');
+  redirect(session.role === 'admin' ? '/dashboard' : '/checkins/new');
 }

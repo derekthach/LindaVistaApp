@@ -12,9 +12,29 @@ export interface SessionData {
   isLoggedIn: boolean;
 }
 
+export type CheckInType = 'room' | 'food' | 'beer';
+
+/** Line item for food/beer check-ins (stable itemId + snapshot label). Raw row as entered by staff. */
+export interface LineItem {
+  itemId: string;
+  itemLabel: string;
+  quantitySold: number;
+  amountCollected: number;
+}
+
+/** Aggregated totals by itemId for a food/beer check-in. */
+export interface SummarizedItem {
+  itemId: string;
+  itemLabel: string;
+  totalQuantitySold: number;
+  totalAmountCollected: number;
+}
+
 export interface CheckIn {
   id?: string;
   checkin_id?: number;
+  /** When present, distinguishes room vs food/beer. Omitted on legacy docs (treated as room). */
+  checkInType?: CheckInType;
   receipt_number: string;
   date: string;
   time: string;
@@ -26,6 +46,10 @@ export interface CheckIn {
   car_make: string;
   car_color: string;
   note?: string;
+  /** Food/beer only. Raw line items as entered (order preserved, duplicates allowed). */
+  lineItems?: LineItem[];
+  /** Food/beer only. Aggregated totals by itemId. */
+  summarizedItems?: SummarizedItem[];
 }
 
 export interface SummaryMetrics {

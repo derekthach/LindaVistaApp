@@ -1,5 +1,4 @@
 import { requireAuth } from '@/server/auth/session';
-import { requireAdmin } from '@/lib/server/requireAdmin';
 import { listCheckinsByDateRange } from '@/lib/server/checkinsRepo';
 import AppLayout from '@/components/AppLayout';
 import CheckinsList from '@/components/CheckinsList';
@@ -16,7 +15,6 @@ export default async function CheckinsPage({
   searchParams: Promise<SearchParams>;
 }) {
   const session = await requireAuth('admin');
-  await requireAdmin();
   const params = await searchParams;
   // Single-day filter: date=YYYY-MM-DD. Backward compat: start_date/end_date.
   const startISO = params.date ?? params.start_date;

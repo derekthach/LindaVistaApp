@@ -37,6 +37,19 @@ In [Firebase Console](https://console.firebase.google.com) → Project **lindavi
 
 Restart the dev server after changing `.env.local`. Do not commit `.env.local` or the key file.
 
+## Deploy to Vercel (preview/production)
+
+Set these **Environment Variables** in your Vercel project so the app and admin features work:
+
+| Variable | Required | Notes |
+|----------|----------|--------|
+| `SESSION_SECRET` | Yes | Long random string for session signing (e.g. 32+ chars). |
+| `LV_ADMIN_SECRET` | For admin actions | Secret used to authorize Export CSV and per-row delete. If unset, the check-ins page still loads, but export and delete will return 401 until this is set and you log in again as admin. |
+| `GOOGLE_CLOUD_PROJECT` | For Firestore | e.g. `lindavista-hms`. |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` or `FIREBASE_CLIENT_EMAIL` + `FIREBASE_PRIVATE_KEY` | For Firestore | Needed for dashboard and check-ins data. |
+
+After adding `LV_ADMIN_SECRET`, redeploy and log in again as admin so the `lv_admin` cookie is set; then Export and Delete will work.
+
 ## View Check-Ins date filter
 
 The **View Check-Ins** page filters by a single calendar day. The date is sent as `date=YYYY-MM-DD` (e.g. `GET /checkins?date=2026-02-15`). **Date normalization and timezone:** The backend interprets the date in **America/Puerto_Rico**. Firestore stores `checkInAt` as a Timestamp; the query uses start-of-day and end-of-day (exclusive) for that calendar day in that zone, so records are included when their normalized `date` (YYYY-MM-DD in America/Puerto_Rico) matches the selected day. CSV export uses the same `date` param and produces `checkins_YYYY-MM-DD.csv`.

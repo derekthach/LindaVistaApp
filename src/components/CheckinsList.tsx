@@ -61,6 +61,56 @@ function centsToCurrency(cents: number): string {
   );
 }
 
+/** Single monetary amount for a check-in (already normalized: room cost or food/beer total). */
+function getCheckinAmount(checkin: CheckIn): number {
+  const n = Number(checkin.cost);
+  return Number.isNaN(n) ? 0 : Math.max(0, n);
+}
+
+type CheckinAmountByType = { room: number; food: number; beer: number };
+
+/** Amount for this check-in attributed to each type (only one is non-zero). */
+function getCheckinAmountByType(checkin: CheckIn): CheckinAmountByType {
+  const amount = getCheckinAmount(checkin);
+  const t = checkin.checkInType ?? 'room';
+  if (t === 'room') return { room: amount, food: 0, beer: 0 };
+  if (t === 'food') return { room: 0, food: amount, beer: 0 };
+  return { room: 0, food: 0, beer: amount };
+}
+
+export type SectionTotals = {
+  roomCents: number;
+  foodCents: number;
+  beerCents: number;
+  totalCents: number;
+};
+
+function totalsToCents(checkins: CheckIn[]): SectionTotals {
+  let roomCents = 0;
+  let foodCents = 0;
+  let beerCents = 0;
+  for (const c of checkins) {
+    const by = getCheckinAmountByType(c);
+    roomCents += Math.round(by.room * 100);
+    foodCents += Math.round(by.food * 100);
+    beerCents += Math.round(by.beer * 100);
+  }
+  return {
+    roomCents,
+    foodCents,
+    beerCents,
+    totalCents: roomCents + foodCents + beerCents,
+  };
+}
+
+function renderTotalsBreakdown(totals: SectionTotals) {
+  return (
+    <span style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+      Room: {centsToCurrency(totals.roomCents)} | Food: {centsToCurrency(totals.foodCents)} | Beer: {centsToCurrency(totals.beerCents)} | <strong>Total: {centsToCurrency(totals.totalCents)}</strong>
+    </span>
+  );
+}
+
 function sortCheckinsForSections(checkins: CheckIn[]): CheckIn[] {
   return [...checkins].sort((a, b) => {
     const minsA = timeToMinutes(a.time);
@@ -68,6 +118,17 @@ function sortCheckinsForSections(checkins: CheckIn[]): CheckIn[] {
     if (minsA !== minsB) return minsA - minsB;
     return (a.receipt_number || '').localeCompare(b.receipt_number || '');
   });
+}
+
+/** For food/beer, show placeholder instead of 0 or empty. */
+function roomDisplay(checkin: CheckIn): string | number {
+  if (checkin.checkInType === 'food' || checkin.checkInType === 'beer') return '—';
+  return checkin.room_id;
+}
+
+function plateDisplay(checkin: CheckIn): string {
+  if (checkin.checkInType === 'food' || checkin.checkInType === 'beer') return '—';
+  return checkin.car_plate ?? '';
 }
 
 export default function CheckinsList({
@@ -87,7 +148,7 @@ export default function CheckinsList({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const isAdmin = role === 'admin';
-  const colCount = isAdmin ? 8 : 7;
+  const colCount = isAdmin ? 9 : 8;
   const colCountForTotal = colCount - 1;
 
   useEffect(() => {
@@ -157,15 +218,28 @@ export default function CheckinsList({
     if (!dateFilterActive || initialCheckins.length === 0) return null;
     const sorted = sortCheckinsForSections(initialCheckins);
     const buckets: CheckIn[][] = [[], [], []];
-    const subtotalCents = [0, 0, 0];
+    const sectionTotals: SectionTotals[] = [
+      { roomCents: 0, foodCents: 0, beerCents: 0, totalCents: 0 },
+      { roomCents: 0, foodCents: 0, beerCents: 0, totalCents: 0 },
+      { roomCents: 0, foodCents: 0, beerCents: 0, totalCents: 0 },
+    ];
     for (const c of sorted) {
       const mins = timeToMinutes(c.time);
       const idx = getBucketIndex(mins);
       buckets[idx].push(c);
-      subtotalCents[idx] += costToCents(c.cost);
+      const t = totalsToCents([c]);
+      sectionTotals[idx].roomCents += t.roomCents;
+      sectionTotals[idx].foodCents += t.foodCents;
+      sectionTotals[idx].beerCents += t.beerCents;
+      sectionTotals[idx].totalCents += t.totalCents;
     }
-    const dayTotalCents = subtotalCents[0] + subtotalCents[1] + subtotalCents[2];
-    return { buckets, subtotalCents, dayTotalCents };
+    const dayTotals: SectionTotals = {
+      roomCents: sectionTotals[0].roomCents + sectionTotals[1].roomCents + sectionTotals[2].roomCents,
+      foodCents: sectionTotals[0].foodCents + sectionTotals[1].foodCents + sectionTotals[2].foodCents,
+      beerCents: sectionTotals[0].beerCents + sectionTotals[1].beerCents + sectionTotals[2].beerCents,
+      totalCents: sectionTotals[0].totalCents + sectionTotals[1].totalCents + sectionTotals[2].totalCents,
+    };
+    return { buckets, sectionTotals, dayTotals };
   }, [dateFilterActive, initialCheckins]);
 
   const renderActionsCell = (checkin: CheckIn) => {
@@ -203,9 +277,10 @@ export default function CheckinsList({
                   <td style={{ padding: 8 }}>{checkin.receipt_number}</td>
                   <td style={{ padding: 8 }}>{checkin.date}</td>
                   <td style={{ padding: 8 }}>{checkin.time}</td>
-                  <td style={{ padding: 8 }}>{checkin.room_id}</td>
+                  <td style={{ padding: 8 }}>{checkin.checkInType ?? 'room'}</td>
+                  <td style={{ padding: 8 }}>{roomDisplay(checkin)}</td>
                   <td style={{ padding: 8 }}>{checkin.staff_name}</td>
-                  <td style={{ padding: 8 }}>{checkin.car_plate}</td>
+                  <td style={{ padding: 8 }}>{plateDisplay(checkin)}</td>
                   <td style={{ padding: 8 }}>${Number(checkin.cost).toFixed(2)}</td>
                   {renderActionsCell(checkin)}
                 </tr>
@@ -214,7 +289,7 @@ export default function CheckinsList({
                 <td colSpan={colCountForTotal} style={{ padding: 8, textAlign: 'right', fontWeight: 500 }}>
                   Section total
                 </td>
-                <td style={{ padding: 8, fontWeight: 500 }}>{centsToCurrency(sectioned.subtotalCents[idx])}</td>
+                <td style={{ padding: 8, fontWeight: 500 }}>{renderTotalsBreakdown(sectioned.sectionTotals[idx])}</td>
               </tr>
             </Fragment>
           ))}
@@ -222,7 +297,7 @@ export default function CheckinsList({
             <td colSpan={colCountForTotal} style={{ padding: 8, textAlign: 'right' }}>
               Day total
             </td>
-            <td style={{ padding: 8 }}>{centsToCurrency(sectioned.dayTotalCents)}</td>
+            <td style={{ padding: 8 }}>{renderTotalsBreakdown(sectioned.dayTotals)}</td>
           </tr>
         </>
       );
@@ -232,10 +307,11 @@ export default function CheckinsList({
         <td style={{ padding: 8 }}>{checkin.receipt_number}</td>
         <td style={{ padding: 8 }}>{checkin.date}</td>
         <td style={{ padding: 8 }}>{checkin.time}</td>
-        <td style={{ padding: 8 }}>{checkin.room_id}</td>
+        <td style={{ padding: 8 }}>{checkin.checkInType ?? 'room'}</td>
+        <td style={{ padding: 8 }}>{roomDisplay(checkin)}</td>
         <td style={{ padding: 8 }}>{checkin.staff_name}</td>
-        <td style={{ padding: 8 }}>{checkin.car_plate}</td>
-        <td style={{ padding: 8 }}>${checkin.cost.toFixed(2)}</td>
+        <td style={{ padding: 8 }}>{plateDisplay(checkin)}</td>
+        <td style={{ padding: 8 }}>${Number(checkin.cost).toFixed(2)}</td>
         {renderActionsCell(checkin)}
       </tr>
     ));
@@ -284,7 +360,7 @@ export default function CheckinsList({
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              {['Receipt #', 'Date', 'Time', 'Room', 'Staff', 'Plate', 'Cost'].map((h) => (
+              {['Receipt #', 'Date', 'Time', 'Type', 'Room', 'Staff', 'Plate', 'Cost'].map((h) => (
                 <th key={h} style={{ textAlign: 'left', padding: 8, borderBottom: '1px solid #e5e7eb' }}>
                   {h}
                 </th>

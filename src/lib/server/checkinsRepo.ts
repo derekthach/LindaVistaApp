@@ -4,6 +4,9 @@ import { getAdminDb } from './firebaseAdmin';
 import { normalizeCheckin } from '@/lib/models/checkin';
 import type {
   CheckIn,
+  CheckInType,
+  LineItem,
+  SummarizedItem,
   SummaryMetrics,
   DashboardData,
   RoomUsageData,
@@ -38,6 +41,7 @@ export async function createCheckin(data: CreateCheckinInput): Promise<string> {
     const doc = {
       receiptNumber,
       checkInAt,
+      checkInType: 'room' as const,
       roomId: data.room_id,
       cost: data.cost,
       paymentMethod: data.payment_method,
@@ -46,6 +50,57 @@ export async function createCheckin(data: CreateCheckinInput): Promise<string> {
       carMake: data.car_make,
       carColor: data.car_color,
       note: data.note ?? '',
+    };
+
+    tx.set(counterRef, { nextReceiptNumber: nextNum + 1 }, { merge: true });
+    const newRef = checkinsRef.doc();
+    tx.set(newRef, doc);
+    return { id: newRef.id, receiptNumber };
+  });
+
+  return result.receiptNumber;
+}
+
+export interface CreateSimpleCheckinInput {
+  date: string;
+  time: string;
+  staff_name: string;
+  lineItems: LineItem[];
+  summarizedItems: SummarizedItem[];
+  notes?: string;
+}
+
+/** Create a food or beer check-in (same collection, checkInType set, lineItems + summarizedItems + notes). */
+export async function createSimpleCheckin(
+  checkInType: 'food' | 'beer',
+  data: CreateSimpleCheckinInput
+): Promise<string> {
+  const db = getAdminDb();
+  const counterRef = db.collection(COUNTERS_COLLECTION).doc(RECEIPT_COUNTER_ID);
+  const checkinsRef = db.collection(CHECKINS_COLLECTION);
+
+  const result = await db.runTransaction(async (tx) => {
+    const counterSnap = await tx.get(counterRef);
+    const nextNum = counterSnap.exists
+      ? (counterSnap.data()?.nextReceiptNumber as number) ?? 1
+      : 1;
+    const receiptNumber = nextNum.toString().padStart(4, '0');
+
+    const dt = DateTime.fromFormat(
+      `${data.date} ${data.time}`,
+      'yyyy-MM-dd HH:mm',
+      { zone: 'America/Puerto_Rico' }
+    );
+    const checkInAt = dt.isValid ? Timestamp.fromDate(dt.toJSDate()) : Timestamp.now();
+
+    const doc = {
+      receiptNumber,
+      checkInAt,
+      checkInType,
+      staffName: data.staff_name,
+      lineItems: data.lineItems,
+      summarizedItems: data.summarizedItems,
+      note: data.notes ?? '',
     };
 
     tx.set(counterRef, { nextReceiptNumber: nextNum + 1 }, { merge: true });

@@ -23,7 +23,7 @@ export async function loginAction(formData: FormData) {
   session.isLoggedIn = true;
   await session.save();
 
-  redirect(user.role === 'admin' ? '/dashboard' : '/checkin');
+  redirect(user.role === 'admin' ? '/dashboard' : '/checkins/new');
 }
 
 export async function logoutAction() {
