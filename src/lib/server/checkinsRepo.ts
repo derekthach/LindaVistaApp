@@ -247,6 +247,47 @@ export async function getRoomUsageTop15(): Promise<RoomUsageData> {
   };
 }
 
+/**
+ * Room usage frequency for a single month: top 15 rooms by check-in count.
+ * Only checkInType === 'room'. Excludes room 0 and invalid/missing room numbers.
+ * Date range: startOfMonth (inclusive) to startOfNextMonth (exclusive) in America/Puerto_Rico.
+ * Uses listCheckinsByDateRange (index on checkInAt only) then filters in memory to avoid a composite index.
+ */
+export async function getRoomUsageFrequency(params: {
+  year: number;
+  month: number; // 1-12
+}): Promise<RoomUsageData> {
+  const { year, month } = params;
+
+  const startOfMonth = DateTime.fromObject(
+    { year, month, day: 1 },
+    { zone: ZONE }
+  ).startOf('day');
+  const lastDayOfMonth = startOfMonth.plus({ months: 1 }).minus({ days: 1 });
+
+  const startISO = startOfMonth.toISODate() ?? '';
+  const endISO = lastDayOfMonth.toISODate() ?? '';
+
+  const checkins = await listCheckinsByDateRange(startISO, endISO);
+
+  const byRoom = new Map<number, number>();
+  for (const c of checkins) {
+    if (c.checkInType !== 'room') continue;
+    const roomId = c.room_id;
+    if (roomId == null || Number.isNaN(Number(roomId)) || roomId <= 0) continue;
+    byRoom.set(roomId, (byRoom.get(roomId) ?? 0) + 1);
+  }
+
+  const sorted = [...byRoom.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 15);
+
+  return {
+    room_numbers: sorted.map(([id]) => `Room ${id}`),
+    usage_counts: sorted.map(([, count]) => count),
+  };
+}
+
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',

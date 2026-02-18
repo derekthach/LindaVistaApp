@@ -1,9 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { DateTime } from 'luxon';
 import LineChart from './charts/LineChart';
 import BarChart from './charts/BarChart';
 import type { DashboardData, RoomUsageData, MonthlyComparisonData } from '@/types';
+
+const ZONE = 'America/Puerto_Rico';
+const MONTH_OPTIONS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function roomUsageYearOptions(): number[] {
+  const y = DateTime.now().setZone(ZONE).year;
+  return [y - 2, y - 1, y, y + 1, y + 2];
+}
 
 const EMPTY_DASHBOARD: DashboardData = {
   dates: [],
@@ -26,6 +34,13 @@ function emptyMonthly(month: number, year: number): MonthlyComparisonData {
 export default function DashboardCharts() {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [roomUsage, setRoomUsage] = useState<RoomUsageData | null>(null);
+  const [roomUsageLoading, setRoomUsageLoading] = useState(true);
+  const [roomUsageMonth, setRoomUsageMonth] = useState(() =>
+    DateTime.now().setZone(ZONE).month
+  );
+  const [roomUsageYear, setRoomUsageYear] = useState(() =>
+    DateTime.now().setZone(ZONE).year
+  );
   const [monthly, setMonthly] = useState<MonthlyComparisonData | null>(null);
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
@@ -35,12 +50,21 @@ export default function DashboardCharts() {
       .then((res) => (res.ok ? res.json() : EMPTY_DASHBOARD))
       .then(setDashboard)
       .catch(() => setDashboard(EMPTY_DASHBOARD));
-
-    fetch('/api/room-usage')
-      .then((res) => (res.ok ? res.json() : EMPTY_ROOM_USAGE))
-      .then(setRoomUsage)
-      .catch(() => setRoomUsage(EMPTY_ROOM_USAGE));
   }, []);
+
+  useEffect(() => {
+    setRoomUsageLoading(true);
+    fetch(`/api/room-usage?month=${roomUsageMonth}&year=${roomUsageYear}`)
+      .then((res) => (res.ok ? res.json() : EMPTY_ROOM_USAGE))
+      .then((data) => {
+        setRoomUsage(data);
+        setRoomUsageLoading(false);
+      })
+      .catch(() => {
+        setRoomUsage(EMPTY_ROOM_USAGE);
+        setRoomUsageLoading(false);
+      });
+  }, [roomUsageMonth, roomUsageYear]);
 
   useEffect(() => {
     fetch(`/api/monthly-revenue?month=${month}&year=${year}`)
@@ -81,9 +105,51 @@ export default function DashboardCharts() {
         <h2 style={{ marginBottom: 12 }}>Detailed Analytics</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
           <div className="card" style={{ height: 360 }}>
-            <h3>Room Usage Frequency (Top 15)</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+              <h3 style={{ margin: 0 }}>Room Usage Frequency (Top 15)</h3>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <select
+                  value={roomUsageMonth}
+                  onChange={(e) => setRoomUsageMonth(parseInt(e.target.value, 10))}
+                  style={{
+                    height: 36,
+                    padding: '0 10px',
+                    borderRadius: 8,
+                    border: '1px solid #e5e7eb',
+                    fontSize: 14,
+                    minWidth: 72,
+                  }}
+                >
+                  {MONTH_OPTIONS.map((m, i) => (
+                    <option key={m} value={i + 1}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={roomUsageYear}
+                  onChange={(e) => setRoomUsageYear(parseInt(e.target.value, 10))}
+                  style={{
+                    height: 36,
+                    padding: '0 10px',
+                    borderRadius: 8,
+                    border: '1px solid #e5e7eb',
+                    fontSize: 14,
+                    minWidth: 72,
+                  }}
+                >
+                  {roomUsageYearOptions().map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
             <div style={{ height: 280 }}>
-              {roomUsage && roomUsage.room_numbers.length > 0 ? (
+              {roomUsageLoading ? (
+                <p style={{ color: '#6b7280', padding: 24 }}>Loading…</p>
+              ) : roomUsage && roomUsage.room_numbers.length > 0 ? (
                 <BarChart
                   labels={roomUsage.room_numbers}
                   data={roomUsage.usage_counts}
@@ -92,7 +158,7 @@ export default function DashboardCharts() {
                   horizontal
                 />
               ) : (
-                <p style={{ color: '#6b7280', padding: 24 }}>No room usage data yet.</p>
+                <p style={{ color: '#6b7280', padding: 24 }}>No room check-ins for this month.</p>
               )}
             </div>
           </div>
