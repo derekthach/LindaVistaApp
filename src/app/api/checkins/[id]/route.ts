@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/server/firebaseAdmin';
 import { requireAuth } from '@/server/auth/session';
 import { requireAdmin } from '@/lib/server/requireAdmin';
-import { deleteCheckinById, updateCheckin } from '@/lib/server/checkinsRepo';
-import { validateUpdateCheckin } from '@/lib/checkins/validation/updateCheckin';
+import { deleteCheckinById, updateCheckin, updateCheckinFoodBeer } from '@/lib/server/checkinsRepo';
+import { validateUpdateCheckin, validateUpdateFoodBeerCheckin } from '@/lib/checkins/validation/updateCheckin';
 import { normalizeReceipt } from '@/lib/checkins/validation/room';
 import { logError, logInfo } from '@/lib/server/log';
 import { HttpError, toErrorResponse } from '@/lib/server/httpError';
@@ -45,10 +45,9 @@ export async function DELETE(
 }
 
 /**
- * Admin update check-in (receipt, staff, cost, room for room type).
- * Manual QA: Edit room record (room, staff, cost, receipt) -> confirm diff -> save -> table updates.
- * Edit food record: room not shown; staff/cost/receipt work. checkInAt never changed.
- * Receipt duplicates allowed; editing receipt does not affect next receipt number. Audit in checkins/{id}/edits.
+ * Admin update check-in. Room: receipt, staff, cost, room. Food/Beer: receipt, staff, item, quantity, amountCollected.
+ * Manual QA: Edit FOOD: change item, quantity, amountCollected; confirm diff; save; dashboard totals update.
+ * Edit BEER: same. Audit history created. checkInAt unchanged. Receipt duplicates allowed. CSV uses latest values.
  */
 export async function PATCH(
   request: NextRequest,
@@ -72,28 +71,55 @@ export async function PATCH(
     const checkInType = (docSnap.data()?.checkInType as string) ?? 'room';
     const isRoom = checkInType === 'room';
 
-    const raw = {
-      receipt_number: body.receipt_number,
-      staff_name: body.staff_name,
-      cost: body.cost,
-      room_id: body.room_id,
-    };
-    const validation = validateUpdateCheckin(raw as Record<string, unknown>, isRoom);
-    if (!validation.valid) {
-      return NextResponse.json(
-        { error: Object.values(validation.errors).find(Boolean) ?? 'Validation failed', fieldErrors: validation.errors },
-        { status: 400 }
-      );
+    if (isRoom) {
+      const raw = {
+        receipt_number: body.receipt_number,
+        staff_name: body.staff_name,
+        cost: body.cost,
+        room_id: body.room_id,
+      };
+      const validation = validateUpdateCheckin(raw as Record<string, unknown>, true);
+      if (!validation.valid) {
+        return NextResponse.json(
+          { error: Object.values(validation.errors).find(Boolean) ?? 'Validation failed', fieldErrors: validation.errors },
+          { status: 400 }
+        );
+      }
+      const receiptPadded = normalizeReceipt(String(raw.receipt_number ?? ''))!;
+      const payload = {
+        receipt_number: receiptPadded,
+        staff_name: String(raw.staff_name).trim(),
+        cost: Number(raw.cost),
+        room_id: Number(raw.room_id),
+      };
+      await updateCheckin(id, payload, payload.staff_name);
+    } else {
+      const raw = {
+        receipt_number: body.receipt_number,
+        staff_name: body.staff_name,
+        itemId: body.itemId,
+        itemLabel: body.itemLabel,
+        quantity: body.quantity,
+        amountCollected: body.amountCollected,
+      };
+      const validation = validateUpdateFoodBeerCheckin(raw as Record<string, unknown>);
+      if (!validation.valid) {
+        return NextResponse.json(
+          { error: Object.values(validation.errors).find(Boolean) ?? 'Validation failed', fieldErrors: validation.errors },
+          { status: 400 }
+        );
+      }
+      const receiptPadded = normalizeReceipt(String(raw.receipt_number ?? ''))!;
+      const payload = {
+        receipt_number: receiptPadded,
+        staff_name: String(raw.staff_name).trim(),
+        itemId: String(raw.itemId).trim(),
+        itemLabel: raw.itemLabel != null ? String(raw.itemLabel).trim() : String(raw.itemId).trim(),
+        quantity: Math.floor(Number(raw.quantity)),
+        amountCollected: Number(raw.amountCollected),
+      };
+      await updateCheckinFoodBeer(id, payload, payload.staff_name);
     }
-
-    const receiptPadded = normalizeReceipt(String(raw.receipt_number ?? ''))!;
-    const payload = {
-      receipt_number: receiptPadded,
-      staff_name: String(raw.staff_name).trim(),
-      cost: Number(raw.cost),
-      ...(isRoom && { room_id: Number(raw.room_id) }),
-    };
-    await updateCheckin(id, payload, payload.staff_name);
     logInfo('api.checkins.patch.success', { requestId, id });
     return NextResponse.json({ ok: true });
   } catch (err) {

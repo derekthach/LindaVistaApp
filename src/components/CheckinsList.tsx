@@ -12,6 +12,7 @@ import {
 import { getCarColorLabel } from '@/lib/checkins/colors';
 import EditCheckinModal, { type EditCheckinDraft } from '@/components/checkins/EditCheckinModal';
 import ConfirmDiffModal, { type DiffLine } from '@/components/checkins/ConfirmDiffModal';
+import EditHistoryPanel from '@/components/checkins/EditHistoryPanel';
 
 function TrashIcon() {
   return (
@@ -223,6 +224,28 @@ export default function CheckinsList({
     }
   };
 
+  function getFirstItemLabel(c: CheckIn): string {
+    const line = c.lineItems?.[0];
+    if (line?.itemLabel) return line.itemLabel;
+    const sum = c.summarizedItems?.[0];
+    if (sum?.itemLabel) return sum.itemLabel;
+    return '';
+  }
+  function getFirstQuantity(c: CheckIn): number {
+    const line = c.lineItems?.[0];
+    if (line != null && typeof line.quantitySold === 'number') return line.quantitySold;
+    const sum = c.summarizedItems?.[0];
+    if (sum != null && typeof sum.totalQuantitySold === 'number') return sum.totalQuantitySold;
+    return 1;
+  }
+  function getFirstAmountCollected(c: CheckIn): number {
+    const line = c.lineItems?.[0];
+    if (line != null && typeof line.amountCollected === 'number') return line.amountCollected;
+    const sum = c.summarizedItems?.[0];
+    if (sum != null && typeof sum.totalAmountCollected === 'number') return sum.totalAmountCollected;
+    return Number(c.cost) || 0;
+  }
+
   function buildDiffLines(checkin: CheckIn, draft: EditCheckinDraft): DiffLine[] {
     const lines: DiffLine[] = [];
     const receiptFrom = checkin.receipt_number?.padStart(4, '0') ?? '';
@@ -232,16 +255,33 @@ export default function CheckinsList({
     if (draft.staff_name !== (checkin.staff_name ?? '')) {
       lines.push({ label: 'Staff', from: checkin.staff_name ?? '', to: draft.staff_name });
     }
-    if (Number(draft.cost) !== Number(checkin.cost)) {
-      lines.push({
-        label: 'Cost',
-        from: `$${Number(checkin.cost).toFixed(2)}`,
-        to: `$${Number(draft.cost).toFixed(2)}`,
-      });
-    }
     const isRoom = checkin.checkInType !== 'food' && checkin.checkInType !== 'beer';
-    if (isRoom && draft.room_id !== (checkin.room_id ?? 0)) {
-      lines.push({ label: 'Room', from: String(checkin.room_id ?? ''), to: String(draft.room_id) });
+    if (isRoom) {
+      if (draft.cost != null && Number(draft.cost) !== Number(checkin.cost)) {
+        lines.push({
+          label: 'Cost',
+          from: `$${Number(checkin.cost).toFixed(2)}`,
+          to: `$${Number(draft.cost).toFixed(2)}`,
+        });
+      }
+      if (draft.room_id != null && draft.room_id !== (checkin.room_id ?? 0)) {
+        lines.push({ label: 'Room', from: String(checkin.room_id ?? ''), to: String(draft.room_id) });
+      }
+    } else {
+      const fromLabel = getFirstItemLabel(checkin);
+      if (draft.itemLabel != null && draft.itemLabel !== fromLabel) {
+        lines.push({ label: 'Item', from: fromLabel || '(empty)', to: draft.itemLabel });
+      }
+      if (draft.quantity != null && draft.quantity !== getFirstQuantity(checkin)) {
+        lines.push({ label: 'Quantity', from: String(getFirstQuantity(checkin)), to: String(draft.quantity) });
+      }
+      if (draft.amountCollected != null && Number(draft.amountCollected) !== getFirstAmountCollected(checkin)) {
+        lines.push({
+          label: 'Amount Collected',
+          from: `$${getFirstAmountCollected(checkin).toFixed(2)}`,
+          to: `$${Number(draft.amountCollected).toFixed(2)}`,
+        });
+      }
     }
     return lines;
   }
@@ -263,12 +303,23 @@ export default function CheckinsList({
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          receipt_number: pendingUpdate.draft.receipt_number,
-          staff_name: pendingUpdate.draft.staff_name,
-          cost: pendingUpdate.draft.cost,
-          ...(pendingUpdate.checkin.checkInType === 'room' && { room_id: pendingUpdate.draft.room_id }),
-        }),
+        body: JSON.stringify(
+          pendingUpdate.checkin.checkInType === 'room'
+            ? {
+                receipt_number: pendingUpdate.draft.receipt_number,
+                staff_name: pendingUpdate.draft.staff_name,
+                cost: pendingUpdate.draft.cost,
+                room_id: pendingUpdate.draft.room_id,
+              }
+            : {
+                receipt_number: pendingUpdate.draft.receipt_number,
+                staff_name: pendingUpdate.draft.staff_name,
+                itemId: pendingUpdate.draft.itemId,
+                itemLabel: pendingUpdate.draft.itemLabel,
+                quantity: pendingUpdate.draft.quantity,
+                amountCollected: pendingUpdate.draft.amountCollected,
+              }
+        ),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -370,7 +421,14 @@ export default function CheckinsList({
                   {expandedId === (checkin.id ?? checkin.receipt_number) && (
                     <tr>
                       <td colSpan={colCount} style={{ padding: 0, borderBottom: '1px solid #e5e7eb', verticalAlign: 'top' }}>
-                        <DetailsPanel checkin={checkin} />
+                        <div className="checkin-expanded-grid">
+                          <div style={{ minWidth: 0 }}>
+                            <DetailsPanel checkin={checkin} />
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <EditHistoryPanel checkinId={checkin.id ?? ''} checkin={checkin} />
+                          </div>
+                        </div>
                       </td>
                     </tr>
                   )}
@@ -408,7 +466,14 @@ export default function CheckinsList({
         {expandedId === (checkin.id ?? checkin.receipt_number) && (
           <tr>
             <td colSpan={colCount} style={{ padding: 0, borderBottom: '1px solid #e5e7eb', verticalAlign: 'top' }}>
-              <DetailsPanel checkin={checkin} />
+              <div className="checkin-expanded-grid">
+                <div style={{ minWidth: 0 }}>
+                  <DetailsPanel checkin={checkin} />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <EditHistoryPanel checkinId={checkin.id ?? ''} checkin={checkin} />
+                </div>
+              </div>
             </td>
           </tr>
         )}

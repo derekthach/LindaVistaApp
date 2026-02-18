@@ -274,6 +274,154 @@ export async function updateCheckin(
   }
 }
 
+export interface UpdateCheckinFoodBeerInput {
+  receipt_number: string;
+  staff_name: string;
+  itemId: string;
+  itemLabel: string;
+  quantity: number;
+  amountCollected: number;
+}
+
+/**
+ * Update food/beer check-in. Persists lineItems and summarizedItems (single item).
+ * Cost is derived on read via totalAmountCollected; dashboard will reflect new totals after refresh.
+ */
+export async function updateCheckinFoodBeer(
+  id: string,
+  payload: UpdateCheckinFoodBeerInput,
+  editedBy: string
+): Promise<void> {
+  const db = getAdminDb();
+  const ref = db.collection(CHECKINS_COLLECTION).doc(id);
+  const editsRef = ref.collection(EDITS_SUBCOLLECTION);
+
+  const snapshot = await ref.get();
+  if (!snapshot.exists) {
+    throw new Error('Check-in not found');
+  }
+  const data = snapshot.data()!;
+  const checkInType = (data.checkInType as string) ?? 'room';
+  if (checkInType !== 'food' && checkInType !== 'beer') {
+    throw new Error('Check-in is not food or beer');
+  }
+
+  const receiptNumber = payload.receipt_number.padStart(4, '0');
+  const itemId = payload.itemId.trim();
+  const itemLabel = payload.itemLabel.trim() || itemId;
+  const lineItems: LineItem[] = [
+    {
+      itemId,
+      itemLabel,
+      quantitySold: payload.quantity,
+      amountCollected: payload.amountCollected,
+    },
+  ];
+  const summarizedItems: SummarizedItem[] = [
+    {
+      itemId,
+      itemLabel,
+      totalQuantitySold: payload.quantity,
+      totalAmountCollected: payload.amountCollected,
+    },
+  ];
+
+  const existingLineItems = (data.lineItems as LineItem[] | undefined) ?? [];
+  const existingSummarized = (data.summarizedItems as SummarizedItem[] | undefined) ?? [];
+  const firstLine = existingLineItems[0];
+  const firstSum = existingSummarized[0];
+  const before: Record<string, unknown> = {
+    receiptNumber: data.receiptNumber ?? '',
+    staffName: data.staffName ?? '',
+    item: firstLine?.itemLabel ?? firstSum?.itemLabel ?? '',
+    quantity: firstLine?.quantitySold ?? firstSum?.totalQuantitySold ?? 0,
+    amountCollected: firstLine?.amountCollected ?? firstSum?.totalAmountCollected ?? 0,
+  };
+  const after: Record<string, unknown> = {
+    receiptNumber,
+    staffName: payload.staff_name,
+    item: itemLabel,
+    quantity: payload.quantity,
+    amountCollected: payload.amountCollected,
+  };
+  const changedFields: string[] = [];
+  if (String(before.receiptNumber) !== String(after.receiptNumber)) changedFields.push('receiptNumber');
+  if (String(before.staffName) !== String(after.staffName)) changedFields.push('staffName');
+  if (String(before.item) !== String(after.item)) changedFields.push('item');
+  if (Number(before.quantity) !== Number(after.quantity)) changedFields.push('quantity');
+  if (Number(before.amountCollected) !== Number(after.amountCollected)) changedFields.push('amountCollected');
+
+  if (changedFields.length === 0) {
+    return;
+  }
+
+  const updateData: Record<string, unknown> = {
+    receiptNumber,
+    staffName: payload.staff_name,
+    lineItems,
+    summarizedItems,
+    updatedAt: Timestamp.now(),
+    updatedBy: editedBy,
+  };
+
+  await ref.update(updateData);
+  try {
+    await editsRef.add({
+      before,
+      after,
+      editedAt: Timestamp.now(),
+      editedBy,
+      changedFields,
+    });
+  } catch (auditErr) {
+    console.error('checkinsRepo.updateCheckinFoodBeer: audit write failed', auditErr);
+  }
+}
+
+export interface CheckinEditRecord {
+  id: string;
+  before: Record<string, unknown>;
+  after: Record<string, unknown>;
+  editedAt: string;
+  editedBy: string;
+  changedFields: string[];
+}
+
+/**
+ * List edit history for a check-in (subcollection checkins/{id}/edits).
+ * Fetches without orderBy to avoid index requirement; sorts newest first in memory.
+ * editedAt returned as ISO string in America/Puerto_Rico.
+ */
+export async function getCheckinEdits(checkinId: string): Promise<CheckinEditRecord[]> {
+  const db = getAdminDb();
+  const ref = db.collection(CHECKINS_COLLECTION).doc(checkinId).collection(EDITS_SUBCOLLECTION);
+  const snapshot = await ref.get();
+  const zone = 'America/Puerto_Rico';
+  const records: CheckinEditRecord[] = snapshot.docs.map((doc) => {
+    const d = doc.data();
+    const editedAtRaw = d.editedAt;
+    let editedAtISO = '';
+    if (editedAtRaw != null) {
+      try {
+        const date = typeof editedAtRaw?.toDate === 'function' ? editedAtRaw.toDate() : new Date(editedAtRaw);
+        editedAtISO = DateTime.fromJSDate(date, { zone }).toISO() ?? '';
+      } catch {
+        editedAtISO = String(editedAtRaw);
+      }
+    }
+    return {
+      id: doc.id,
+      before: (d.before as Record<string, unknown>) ?? {},
+      after: (d.after as Record<string, unknown>) ?? {},
+      editedAt: editedAtISO,
+      editedBy: String(d.editedBy ?? ''),
+      changedFields: Array.isArray(d.changedFields) ? (d.changedFields as string[]) : [],
+    };
+  });
+  records.sort((a, b) => (b.editedAt || '').localeCompare(a.editedAt || ''));
+  return records;
+}
+
 const ZONE = 'America/Puerto_Rico';
 
 export async function getSummaryMetrics(): Promise<SummaryMetrics> {

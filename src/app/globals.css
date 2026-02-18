@@ -98,3 +98,17 @@ textarea {
   color: #374151;
   border-color: #d1d5db;
 }
+
+/* View Check-Ins expanded row: two columns on desktop, stack on mobile */
+.checkin-expanded-grid {
+  display: grid;
+  grid-template-columns: 1fr minmax(200px, 320px);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 640px) {
+  .checkin-expanded-grid {
+    grid-template-columns: 1fr;
+  }
+}

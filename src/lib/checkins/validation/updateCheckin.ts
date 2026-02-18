@@ -74,4 +74,79 @@ export function validateUpdateCheckin(
   };
 }
 
+const AMOUNT_COLLECTED_MAX = 1000;
+const QUANTITY_MIN = 1;
+const QUANTITY_MAX = 999;
+
+export interface UpdateFoodBeerPayload {
+  receipt_number: string;
+  staff_name: string;
+  itemId: string;
+  itemLabel?: string;
+  quantity: number;
+  amountCollected: number;
+}
+
+export interface UpdateFoodBeerValidationResult {
+  valid: boolean;
+  errors: Partial<Record<keyof UpdateFoodBeerPayload, string>>;
+}
+
+export function validateUpdateFoodBeerCheckin(
+  raw: Record<string, unknown>
+): UpdateFoodBeerValidationResult {
+  const errors: UpdateFoodBeerValidationResult['errors'] = {};
+
+  const receiptRaw = raw.receipt_number != null ? String(raw.receipt_number).trim() : '';
+  if (!receiptRaw) {
+    errors.receipt_number = 'Receipt number is required';
+  } else {
+    const normalized = normalizeReceipt(receiptRaw);
+    if (normalized === null) {
+      errors.receipt_number = 'Receipt must be 4 digits (0000-9999)';
+    }
+  }
+
+  const staff = raw.staff_name != null ? String(raw.staff_name).trim() : '';
+  if (!staff) {
+    errors.staff_name = 'Staff is required';
+  } else if (!ALLOWED_STAFF.includes(staff as (typeof ALLOWED_STAFF)[number])) {
+    errors.staff_name = 'Staff must be one of: ' + ALLOWED_STAFF.join(', ');
+  }
+
+  const itemId = raw.itemId != null ? String(raw.itemId).trim() : '';
+  if (!itemId) {
+    errors.itemId = 'Item is required';
+  }
+
+  const qtyVal = raw.quantity;
+  if (qtyVal === undefined || qtyVal === null || qtyVal === '') {
+    errors.quantity = 'Quantity is required';
+  } else {
+    const qty = Number(qtyVal);
+    if (Number.isNaN(qty) || !Number.isInteger(qty) || qty < QUANTITY_MIN || qty > QUANTITY_MAX) {
+      errors.quantity = `Quantity must be a whole number from ${QUANTITY_MIN} to ${QUANTITY_MAX}`;
+    }
+  }
+
+  const amountVal = raw.amountCollected;
+  if (amountVal === undefined || amountVal === null || amountVal === '') {
+    errors.amountCollected = 'Amount collected is required';
+  } else {
+    const amount = Number(amountVal);
+    if (Number.isNaN(amount)) {
+      errors.amountCollected = 'Amount must be a number';
+    } else if (amount < 0) {
+      errors.amountCollected = 'Amount cannot be negative';
+    } else if (amount > AMOUNT_COLLECTED_MAX) {
+      errors.amountCollected = `Amount cannot exceed $${AMOUNT_COLLECTED_MAX}`;
+    }
+  }
+
+  return {
+    valid: Object.keys(errors).length === 0,
+    errors,
+  };
+}
+
 export { ALLOWED_STAFF };
