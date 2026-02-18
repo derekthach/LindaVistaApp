@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getAdminDb } from '@/lib/server/firebaseAdmin';
 import { requireAuth } from '@/server/auth/session';
-import { requireAdmin } from '@/lib/server/requireAdmin';
-import { deleteCheckinById } from '@/lib/server/checkinsRepo';
+import { deleteCheckinById, updateCheckin } from '@/lib/server/checkinsRepo';
+import { validateUpdateCheckin } from '@/lib/checkins/validation/updateCheckin';
+import { normalizeReceipt } from '@/lib/checkins/validation/room';
 import { logError, logInfo } from '@/lib/server/log';
 import { HttpError, toErrorResponse } from '@/lib/server/httpError';
+
+const CHECKINS_COLLECTION = 'checkins';
 
 export const runtime = 'nodejs';
 
@@ -36,5 +40,73 @@ export async function DELETE(
     logError('api.checkins.delete.error', { requestId, message: String(err) });
     const { status, body } = toErrorResponse(httpErr, requestId);
     return NextResponse.json(body, { status });
+  }
+}
+
+/**
+ * Admin update check-in (receipt, staff, cost, room for room type).
+ * Manual QA: Edit room record (room, staff, cost, receipt) -> confirm diff -> save -> table updates.
+ * Edit food record: room not shown; staff/cost/receipt work. checkInAt never changed.
+ * Receipt duplicates allowed; editing receipt does not affect next receipt number. Audit in checkins/{id}/edits.
+ */
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const requestId = crypto.randomUUID();
+  logInfo('api.checkins.patch.start', { requestId });
+
+  try {
+    await requireAuth('admin');
+    const { id } = await params;
+    if (!id || typeof id !== 'string') {
+      return NextResponse.json({ error: 'Missing or invalid id' }, { status: 400 });
+    }
+    const body = await request.json().catch(() => ({}));
+    const db = getAdminDb();
+    const docSnap = await db.collection(CHECKINS_COLLECTION).doc(id).get();
+    if (!docSnap.exists) {
+      return NextResponse.json({ error: 'Check-in not found' }, { status: 404 });
+    }
+    const checkInType = (docSnap.data()?.checkInType as string) ?? 'room';
+    const isRoom = checkInType === 'room';
+
+    const raw = {
+      receipt_number: body.receipt_number,
+      staff_name: body.staff_name,
+      cost: body.cost,
+      room_id: body.room_id,
+    };
+    const validation = validateUpdateCheckin(raw as Record<string, unknown>, isRoom);
+    if (!validation.valid) {
+      return NextResponse.json(
+        { error: Object.values(validation.errors).find(Boolean) ?? 'Validation failed', fieldErrors: validation.errors },
+        { status: 400 }
+      );
+    }
+
+    const receiptPadded = normalizeReceipt(String(raw.receipt_number ?? ''))!;
+    const payload = {
+      receipt_number: receiptPadded,
+      staff_name: String(raw.staff_name).trim(),
+      cost: Number(raw.cost),
+      ...(isRoom && { room_id: Number(raw.room_id) }),
+    };
+    await updateCheckin(id, payload, payload.staff_name);
+    logInfo('api.checkins.patch.success', { requestId, id });
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    const httpErr =
+      err instanceof HttpError
+        ? err
+        : err instanceof Error && err.message === 'Not authenticated'
+          ? new HttpError(401, 'UNAUTHORIZED')
+          : err instanceof Error && err.message === 'Insufficient permissions'
+            ? new HttpError(403, 'FORBIDDEN')
+            : new HttpError(500, 'UPDATE_FAILED', { message: err instanceof Error ? err.message : String(err) });
+    logError('api.checkins.patch.error', { requestId, message: String(err) });
+    const { status, body } = toErrorResponse(httpErr, requestId);
+    const responseBody = status === 500 && err instanceof Error ? { ...body, error: err.message } : body;
+    return NextResponse.json(responseBody, { status });
   }
 }

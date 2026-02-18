@@ -196,6 +196,84 @@ export async function deleteCheckinById(id: string): Promise<void> {
   await ref.delete();
 }
 
+const EDITS_SUBCOLLECTION = 'edits';
+
+export interface UpdateCheckinInput {
+  receipt_number: string;
+  staff_name: string;
+  cost: number;
+  room_id?: number;
+}
+
+/**
+ * Update check-in editable fields. Does not change checkInAt.
+ * Writes audit snapshot to checkins/{id}/edits. Editing receipt does not affect next receipt counter.
+ */
+export async function updateCheckin(
+  id: string,
+  payload: UpdateCheckinInput,
+  editedBy: string
+): Promise<void> {
+  const db = getAdminDb();
+  const ref = db.collection(CHECKINS_COLLECTION).doc(id);
+  const editsRef = ref.collection(EDITS_SUBCOLLECTION);
+
+  const snapshot = await ref.get();
+  if (!snapshot.exists) {
+    throw new Error('Check-in not found');
+  }
+  const data = snapshot.data()!;
+  const checkInType = (data.checkInType as string) ?? 'room';
+  const isRoom = checkInType === 'room';
+
+  const receiptNumber = payload.receipt_number.padStart(4, '0');
+  const before: Record<string, unknown> = {
+    receiptNumber: data.receiptNumber ?? '',
+    staffName: data.staffName ?? '',
+    cost: data.cost != null ? Number(data.cost) : 0,
+    ...(isRoom && { roomId: data.roomId != null ? Number(data.roomId) : 0 }),
+  };
+  const after: Record<string, unknown> = {
+    receiptNumber,
+    staffName: payload.staff_name,
+    cost: payload.cost,
+    ...(isRoom && { roomId: payload.room_id ?? 0 }),
+  };
+  const changedFields: string[] = [];
+  if (String(before.receiptNumber) !== String(after.receiptNumber)) changedFields.push('receiptNumber');
+  if (String(before.staffName) !== String(after.staffName)) changedFields.push('staffName');
+  if (Number(before.cost) !== Number(after.cost)) changedFields.push('cost');
+  if (isRoom && Number(before.roomId) !== Number(after.roomId)) changedFields.push('roomId');
+
+  if (changedFields.length === 0) {
+    return;
+  }
+
+  const updateData: Record<string, unknown> = {
+    receiptNumber,
+    staffName: payload.staff_name,
+    cost: payload.cost,
+    updatedAt: Timestamp.now(),
+    updatedBy: editedBy,
+  };
+  if (isRoom) {
+    updateData.roomId = payload.room_id ?? 0;
+  }
+
+  await ref.update(updateData);
+  try {
+    await editsRef.add({
+      before,
+      after,
+      editedAt: Timestamp.now(),
+      editedBy,
+      changedFields,
+    });
+  } catch (auditErr) {
+    console.error('checkinsRepo.updateCheckin: audit write failed', auditErr);
+  }
+}
+
 const ZONE = 'America/Puerto_Rico';
 
 export async function getSummaryMetrics(): Promise<SummaryMetrics> {

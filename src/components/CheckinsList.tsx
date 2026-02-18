@@ -10,6 +10,8 @@ import {
   type SectionTotals,
 } from '@/lib/checkins/sectioning';
 import { getCarColorLabel } from '@/lib/checkins/colors';
+import EditCheckinModal, { type EditCheckinDraft } from '@/components/checkins/EditCheckinModal';
+import ConfirmDiffModal, { type DiffLine } from '@/components/checkins/ConfirmDiffModal';
 
 function TrashIcon() {
   return (
@@ -33,6 +35,15 @@ function ChevronRightIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d="M9 18l6-6-6-6" />
+    </svg>
+  );
+}
+
+function EditIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+      <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
     </svg>
   );
 }
@@ -141,6 +152,9 @@ export default function CheckinsList({
   const router = useRouter();
   const [selectedDate, setSelectedDate] = useState(initialDate ?? '');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [editingCheckin, setEditingCheckin] = useState<CheckIn | null>(null);
+  const [pendingUpdate, setPendingUpdate] = useState<{ checkin: CheckIn; draft: EditCheckinDraft } | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<CheckIn | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -209,6 +223,69 @@ export default function CheckinsList({
     }
   };
 
+  function buildDiffLines(checkin: CheckIn, draft: EditCheckinDraft): DiffLine[] {
+    const lines: DiffLine[] = [];
+    const receiptFrom = checkin.receipt_number?.padStart(4, '0') ?? '';
+    if (draft.receipt_number !== receiptFrom) {
+      lines.push({ label: 'Receipt #', from: receiptFrom, to: draft.receipt_number });
+    }
+    if (draft.staff_name !== (checkin.staff_name ?? '')) {
+      lines.push({ label: 'Staff', from: checkin.staff_name ?? '', to: draft.staff_name });
+    }
+    if (Number(draft.cost) !== Number(checkin.cost)) {
+      lines.push({
+        label: 'Cost',
+        from: `$${Number(checkin.cost).toFixed(2)}`,
+        to: `$${Number(draft.cost).toFixed(2)}`,
+      });
+    }
+    const isRoom = checkin.checkInType !== 'food' && checkin.checkInType !== 'beer';
+    if (isRoom && draft.room_id !== (checkin.room_id ?? 0)) {
+      lines.push({ label: 'Room', from: String(checkin.room_id ?? ''), to: String(draft.room_id) });
+    }
+    return lines;
+  }
+
+  const handleEditSave = (draft: EditCheckinDraft) => {
+    if (!editingCheckin) return;
+    const diffLines = buildDiffLines(editingCheckin, draft);
+    if (diffLines.length === 0) return;
+    setPendingUpdate({ checkin: editingCheckin, draft });
+    setEditingCheckin(null);
+  };
+
+  const handleConfirmUpdate = async () => {
+    if (!pendingUpdate?.checkin.id) return;
+    setIsUpdating(true);
+    setErrorMessage(null);
+    try {
+      const res = await fetch(`/api/checkins/${pendingUpdate.checkin.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          receipt_number: pendingUpdate.draft.receipt_number,
+          staff_name: pendingUpdate.draft.staff_name,
+          cost: pendingUpdate.draft.cost,
+          ...(pendingUpdate.checkin.checkInType === 'room' && { room_id: pendingUpdate.draft.room_id }),
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const msg = typeof data?.error === 'string' ? data.error : typeof data?.message === 'string' ? data.message : 'Update failed';
+        throw new Error(msg);
+      }
+      setPendingUpdate(null);
+      setEditingCheckin(null);
+      setSuccessMessage('Record updated.');
+      router.refresh();
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Update failed');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   useEffect(() => {
     if (!successMessage) return;
     const t = setTimeout(() => setSuccessMessage(null), 4000);
@@ -226,7 +303,7 @@ export default function CheckinsList({
     const rowId = checkin.id ?? checkin.receipt_number;
     const isExpanded = expandedId === rowId;
     return (
-      <td style={{ padding: 8, width: 80, textAlign: 'right', verticalAlign: 'middle' }}>
+      <td style={{ padding: 8, width: 112, textAlign: 'right', verticalAlign: 'middle' }}>
         <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', alignItems: 'center' }}>
           <button
             type="button"
@@ -239,16 +316,28 @@ export default function CheckinsList({
             {isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
           </button>
           {isAdmin && checkin.id && (
-            <button
-              type="button"
-              onClick={() => handleDeleteClick(checkin)}
-              className="btn btn-ghost"
-              style={{ minWidth: 32, height: 32, padding: 0 }}
-              aria-label="Delete check-in"
-              title="Delete check-in"
-            >
-              <TrashIcon />
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setEditingCheckin(checkin)}
+                className="btn btn-ghost"
+                style={{ minWidth: 32, height: 32, padding: 0 }}
+                aria-label="Edit check-in"
+                title="Edit check-in"
+              >
+                <EditIcon />
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteClick(checkin)}
+                className="btn btn-ghost"
+                style={{ minWidth: 32, height: 32, padding: 0 }}
+                aria-label="Delete check-in"
+                title="Delete check-in"
+              >
+                <TrashIcon />
+              </button>
+            </>
           )}
         </div>
       </td>
@@ -375,7 +464,7 @@ export default function CheckinsList({
                   {h}
                 </th>
               ))}
-              <th key="actions" style={{ width: 80, padding: 8, borderBottom: '1px solid #e5e7eb', textAlign: 'right' }}>
+              <th key="actions" style={{ width: 112, padding: 8, borderBottom: '1px solid #e5e7eb', textAlign: 'right' }}>
                 Actions
               </th>
             </tr>
@@ -385,6 +474,20 @@ export default function CheckinsList({
         {initialCheckins.length === 0 && <div style={{ padding: 16 }}>No check-ins found.</div>}
       </div>
 
+      <EditCheckinModal
+        open={!!editingCheckin}
+        onOpenChange={(open) => !open && setEditingCheckin(null)}
+        checkin={editingCheckin}
+        onSave={handleEditSave}
+        saveDisabled={isUpdating}
+      />
+      <ConfirmDiffModal
+        open={!!pendingUpdate}
+        onOpenChange={(open) => !open && setPendingUpdate(null)}
+        diffLines={pendingUpdate ? buildDiffLines(pendingUpdate.checkin, pendingUpdate.draft) : []}
+        onConfirm={handleConfirmUpdate}
+        isSubmitting={isUpdating}
+      />
       {pendingDelete && (
         <div
           role="dialog"

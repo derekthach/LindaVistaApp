@@ -17,7 +17,8 @@ export async function requireAdmin(request?: NextRequest): Promise<void> {
   let secret: string | undefined;
 
   if (request) {
-    secret = request.headers.get(HEADER_SECRET) ?? request.cookies.get(COOKIE_NAME)?.value;
+    const cookieVal = request.cookies?.get?.(COOKIE_NAME)?.value;
+    secret = request.headers.get(HEADER_SECRET) ?? cookieVal;
   } else {
     const [h, c] = await Promise.all([headers(), cookies()]);
     secret = h.get(HEADER_SECRET) ?? c.get(COOKIE_NAME)?.value;
