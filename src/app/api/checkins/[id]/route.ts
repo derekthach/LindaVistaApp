@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/server/firebaseAdmin';
 import { requireAuth } from '@/server/auth/session';
+import { requireAdmin } from '@/lib/server/requireAdmin';
 import { deleteCheckinById, updateCheckin } from '@/lib/server/checkinsRepo';
 import { validateUpdateCheckin } from '@/lib/checkins/validation/updateCheckin';
 import { normalizeReceipt } from '@/lib/checkins/validation/room';
