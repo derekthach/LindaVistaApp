@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@vercel/analytics": "^1.6.1",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.6.2",
     "chart.js": "^4.5.1",
