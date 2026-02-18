@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { LanguageProvider, LanguageToggle, useLanguage } from '@/components/LanguageToggle';
 import StaffDropdown from '@/components/checkins/StaffDropdown';
@@ -10,6 +10,7 @@ import type { ItemOption } from '@/lib/checkins/items';
 import type { LineItem } from '@/types';
 import { getDraft, setDraft } from '@/lib/checkins/draft';
 import { validateSimpleCheckin } from '@/lib/checkins/validation';
+import type { TranslationKey } from '@/components/LanguageToggle';
 
 const SIMPLE_TYPES: ('food' | 'beer')[] = ['food', 'beer'];
 
@@ -31,11 +32,41 @@ function SimpleCheckinFormContent({ type }: { type: 'food' | 'beer' }) {
   const [staffName, setStaffName] = useState('');
   const [notes, setNotes] = useState('');
   const [lineRows, setLineRows] = useState<LineItem[]>([initialRow()]);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [lineItemErrors, setLineItemErrors] = useState<
-    Record<number, { quantitySold?: string; amountCollected?: string; itemId?: string }>
-  >({});
   const [submitting, setSubmitting] = useState(false);
+  const [hasAttemptedReview, setHasAttemptedReview] = useState(false);
+
+  const lineItemsForValidation: LineItem[] = useMemo(
+    () =>
+      lineRows.map((r) => ({
+        itemId: r.itemId ?? '',
+        itemLabel: r.itemLabel ?? '',
+        quantitySold: Number(r.quantitySold) || 0,
+        amountCollected: Number(r.amountCollected) ?? 0,
+      })),
+    [lineRows]
+  );
+
+  const validation = useMemo(
+    () =>
+      validateSimpleCheckin({
+        date,
+        time,
+        staff_name: staffName,
+        checkInType: type,
+        lineItems: lineItemsForValidation,
+        notes: notes || undefined,
+      }),
+    [date, time, staffName, type, lineItemsForValidation, notes]
+  );
+
+  const displayErrors = validation.errors;
+  const displayLineItemErrors = validation.lineItemErrors ?? {};
+  const formValid = validation.valid;
+
+  const totalAmountCollected = useMemo(
+    () => lineRows.reduce((sum, r) => sum + (Number(r.amountCollected) || 0), 0),
+    [lineRows]
+  );
 
   useEffect(() => {
     const { date: d, time: tm } = getDefaultDateAndTime();
@@ -116,42 +147,17 @@ function SimpleCheckinFormContent({ type }: { type: 'food' | 'beer' }) {
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setErrors({});
-    setLineItemErrors({});
+    setHasAttemptedReview(true);
+    if (!formValid) return;
     const staff_name = staffName?.trim() ?? '';
     const lineItems: LineItem[] = lineRows
       .filter((r) => r.itemId?.trim())
       .map((r) => ({
         itemId: r.itemId,
         itemLabel: r.itemLabel,
-        quantitySold: Number(r.quantitySold) || 1,
+        quantitySold: Math.min(QUANTITY_MAX, Math.max(1, Math.floor(Number(r.quantitySold) || 1))),
         amountCollected: Number(r.amountCollected) ?? 0,
       }));
-
-    const validation = validateSimpleCheckin({
-      date,
-      time,
-      staff_name,
-      checkInType: type,
-      lineItems,
-      notes: notes || undefined,
-    });
-    if (!validation.valid) {
-      setErrors(validation.errors as Record<string, string>);
-      if (validation.lineItemErrors) {
-        const filledIndices = lineRows
-          .map((r, i) => (r.itemId?.trim() ? i : -1))
-          .filter((i) => i >= 0);
-        const mapped: typeof lineItemErrors = {};
-        for (const [key, val] of Object.entries(validation.lineItemErrors)) {
-          const submittedIdx = Number(key);
-          const clientIdx = filledIndices[submittedIdx];
-          if (clientIdx !== undefined) mapped[clientIdx] = val;
-        }
-        setLineItemErrors(mapped);
-      }
-      return;
-    }
 
     setDraft({
       checkInType: type,
@@ -159,10 +165,13 @@ function SimpleCheckinFormContent({ type }: { type: 'food' | 'beer' }) {
       time,
       staff_name,
       lineItems,
-      notes: notes || undefined,
+      notes: notes?.trim() ? notes.trim().slice(0, 250) : undefined,
     });
     router.push(`/checkins/new/${type}/validate`);
   };
+
+  const QUANTITY_MAX = 50;
+  const msg = (code: string) => t(code as TranslationKey);
 
   return (
     <div className="card">
@@ -192,8 +201,8 @@ function SimpleCheckinFormContent({ type }: { type: 'food' | 'beer' }) {
                 border: '1px solid #d1d5db',
               }}
             />
-            {errors.date && (
-              <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 4 }}>{errors.date}</div>
+            {hasAttemptedReview && displayErrors.date && (
+              <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 4 }}>{msg(displayErrors.date)}</div>
             )}
           </label>
 
@@ -203,23 +212,24 @@ function SimpleCheckinFormContent({ type }: { type: 'food' | 'beer' }) {
               name="time"
               type="text"
               value={time}
-              onChange={(e) => setTime(e.target.value)}
-              required
+              readOnly
+              aria-readonly
               style={{
                 width: '100%',
                 padding: '8px 12px',
                 borderRadius: 8,
                 border: '1px solid #d1d5db',
+                backgroundColor: '#f9fafb',
               }}
             />
-            {errors.time && (
-              <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 4 }}>{errors.time}</div>
+            {hasAttemptedReview && displayErrors.time && (
+              <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 4 }}>{msg(displayErrors.time)}</div>
             )}
           </label>
 
           <StaffDropdown value={staffName} onChange={setStaffName} />
-          {errors.staff_name && (
-            <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 4 }}>{errors.staff_name}</div>
+          {hasAttemptedReview && displayErrors.staff_name && (
+            <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 4 }}>{msg(displayErrors.staff_name)}</div>
           )}
         </div>
 
@@ -255,9 +265,9 @@ function SimpleCheckinFormContent({ type }: { type: 'food' | 'beer' }) {
                       </option>
                     ))}
                   </select>
-                  {lineItemErrors[index]?.itemId && (
+                  {hasAttemptedReview && displayLineItemErrors[index]?.itemId && (
                     <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 4 }}>
-                      {lineItemErrors[index].itemId}
+                      {msg(displayLineItemErrors[index].itemId!)}
                     </div>
                   )}
                 </label>
@@ -266,6 +276,7 @@ function SimpleCheckinFormContent({ type }: { type: 'food' | 'beer' }) {
                   <input
                     type="number"
                     min={1}
+                    max={50}
                     step={1}
                     value={row.quantitySold || ''}
                     onChange={(e) =>
@@ -278,9 +289,9 @@ function SimpleCheckinFormContent({ type }: { type: 'food' | 'beer' }) {
                       border: '1px solid #d1d5db',
                     }}
                   />
-                  {lineItemErrors[index]?.quantitySold && (
+                  {hasAttemptedReview && displayLineItemErrors[index]?.quantitySold && (
                     <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 4 }}>
-                      {lineItemErrors[index].quantitySold}
+                      {msg(displayLineItemErrors[index].quantitySold!)}
                     </div>
                   )}
                 </label>
@@ -288,7 +299,8 @@ function SimpleCheckinFormContent({ type }: { type: 'food' | 'beer' }) {
                   <div style={{ marginBottom: 4 }}>{t('amount_collected')}</div>
                   <input
                     type="number"
-                    min={0}
+                    min={0.01}
+                    max={1000}
                     step={0.01}
                     value={row.amountCollected === 0 ? '' : row.amountCollected}
                     onChange={(e) =>
@@ -301,9 +313,9 @@ function SimpleCheckinFormContent({ type }: { type: 'food' | 'beer' }) {
                       border: '1px solid #d1d5db',
                     }}
                   />
-                  {lineItemErrors[index]?.amountCollected && (
+                  {hasAttemptedReview && displayLineItemErrors[index]?.amountCollected && (
                     <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 4 }}>
-                      {lineItemErrors[index].amountCollected}
+                      {msg(displayLineItemErrors[index].amountCollected!)}
                     </div>
                   )}
                 </label>
@@ -344,8 +356,15 @@ function SimpleCheckinFormContent({ type }: { type: 'food' | 'beer' }) {
           >
             {t('add_another_item')}
           </button>
-          {errors.lineItems && (
-            <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 8 }}>{errors.lineItems}</div>
+          <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            <span style={{ fontWeight: 600 }}>{t('total')}</span>
+            <span>{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(totalAmountCollected)}</span>
+          </div>
+          {hasAttemptedReview && displayErrors.lineItems && (
+            <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 4 }}>{msg(displayErrors.lineItems)}</div>
+          )}
+          {hasAttemptedReview && displayErrors.itemsTotal && (
+            <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 4 }}>{msg(displayErrors.itemsTotal)}</div>
           )}
         </section>
 
@@ -356,6 +375,7 @@ function SimpleCheckinFormContent({ type }: { type: 'food' | 'beer' }) {
             rows={3}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
+            maxLength={250}
             style={{
               width: '100%',
               padding: '8px 12px',
@@ -363,11 +383,10 @@ function SimpleCheckinFormContent({ type }: { type: 'food' | 'beer' }) {
               border: '1px solid #d1d5db',
             }}
           />
+          {hasAttemptedReview && displayErrors.notes && (
+            <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 4 }}>{msg(displayErrors.notes)}</div>
+          )}
         </label>
-
-        {errors.form && (
-          <div style={{ fontSize: 14, color: '#b91c1c' }}>{errors.form}</div>
-        )}
 
         <button
           type="submit"

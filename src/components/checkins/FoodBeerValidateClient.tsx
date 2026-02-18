@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LanguageProvider, LanguageToggle, useLanguage } from '@/components/LanguageToggle';
+import type { TranslationKey } from '@/components/LanguageToggle';
 import { getDraft, clearDraft } from '@/lib/checkins/draft';
 import type { FoodBeerDraft } from '@/lib/checkins/draft';
 import { confirmFoodBeerCheckinAction } from '@/app/actions/checkin';
@@ -123,7 +124,7 @@ function ValidateContent({ type }: { type: 'food' | 'beer' }) {
       </div>
 
       {error && (
-        <div style={{ marginBottom: 12, fontSize: 14, color: '#b91c1c' }}>{error}</div>
+        <div style={{ marginBottom: 12, fontSize: 14, color: '#b91c1c' }}>{t(error as TranslationKey)}</div>
       )}
 
       <div style={{ display: 'flex', gap: 10 }}>

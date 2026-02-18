@@ -46,6 +46,22 @@ const translations = {
     review: 'Review',
     cancel: 'Cancel',
     total_amount_collected: 'Total Amount Collected',
+    total: 'Total',
+    requiredStaff: 'Staff name is required.',
+    requiredItem: 'Item is required.',
+    atLeastOneItem: 'At least one item is required.',
+    quantityRequired: 'Quantity is required.',
+    quantityInteger: 'Quantity must be a whole number.',
+    quantityRange: 'Quantity must be between 1 and 50.',
+    amountRequired: 'Amount collected is required.',
+    amountPositive: 'Amount collected must be greater than 0.',
+    amountMax: 'Amount collected cannot exceed 1000.',
+    totalMax: 'Total amount collected cannot exceed 2000.',
+    notesMax: 'Notes cannot exceed 250 characters.',
+    requiredDate: 'Date is required.',
+    requiredTime: 'Time is required.',
+    invalidCheckInType: 'Invalid check-in type.',
+    fix_errors_below: 'Please fix the errors below.',
   },
   es: {
     room_number: 'Número de Habitación',
@@ -88,13 +104,31 @@ const translations = {
     review: 'Revisar',
     cancel: 'Cancelar',
     total_amount_collected: 'Total Cobrado',
+    total: 'Total',
+    requiredStaff: 'El nombre del empleado es obligatorio.',
+    requiredItem: 'El artículo es obligatorio.',
+    atLeastOneItem: 'Se requiere al menos un artículo.',
+    quantityRequired: 'La cantidad es obligatoria.',
+    quantityInteger: 'La cantidad debe ser un número entero.',
+    quantityRange: 'La cantidad debe estar entre 1 y 50.',
+    amountRequired: 'El monto cobrado es obligatorio.',
+    amountPositive: 'El monto cobrado debe ser mayor que 0.',
+    amountMax: 'El monto cobrado no puede superar 1000.',
+    totalMax: 'El monto total cobrado no puede superar 2000.',
+    notesMax: 'Las notas no pueden superar 250 caracteres.',
+    requiredDate: 'La fecha es obligatoria.',
+    requiredTime: 'La hora es obligatoria.',
+    invalidCheckInType: 'Tipo de registro no válido.',
+    fix_errors_below: 'Corrija los errores a continuación.',
   },
 };
+
+export type TranslationKey = keyof typeof translations.en;
 
 type LanguageContextValue = {
   language: Language;
   setLanguage: (lang: Language) => void;
-  t: (key: keyof typeof translations.en) => string;
+  t: (key: TranslationKey) => string;
 };
 
 const LanguageContext = createContext<LanguageContextValue | null>(null);

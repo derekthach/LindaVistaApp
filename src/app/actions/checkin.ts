@@ -96,8 +96,10 @@ export async function submitSimpleCheckinAction(
     notes,
   });
   if (!validation.valid) {
+    const firstError = Object.values(validation.errors).find(Boolean)
+      ?? Object.values(validation.lineItemErrors ?? {}).flatMap((row) => Object.values(row)).find(Boolean);
     return {
-      error: Object.values(validation.errors).find(Boolean) ?? 'Please fix the errors below.',
+      error: firstError ?? 'fix_errors_below',
       lineItemErrors: validation.lineItemErrors,
     };
   }
@@ -128,8 +130,10 @@ export async function confirmFoodBeerCheckinAction(
     notes: draft.notes,
   });
   if (!validation.valid) {
+    const firstError = Object.values(validation.errors).find(Boolean)
+      ?? Object.values(validation.lineItemErrors ?? {}).flatMap((row) => Object.values(row)).find(Boolean);
     return {
-      error: Object.values(validation.errors).find(Boolean) ?? 'Please fix the errors below.',
+      error: firstError ?? 'fix_errors_below',
     };
   }
 

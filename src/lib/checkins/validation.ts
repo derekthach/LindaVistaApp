@@ -1,6 +1,32 @@
 import type { CheckInType } from './types';
 import type { LineItem } from '@/types';
 
+/** Error codes returned by validation; map to bilingual messages in UI. */
+export const VALIDATION_CODES = {
+  requiredStaff: 'requiredStaff',
+  requiredItem: 'requiredItem',
+  atLeastOneItem: 'atLeastOneItem',
+  quantityRequired: 'quantityRequired',
+  quantityInteger: 'quantityInteger',
+  quantityRange: 'quantityRange',
+  amountRequired: 'amountRequired',
+  amountPositive: 'amountPositive',
+  amountMax: 'amountMax',
+  totalMax: 'totalMax',
+  notesMax: 'notesMax',
+  requiredDate: 'requiredDate',
+  requiredTime: 'requiredTime',
+  invalidCheckInType: 'invalidCheckInType',
+} as const;
+
+export type ValidationCode = (typeof VALIDATION_CODES)[keyof typeof VALIDATION_CODES];
+
+const QUANTITY_MIN = 1;
+const QUANTITY_MAX = 50;
+const AMOUNT_MAX_PER_ROW = 1000;
+const TOTAL_AMOUNT_MAX = 2000;
+const NOTES_MAX_LENGTH = 250;
+
 export interface SimpleCheckinFormValues {
   date: string;
   time: string;
@@ -12,51 +38,76 @@ export interface SimpleCheckinFormValues {
 
 export interface ValidationResult {
   valid: boolean;
-  errors: Partial<Record<keyof SimpleCheckinFormValues, string>>;
+  /** Error codes keyed by field (staff_name, date, time, lineItems, itemsTotal, notes, etc.) */
+  errors: Record<string, string>;
   lineItemErrors?: Record<number, { quantitySold?: string; amountCollected?: string; itemId?: string }>;
 }
 
 /**
- * Lightweight validation for food/beer check-in form.
- * Requires: date, time, staff_name, checkInType, at least one line item with itemId, quantitySold >= 1, amountCollected >= 0.
+ * Validation for food/beer check-in form.
+ * Returns error codes for bilingual display. Rules:
+ * - Staff required; at least one valid item row (item selected, quantity 1-50 int, amount > 0 and <= 1000).
+ * - Total amount across rows <= 2000. Notes optional, max 250 chars.
  */
 export function validateSimpleCheckin(values: SimpleCheckinFormValues): ValidationResult {
-  const errors: ValidationResult['errors'] = {};
-  const lineItemErrors: ValidationResult['lineItemErrors'] = {};
+  const errors: Record<string, string> = {};
+  const lineItemErrors: Record<number, { quantitySold?: string; amountCollected?: string; itemId?: string }> = {};
 
   if (!values.date?.trim()) {
-    errors.date = 'Date is required';
+    errors.date = VALIDATION_CODES.requiredDate;
   }
   if (!values.time?.trim()) {
-    errors.time = 'Time is required';
+    errors.time = VALIDATION_CODES.requiredTime;
   }
   if (!values.staff_name?.trim()) {
-    errors.staff_name = 'Staff name is required';
+    errors.staff_name = VALIDATION_CODES.requiredStaff;
   }
   if (!values.checkInType || !['room', 'food', 'beer'].includes(values.checkInType)) {
-    errors.checkInType = 'Invalid check-in type';
+    errors.checkInType = VALIDATION_CODES.invalidCheckInType;
   }
 
-  if (!values.lineItems?.length) {
-    errors.lineItems = 'At least one item is required';
+  if (values.notes != null && values.notes.length > NOTES_MAX_LENGTH) {
+    errors.notes = VALIDATION_CODES.notesMax;
+  }
+
+  const items = values.lineItems ?? [];
+  const validItems = items.filter((item) => item.itemId?.trim());
+  if (validItems.length === 0) {
+    errors.lineItems = VALIDATION_CODES.atLeastOneItem;
   } else {
-    values.lineItems.forEach((item, index) => {
-      const row: NonNullable<ValidationResult['lineItemErrors']>[number] = {};
+    let totalAmount = 0;
+    items.forEach((item, index) => {
+      const row: { quantitySold?: string; amountCollected?: string; itemId?: string } = {};
       if (!item.itemId?.trim()) {
-        row.itemId = 'Item is required';
+        row.itemId = VALIDATION_CODES.requiredItem;
       }
       const q = item.quantitySold;
-      if (typeof q !== 'number' || Number.isNaN(q) || q < 1 || Math.floor(q) !== q) {
-        row.quantitySold = 'Quantity must be a whole number ≥ 1';
-      }
-      const a = item.amountCollected;
-      if (typeof a !== 'number' || Number.isNaN(a) || a < 0) {
-        row.amountCollected = 'Amount must be ≥ 0';
+      if (item.itemId?.trim()) {
+        if (typeof q !== 'number' || Number.isNaN(q)) {
+          row.quantitySold = VALIDATION_CODES.quantityRequired;
+        } else if (Math.floor(q) !== q) {
+          row.quantitySold = VALIDATION_CODES.quantityInteger;
+        } else if (q < QUANTITY_MIN || q > QUANTITY_MAX) {
+          row.quantitySold = VALIDATION_CODES.quantityRange;
+        }
+        const a = item.amountCollected;
+        if (typeof a !== 'number' || Number.isNaN(a)) {
+          row.amountCollected = VALIDATION_CODES.amountRequired;
+        } else if (a <= 0) {
+          row.amountCollected = VALIDATION_CODES.amountPositive;
+        } else if (a > AMOUNT_MAX_PER_ROW) {
+          row.amountCollected = VALIDATION_CODES.amountMax;
+        } else {
+          totalAmount += a;
+        }
       }
       if (Object.keys(row).length > 0) {
         lineItemErrors[index] = row;
       }
     });
+    if (totalAmount > TOTAL_AMOUNT_MAX) {
+      errors.itemsTotal = VALIDATION_CODES.totalMax;
+    }
   }
 
   return {
