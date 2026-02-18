@@ -4,6 +4,11 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { CheckIn, UserRole } from '@/types';
 import Button from '@/components/Button';
+import {
+  SECTION_LABELS,
+  buildSectionedData,
+  type SectionTotals,
+} from '@/lib/checkins/sectioning';
 
 function TrashIcon() {
   return (
@@ -15,110 +20,22 @@ function TrashIcon() {
   );
 }
 
-// --- Helpers (PR timezone: bucketing uses normalized HH:mm from America/Puerto_Rico) ---
-
-/** Parse "HH:mm" to minutes since midnight. Invalid => 0. */
-function timeToMinutes(timeHHmm: string): number {
-  const parts = String(timeHHmm).trim().split(':');
-  if (parts.length < 2) return 0;
-  const h = parseInt(parts[0], 10);
-  const m = parseInt(parts[1], 10);
-  if (Number.isNaN(h) || Number.isNaN(m)) return 0;
-  return Math.max(0, Math.min(1439, h * 60 + m));
-}
-
-/** Bucket 1: 0..480 (12:00am-8:00am), Bucket 2: 481..960 (8:01am-4:00pm), Bucket 3: 961..1439 (4:01pm-11:59pm). */
-const BUCKET_RANGES: [number, number][] = [
-  [0, 480],
-  [481, 960],
-  [961, 1439],
-];
-
-const SECTION_LABELS = ['12:00am-8:00am', '8:01am-4:00pm', '4:01pm-11:59pm'];
-
-function getBucketIndex(mins: number): number {
-  for (let i = 0; i < BUCKET_RANGES.length; i++) {
-    const [lo, hi] = BUCKET_RANGES[i];
-    if (mins >= lo && mins <= hi) return i;
-  }
-  return 2;
-}
-
-/** Safe parse to integer cents. Handles number, "$23.00", "23.00". */
-function costToCents(cost: unknown): number {
-  if (typeof cost === 'number' && !Number.isNaN(cost)) return Math.round(cost * 100);
-  if (typeof cost === 'string') {
-    const cleaned = cost.replace(/^\s*\$?\s*/, '').trim();
-    const n = parseFloat(cleaned);
-    if (!Number.isNaN(n)) return Math.round(n * 100);
-  }
-  return 0;
-}
-
 function centsToCurrency(cents: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(
     cents / 100
   );
 }
 
-/** Single monetary amount for a check-in (already normalized: room cost or food/beer total). */
-function getCheckinAmount(checkin: CheckIn): number {
-  const n = Number(checkin.cost);
-  return Number.isNaN(n) ? 0 : Math.max(0, n);
-}
-
-type CheckinAmountByType = { room: number; food: number; beer: number };
-
-/** Amount for this check-in attributed to each type (only one is non-zero). */
-function getCheckinAmountByType(checkin: CheckIn): CheckinAmountByType {
-  const amount = getCheckinAmount(checkin);
-  const t = checkin.checkInType ?? 'room';
-  if (t === 'room') return { room: amount, food: 0, beer: 0 };
-  if (t === 'food') return { room: 0, food: amount, beer: 0 };
-  return { room: 0, food: 0, beer: amount };
-}
-
-export type SectionTotals = {
-  roomCents: number;
-  foodCents: number;
-  beerCents: number;
-  totalCents: number;
-};
-
-function totalsToCents(checkins: CheckIn[]): SectionTotals {
-  let roomCents = 0;
-  let foodCents = 0;
-  let beerCents = 0;
-  for (const c of checkins) {
-    const by = getCheckinAmountByType(c);
-    roomCents += Math.round(by.room * 100);
-    foodCents += Math.round(by.food * 100);
-    beerCents += Math.round(by.beer * 100);
-  }
-  return {
-    roomCents,
-    foodCents,
-    beerCents,
-    totalCents: roomCents + foodCents + beerCents,
-  };
-}
-
 function renderTotalsBreakdown(totals: SectionTotals) {
+  const carCount = totals.carCount ?? 0;
   return (
     <span style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
-      Room: {centsToCurrency(totals.roomCents)} | Food: {centsToCurrency(totals.foodCents)} | Beer: {centsToCurrency(totals.beerCents)} | <strong>Total: {centsToCurrency(totals.totalCents)}</strong>
+      Cars: {carCount} | Room: {centsToCurrency(totals.roomCents)} | Food: {centsToCurrency(totals.foodCents)} | Beer: {centsToCurrency(totals.beerCents)} | <strong>Total: {centsToCurrency(totals.totalCents)}</strong>
     </span>
   );
 }
 
-function sortCheckinsForSections(checkins: CheckIn[]): CheckIn[] {
-  return [...checkins].sort((a, b) => {
-    const minsA = timeToMinutes(a.time);
-    const minsB = timeToMinutes(b.time);
-    if (minsA !== minsB) return minsA - minsB;
-    return (a.receipt_number || '').localeCompare(b.receipt_number || '');
-  });
-}
+export type { SectionTotals } from '@/lib/checkins/sectioning';
 
 /** For food/beer, show placeholder instead of 0 or empty. */
 function roomDisplay(checkin: CheckIn): string | number {
@@ -216,30 +133,7 @@ export default function CheckinsList({
 
   const sectioned = useMemo(() => {
     if (!dateFilterActive || initialCheckins.length === 0) return null;
-    const sorted = sortCheckinsForSections(initialCheckins);
-    const buckets: CheckIn[][] = [[], [], []];
-    const sectionTotals: SectionTotals[] = [
-      { roomCents: 0, foodCents: 0, beerCents: 0, totalCents: 0 },
-      { roomCents: 0, foodCents: 0, beerCents: 0, totalCents: 0 },
-      { roomCents: 0, foodCents: 0, beerCents: 0, totalCents: 0 },
-    ];
-    for (const c of sorted) {
-      const mins = timeToMinutes(c.time);
-      const idx = getBucketIndex(mins);
-      buckets[idx].push(c);
-      const t = totalsToCents([c]);
-      sectionTotals[idx].roomCents += t.roomCents;
-      sectionTotals[idx].foodCents += t.foodCents;
-      sectionTotals[idx].beerCents += t.beerCents;
-      sectionTotals[idx].totalCents += t.totalCents;
-    }
-    const dayTotals: SectionTotals = {
-      roomCents: sectionTotals[0].roomCents + sectionTotals[1].roomCents + sectionTotals[2].roomCents,
-      foodCents: sectionTotals[0].foodCents + sectionTotals[1].foodCents + sectionTotals[2].foodCents,
-      beerCents: sectionTotals[0].beerCents + sectionTotals[1].beerCents + sectionTotals[2].beerCents,
-      totalCents: sectionTotals[0].totalCents + sectionTotals[1].totalCents + sectionTotals[2].totalCents,
-    };
-    return { buckets, sectionTotals, dayTotals };
+    return buildSectionedData(initialCheckins);
   }, [dateFilterActive, initialCheckins]);
 
   const renderActionsCell = (checkin: CheckIn) => {

@@ -5,25 +5,9 @@ import { listCheckinsByDateRange } from '@/lib/server/checkinsRepo';
 import { logError, logInfo } from '@/lib/server/log';
 import { HttpError, toErrorResponse } from '@/lib/server/httpError';
 import { requireEnvs } from '@/lib/server/requireEnv';
+import { buildCheckinsExportRows, exportRowsToCsv } from '@/lib/checkins/export';
 
 export const runtime = 'nodejs';
-
-function buildCsv(checkins: Awaited<ReturnType<typeof listCheckinsByDateRange>>): string {
-  const headers = ['Receipt #', 'Date', 'Time', 'Type', 'Room', 'Staff', 'Plate', 'Cost', 'Notes'];
-  const rows = checkins.map((c) => [
-    c.receipt_number,
-    c.date,
-    c.time,
-    c.checkInType ?? 'room',
-    String(c.room_id),
-    c.staff_name,
-    c.car_plate,
-    String(c.cost),
-    c.note ?? '',
-  ]);
-  const escape = (cell: string) => `"${cell.replace(/"/g, '""')}"`;
-  return [headers.join(','), ...rows.map((row) => row.map(escape).join(','))].join('\r\n');
-}
 
 export async function GET(request: NextRequest) {
   const requestId = crypto.randomUUID();
@@ -43,7 +27,9 @@ export async function GET(request: NextRequest) {
     const endISO = date ?? endDate;
 
     const checkins = await listCheckinsByDateRange(startISO, endISO);
-    const csvContent = buildCsv(checkins);
+    const includeGrouping = Boolean(date);
+    const exportRows = buildCheckinsExportRows({ checkins, includeGrouping });
+    const csvContent = exportRowsToCsv(exportRows);
     let filename = 'checkins_export';
     if (date) {
       filename += `_${date}`;
