@@ -16,21 +16,28 @@ import type {
 const CHECKINS_COLLECTION = 'checkins';
 const COUNTERS_COLLECTION = 'counters';
 const RECEIPT_COUNTER_ID = 'receipt';
+const SETTINGS_COLLECTION = 'settings';
+const RECEIPTS_DOC_ID = 'receipts';
 
 export type CreateCheckinInput = Omit<CheckIn, 'checkin_id'>;
 
+/**
+ * Room check-in: uses the provided receipt number and updates the single source of truth
+ * (settings/receipts.nextReceiptNumber) to (providedReceiptNumber + 1) mod 10000 so the next
+ * form load shows the next receipt. Duplicates allowed; no duplicate check.
+ */
 export async function createCheckin(data: CreateCheckinInput): Promise<string> {
   const db = getAdminDb();
-  const counterRef = db.collection(COUNTERS_COLLECTION).doc(RECEIPT_COUNTER_ID);
+  const settingsRef = db.collection(SETTINGS_COLLECTION).doc(RECEIPTS_DOC_ID);
   const checkinsRef = db.collection(CHECKINS_COLLECTION);
 
-  const result = await db.runTransaction(async (tx) => {
-    const counterSnap = await tx.get(counterRef);
-    const nextNum = counterSnap.exists
-      ? (counterSnap.data()?.nextReceiptNumber as number) ?? 1
-      : 1;
-    const receiptNumber = nextNum.toString().padStart(4, '0');
+  const receiptNumber = data.receipt_number.padStart(4, '0');
+  const receiptNum = parseInt(receiptNumber, 10);
+  if (Number.isNaN(receiptNum) || receiptNum < 0 || receiptNum > 9999) {
+    throw new Error('Invalid receipt number');
+  }
 
+  const result = await db.runTransaction(async (tx) => {
     const dt = DateTime.fromFormat(
       `${data.date} ${data.time}`,
       'yyyy-MM-dd HH:mm',
@@ -52,9 +59,12 @@ export async function createCheckin(data: CreateCheckinInput): Promise<string> {
       note: data.note ?? '',
     };
 
-    tx.set(counterRef, { nextReceiptNumber: nextNum + 1 }, { merge: true });
     const newRef = checkinsRef.doc();
     tx.set(newRef, doc);
+
+    const nextReceiptNumber = (receiptNum + 1) % 10000;
+    tx.set(settingsRef, { nextReceiptNumber }, { merge: true });
+
     return { id: newRef.id, receiptNumber };
   });
 
@@ -70,21 +80,29 @@ export interface CreateSimpleCheckinInput {
   notes?: string;
 }
 
-/** Create a food or beer check-in (same collection, checkInType set, lineItems + summarizedItems + notes). */
+/** Create a food or beer check-in (same collection, checkInType set, lineItems + summarizedItems + notes). Uses settings/receipts for next number. */
 export async function createSimpleCheckin(
   checkInType: 'food' | 'beer',
   data: CreateSimpleCheckinInput
 ): Promise<string> {
   const db = getAdminDb();
+  const settingsRef = db.collection(SETTINGS_COLLECTION).doc(RECEIPTS_DOC_ID);
   const counterRef = db.collection(COUNTERS_COLLECTION).doc(RECEIPT_COUNTER_ID);
   const checkinsRef = db.collection(CHECKINS_COLLECTION);
 
   const result = await db.runTransaction(async (tx) => {
-    const counterSnap = await tx.get(counterRef);
-    const nextNum = counterSnap.exists
-      ? (counterSnap.data()?.nextReceiptNumber as number) ?? 1
-      : 1;
-    const receiptNumber = nextNum.toString().padStart(4, '0');
+    let nextNum: number;
+    const settingsSnap = await tx.get(settingsRef);
+    if (settingsSnap.exists) {
+      nextNum = (settingsSnap.data()?.nextReceiptNumber as number) ?? 0;
+    } else {
+      const counterSnap = await tx.get(counterRef);
+      nextNum = counterSnap.exists
+        ? (counterSnap.data()?.nextReceiptNumber as number) ?? 1
+        : 1;
+    }
+    const receiptNumber = (nextNum % 10000).toString().padStart(4, '0');
+    const nextReceiptNumber = (nextNum + 1) % 10000;
 
     const dt = DateTime.fromFormat(
       `${data.date} ${data.time}`,
@@ -103,7 +121,7 @@ export async function createSimpleCheckin(
       note: data.notes ?? '',
     };
 
-    tx.set(counterRef, { nextReceiptNumber: nextNum + 1 }, { merge: true });
+    tx.set(settingsRef, { nextReceiptNumber }, { merge: true });
     const newRef = checkinsRef.doc();
     tx.set(newRef, doc);
     return { id: newRef.id, receiptNumber };
@@ -112,12 +130,22 @@ export async function createSimpleCheckin(
   return result.receiptNumber;
 }
 
+/**
+ * Single source of truth for next receipt: settings/receipts.nextReceiptNumber.
+ * Falls back to counters/receipt if settings doc does not exist (migration).
+ */
 export async function getNextReceiptNumber(): Promise<string> {
   const db = getAdminDb();
+  const settingsRef = db.collection(SETTINGS_COLLECTION).doc(RECEIPTS_DOC_ID);
+  const settingsSnap = await settingsRef.get();
+  if (settingsSnap.exists) {
+    const nextNum = (settingsSnap.data()?.nextReceiptNumber as number) ?? 0;
+    return (nextNum % 10000).toString().padStart(4, '0');
+  }
   const counterRef = db.collection(COUNTERS_COLLECTION).doc(RECEIPT_COUNTER_ID);
-  const snap = await counterRef.get();
-  const nextNum = snap.exists
-    ? (snap.data()?.nextReceiptNumber as number) ?? 1
+  const counterSnap = await counterRef.get();
+  const nextNum = counterSnap.exists
+    ? (counterSnap.data()?.nextReceiptNumber as number) ?? 1
     : 1;
   return nextNum.toString().padStart(4, '0');
 }

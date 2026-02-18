@@ -4,25 +4,58 @@ import { redirect } from 'next/navigation';
 import { requireAuth } from '@/server/auth/session';
 import { createCheckin, createSimpleCheckin } from '@/lib/server/checkinsRepo';
 import { validateSimpleCheckin } from '@/lib/checkins/validation';
+import { validateRoomCheckin, normalizeReceipt } from '@/lib/checkins/validation/room';
 import { summarizeLineItems } from '@/lib/checkins/summarize';
 import type { CheckIn, LineItem, SummarizedItem } from '@/types';
 import type { FoodBeerDraft } from '@/lib/checkins/draft';
 
-export async function submitCheckinAction(formData: FormData) {
+export type RoomCheckinActionResult =
+  | { success: true }
+  | { success: false; error: string; fieldErrors?: Partial<Record<string, string>> };
+
+export async function submitCheckinAction(formData: FormData): Promise<RoomCheckinActionResult> {
   await requireAuth();
 
+  const raw = {
+    room_id: formData.get('room_id'),
+    receipt_number: formData.get('receipt_number'),
+    date: formData.get('date'),
+    time: formData.get('time'),
+    cost: formData.get('cost'),
+    payment_method: formData.get('payment_method'),
+    car_plate: formData.get('car_plate'),
+    car_make: formData.get('car_make'),
+    car_color: formData.get('car_color'),
+    staff_name: formData.get('staff_name'),
+    note: formData.get('note'),
+  };
+
+  const validation = validateRoomCheckin(raw as Record<string, unknown>);
+  if (!validation.valid) {
+    return {
+      success: false,
+      error: Object.values(validation.errors).find(Boolean) ?? 'Please fix the errors below.',
+      fieldErrors: validation.errors as Partial<Record<string, string>>,
+    };
+  }
+
+  const receiptPadded = normalizeReceipt(String(raw.receipt_number ?? ''))!;
+  const carPlate = String(raw.car_plate ?? '').trim().toUpperCase().slice(0, 10);
+  const carMake = String(raw.car_make ?? '').trim().toUpperCase().slice(0, 30);
+  const note = raw.note != null ? String(raw.note).trim().slice(0, 500) : undefined;
+
   const data: Omit<CheckIn, 'checkin_id'> = {
-    room_id: parseInt(formData.get('room_id') as string),
-    receipt_number: formData.get('receipt_number') as string,
-    date: formData.get('date') as string,
-    time: formData.get('time') as string,
-    cost: parseFloat(formData.get('cost') as string),
-    payment_method: formData.get('payment_method') as 'cash' | 'ath_mobil',
-    staff_name: formData.get('staff_name') as string,
-    car_plate: formData.get('car_plate') as string,
-    car_make: formData.get('car_make') as string,
-    car_color: formData.get('car_color') as string,
-    note: (formData.get('note') as string) || undefined,
+    room_id: Number(raw.room_id),
+    receipt_number: receiptPadded,
+    date: String(raw.date).trim(),
+    time: String(raw.time).trim(),
+    cost: Number(raw.cost),
+    payment_method: (raw.payment_method as 'cash' | 'ath_mobil') ?? 'cash',
+    staff_name: String(raw.staff_name).trim(),
+    car_plate: carPlate,
+    car_make: carMake,
+    car_color: String(raw.car_color).trim(),
+    note: note || undefined,
   };
 
   await createCheckin(data);

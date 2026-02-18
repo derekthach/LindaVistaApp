@@ -2,13 +2,14 @@
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { CheckIn, UserRole } from '@/types';
+import type { CheckIn, UserRole, LineItem, SummarizedItem } from '@/types';
 import Button from '@/components/Button';
 import {
   SECTION_LABELS,
   buildSectionedData,
   type SectionTotals,
 } from '@/lib/checkins/sectioning';
+import { getCarColorLabel } from '@/lib/checkins/colors';
 
 function TrashIcon() {
   return (
@@ -16,6 +17,22 @@ function TrashIcon() {
       <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
       <line x1="10" y1="11" x2="10" y2="17" />
       <line x1="14" y1="11" x2="14" y2="17" />
+    </svg>
+  );
+}
+
+function ChevronDownIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
+function ChevronRightIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M9 18l6-6-6-6" />
     </svg>
   );
 }
@@ -43,9 +60,73 @@ function roomDisplay(checkin: CheckIn): string | number {
   return checkin.room_id;
 }
 
-function plateDisplay(checkin: CheckIn): string {
-  if (checkin.checkInType === 'food' || checkin.checkInType === 'beer') return '—';
-  return checkin.car_plate ?? '';
+function orDash(value: string | undefined): string {
+  return value?.trim() ? value.trim() : '—';
+}
+
+function DetailsPanel({ checkin }: { checkin: CheckIn }) {
+  const isRoom = checkin.checkInType !== 'food' && checkin.checkInType !== 'beer';
+  const gridStyle = {
+    display: 'grid',
+    gridTemplateColumns: 'auto 1fr',
+    gap: '6px 16px',
+    alignItems: 'baseline',
+    fontSize: 13,
+  };
+  const labelStyle = { color: '#6b7280', fontWeight: 500 };
+  const valueStyle = { fontWeight: 500 };
+
+  if (isRoom) {
+    const paymentLabel = checkin.payment_method === 'ath_mobil' ? 'ATH Móvil' : 'Cash';
+    return (
+      <div style={{ padding: '12px 16px', backgroundColor: '#f9fafb', borderRadius: 8, margin: 4 }}>
+        <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8, fontWeight: 600 }}>Room check-in details</div>
+        <dl style={{ margin: 0, ...gridStyle } as React.CSSProperties}>
+          <dt style={labelStyle}>License Plate</dt>
+          <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.car_plate)}</dd>
+          <dt style={labelStyle}>Payment Method</dt>
+          <dd style={{ margin: 0, ...valueStyle }}>{checkin.payment_method ? paymentLabel : '—'}</dd>
+          <dt style={labelStyle}>Car Make</dt>
+          <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.car_make)}</dd>
+          <dt style={labelStyle}>Car Color</dt>
+          <dd style={{ margin: 0, ...valueStyle }}>{checkin.car_color ? getCarColorLabel(checkin.car_color) : '—'}</dd>
+          <dt style={labelStyle}>Notes</dt>
+          <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.note)}</dd>
+        </dl>
+      </div>
+    );
+  }
+
+  const items = (checkin.summarizedItems ?? checkin.lineItems ?? []) as SummarizedItem[] | LineItem[];
+  const itemsSummary =
+    items.length > 0
+      ? items
+          .map((item: SummarizedItem | LineItem) => {
+            const label = 'itemLabel' in item ? item.itemLabel : (item as LineItem).itemLabel;
+            const q = 'totalQuantitySold' in item ? (item as SummarizedItem).totalQuantitySold : (item as LineItem).quantitySold;
+            const a = 'totalAmountCollected' in item ? (item as SummarizedItem).totalAmountCollected : (item as LineItem).amountCollected;
+            return `${label ?? item.itemId}: ${q} × $${Number(a).toFixed(2)}`;
+          })
+          .join('; ')
+      : '—';
+
+  return (
+    <div style={{ padding: '12px 16px', backgroundColor: '#f9fafb', borderRadius: 8, margin: 4 }}>
+      <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8, fontWeight: 600 }}>
+        {checkin.checkInType === 'food' ? 'Food & Beverage' : 'Beer'} details
+      </div>
+      <dl style={{ margin: 0, ...gridStyle } as React.CSSProperties}>
+        <dt style={labelStyle}>Staff</dt>
+        <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.staff_name)}</dd>
+        <dt style={labelStyle}>Items</dt>
+        <dd style={{ margin: 0, ...valueStyle }}>{itemsSummary}</dd>
+        <dt style={labelStyle}>Total</dt>
+        <dd style={{ margin: 0, ...valueStyle }}>${Number(checkin.cost).toFixed(2)}</dd>
+        <dt style={labelStyle}>Notes</dt>
+        <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.note)}</dd>
+      </dl>
+    </div>
+  );
 }
 
 export default function CheckinsList({
@@ -59,14 +140,19 @@ export default function CheckinsList({
 }) {
   const router = useRouter();
   const [selectedDate, setSelectedDate] = useState(initialDate ?? '');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<CheckIn | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const isAdmin = role === 'admin';
-  const colCount = isAdmin ? 9 : 8;
+  const colCount = 8;
   const colCountForTotal = colCount - 1;
+  const toggleExpanded = (checkin: CheckIn) => {
+    const id = checkin.id ?? checkin.receipt_number;
+    setExpandedId((prev) => (prev === id ? null : id));
+  };
 
   useEffect(() => {
     setSelectedDate(initialDate ?? '');
@@ -137,20 +223,34 @@ export default function CheckinsList({
   }, [dateFilterActive, initialCheckins]);
 
   const renderActionsCell = (checkin: CheckIn) => {
-    if (!isAdmin) return null;
-    if (!checkin.id) return <td style={{ padding: 8 }} />;
+    const rowId = checkin.id ?? checkin.receipt_number;
+    const isExpanded = expandedId === rowId;
     return (
-      <td style={{ padding: 8, width: 48, textAlign: 'right' }}>
-        <button
-          type="button"
-          onClick={() => handleDeleteClick(checkin)}
-          className="btn btn-ghost"
-          style={{ minWidth: 32, height: 32, padding: 0 }}
-          aria-label="Delete check-in"
-          title="Delete check-in"
-        >
-          <TrashIcon />
-        </button>
+      <td style={{ padding: 8, width: 80, textAlign: 'right', verticalAlign: 'middle' }}>
+        <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={() => toggleExpanded(checkin)}
+            className="btn btn-ghost"
+            style={{ minWidth: 32, height: 32, padding: 0 }}
+            aria-label={isExpanded ? 'Hide details' : 'View details'}
+            title={isExpanded ? 'Hide details' : 'View details'}
+          >
+            {isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
+          </button>
+          {isAdmin && checkin.id && (
+            <button
+              type="button"
+              onClick={() => handleDeleteClick(checkin)}
+              className="btn btn-ghost"
+              style={{ minWidth: 32, height: 32, padding: 0 }}
+              aria-label="Delete check-in"
+              title="Delete check-in"
+            >
+              <TrashIcon />
+            </button>
+          )}
+        </div>
       </td>
     );
   };
@@ -167,17 +267,25 @@ export default function CheckinsList({
                 </td>
               </tr>
               {sectioned.buckets[idx].map((checkin) => (
-                <tr key={checkin.id ?? checkin.receipt_number}>
-                  <td style={{ padding: 8 }}>{checkin.receipt_number}</td>
-                  <td style={{ padding: 8 }}>{checkin.date}</td>
-                  <td style={{ padding: 8 }}>{checkin.time}</td>
-                  <td style={{ padding: 8 }}>{checkin.checkInType ?? 'room'}</td>
-                  <td style={{ padding: 8 }}>{roomDisplay(checkin)}</td>
-                  <td style={{ padding: 8 }}>{checkin.staff_name}</td>
-                  <td style={{ padding: 8 }}>{plateDisplay(checkin)}</td>
-                  <td style={{ padding: 8 }}>${Number(checkin.cost).toFixed(2)}</td>
-                  {renderActionsCell(checkin)}
-                </tr>
+                <Fragment key={checkin.id ?? checkin.receipt_number}>
+                  <tr>
+                    <td style={{ padding: 8 }}>{checkin.receipt_number}</td>
+                    <td style={{ padding: 8 }}>{checkin.date}</td>
+                    <td style={{ padding: 8 }}>{checkin.time}</td>
+                    <td style={{ padding: 8 }}>{checkin.checkInType ?? 'room'}</td>
+                    <td style={{ padding: 8 }}>{roomDisplay(checkin)}</td>
+                    <td style={{ padding: 8 }}>{checkin.staff_name}</td>
+                    <td style={{ padding: 8 }}>${Number(checkin.cost).toFixed(2)}</td>
+                    {renderActionsCell(checkin)}
+                  </tr>
+                  {expandedId === (checkin.id ?? checkin.receipt_number) && (
+                    <tr>
+                      <td colSpan={colCount} style={{ padding: 0, borderBottom: '1px solid #e5e7eb', verticalAlign: 'top' }}>
+                        <DetailsPanel checkin={checkin} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
               <tr style={{ backgroundColor: '#f3f4f6' }}>
                 <td colSpan={colCountForTotal} style={{ padding: 8, textAlign: 'right', fontWeight: 500 }}>
@@ -197,17 +305,25 @@ export default function CheckinsList({
       );
     }
     return initialCheckins.map((checkin) => (
-      <tr key={checkin.id ?? checkin.receipt_number}>
-        <td style={{ padding: 8 }}>{checkin.receipt_number}</td>
-        <td style={{ padding: 8 }}>{checkin.date}</td>
-        <td style={{ padding: 8 }}>{checkin.time}</td>
-        <td style={{ padding: 8 }}>{checkin.checkInType ?? 'room'}</td>
-        <td style={{ padding: 8 }}>{roomDisplay(checkin)}</td>
-        <td style={{ padding: 8 }}>{checkin.staff_name}</td>
-        <td style={{ padding: 8 }}>{plateDisplay(checkin)}</td>
-        <td style={{ padding: 8 }}>${Number(checkin.cost).toFixed(2)}</td>
-        {renderActionsCell(checkin)}
-      </tr>
+      <Fragment key={checkin.id ?? checkin.receipt_number}>
+        <tr>
+          <td style={{ padding: 8 }}>{checkin.receipt_number}</td>
+          <td style={{ padding: 8 }}>{checkin.date}</td>
+          <td style={{ padding: 8 }}>{checkin.time}</td>
+          <td style={{ padding: 8 }}>{checkin.checkInType ?? 'room'}</td>
+          <td style={{ padding: 8 }}>{roomDisplay(checkin)}</td>
+          <td style={{ padding: 8 }}>{checkin.staff_name}</td>
+          <td style={{ padding: 8 }}>${Number(checkin.cost).toFixed(2)}</td>
+          {renderActionsCell(checkin)}
+        </tr>
+        {expandedId === (checkin.id ?? checkin.receipt_number) && (
+          <tr>
+            <td colSpan={colCount} style={{ padding: 0, borderBottom: '1px solid #e5e7eb', verticalAlign: 'top' }}>
+              <DetailsPanel checkin={checkin} />
+            </td>
+          </tr>
+        )}
+      </Fragment>
     ));
   };
 
@@ -254,16 +370,14 @@ export default function CheckinsList({
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              {['Receipt #', 'Date', 'Time', 'Type', 'Room', 'Staff', 'Plate', 'Cost'].map((h) => (
+              {['Receipt #', 'Date', 'Time', 'Type', 'Room', 'Staff', 'Cost'].map((h) => (
                 <th key={h} style={{ textAlign: 'left', padding: 8, borderBottom: '1px solid #e5e7eb' }}>
                   {h}
                 </th>
               ))}
-              {isAdmin && (
-                <th key="actions" style={{ width: 48, padding: 8, borderBottom: '1px solid #e5e7eb', textAlign: 'right' }}>
-                  Actions
-                </th>
-              )}
+              <th key="actions" style={{ width: 80, padding: 8, borderBottom: '1px solid #e5e7eb', textAlign: 'right' }}>
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody>{tableBody()}</tbody>

@@ -56,6 +56,12 @@ export function normalizeCheckin(id: string, data: Record<string, unknown>): Che
     ? (Number(data.cost) || 0)
     : totalAmountCollected(data);
 
+  const paymentRaw = (data.paymentMethod ?? data.payment) as string | undefined;
+  const paymentMethod =
+    paymentRaw === 'cash' || paymentRaw === 'ath_mobil' ? paymentRaw : 'cash';
+  const noteRaw = (data.note ?? data.notes) as string | undefined;
+  const note = typeof noteRaw === 'string' && noteRaw.trim() ? noteRaw.trim() : undefined;
+
   return {
     id,
     checkin_id: undefined,
@@ -65,12 +71,12 @@ export function normalizeCheckin(id: string, data: Record<string, unknown>): Che
     time,
     room_id: isRoom ? (Number(data.roomId) || 0) : 0,
     cost,
-    payment_method: (data.paymentMethod as 'cash' | 'ath_mobil') ?? 'cash',
+    payment_method: paymentMethod,
     staff_name: String(staffName),
     car_plate: (data.carPlate as string) ?? '',
     car_make: (data.carMake as string) ?? '',
     car_color: (data.carColor as string) ?? '',
-    note: (data.note as string) || undefined,
+    note,
     lineItems,
     summarizedItems,
   };
