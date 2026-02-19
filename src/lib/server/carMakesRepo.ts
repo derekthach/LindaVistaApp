@@ -1,6 +1,6 @@
 import { Timestamp } from 'firebase-admin/firestore';
 import { getAdminDb } from './firebaseAdmin';
-import { isFirestoreUnavailableError } from './firestoreError';
+import { isFirestoreUnavailableError, isProduction } from './firestoreError';
 
 const CAR_MAKES_COLLECTION = 'carMakes';
 
