@@ -39,14 +39,16 @@ Restart the dev server after changing `.env.local`. Do not commit `.env.local` o
 
 ## Deploy to Vercel (preview/production)
 
-Set these **Environment Variables** in your Vercel project so the app and admin features work:
+**Important:** In production the app **does not** use a key file (`GOOGLE_APPLICATION_CREDENTIALS` is ignored). You must set Firestore credentials via environment variables below. If Firestore auth fails in production, the app will **fail loudly** (errors in logs / 500s), not silently show empty data.
+
+Set these **Environment Variables** in your Vercel project:
 
 | Variable | Required | Notes |
 |----------|----------|--------|
 | `SESSION_SECRET` | Yes | Long random string for session signing (e.g. 32+ chars). |
 | `LV_ADMIN_SECRET` | For admin actions | Secret used to authorize Export CSV and per-row delete. If unset, the check-ins page still loads, but export and delete will return 401 until this is set and you log in again as admin. |
 | `GOOGLE_CLOUD_PROJECT` | For Firestore | e.g. `lindavista-hms`. |
-| `FIREBASE_SERVICE_ACCOUNT_JSON` or `FIREBASE_CLIENT_EMAIL` + `FIREBASE_PRIVATE_KEY` | For Firestore | Needed for dashboard and check-ins data. |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` or `FIREBASE_CLIENT_EMAIL` + `FIREBASE_PRIVATE_KEY` | For Firestore | **Required in production.** Use one of these; do not rely on a key file. Needed for dashboard and check-ins data. |
 
 After adding `LV_ADMIN_SECRET`, redeploy and log in again as admin so the `lv_admin` cookie is set; then Export and Delete will work.
 

@@ -1,6 +1,7 @@
 import { Timestamp } from 'firebase-admin/firestore';
 import { DateTime } from 'luxon';
 import { getAdminDb } from './firebaseAdmin';
+import { isFirestoreUnavailableError, isProduction } from './firestoreError';
 import { normalizeCheckin } from '@/lib/models/checkin';
 import type {
   CheckIn,
@@ -133,21 +134,30 @@ export async function createSimpleCheckin(
 /**
  * Single source of truth for next receipt: settings/receipts.nextReceiptNumber.
  * Falls back to counters/receipt if settings doc does not exist (migration).
+ * If Firestore/Google auth is unavailable, returns "0001" so the app can run.
  */
 export async function getNextReceiptNumber(): Promise<string> {
-  const db = getAdminDb();
-  const settingsRef = db.collection(SETTINGS_COLLECTION).doc(RECEIPTS_DOC_ID);
-  const settingsSnap = await settingsRef.get();
-  if (settingsSnap.exists) {
-    const nextNum = (settingsSnap.data()?.nextReceiptNumber as number) ?? 0;
-    return (nextNum % 10000).toString().padStart(4, '0');
+  try {
+    const db = getAdminDb();
+    const settingsRef = db.collection(SETTINGS_COLLECTION).doc(RECEIPTS_DOC_ID);
+    const settingsSnap = await settingsRef.get();
+    if (settingsSnap.exists) {
+      const nextNum = (settingsSnap.data()?.nextReceiptNumber as number) ?? 0;
+      return (nextNum % 10000).toString().padStart(4, '0');
+    }
+    const counterRef = db.collection(COUNTERS_COLLECTION).doc(RECEIPT_COUNTER_ID);
+    const counterSnap = await counterRef.get();
+    const nextNum = counterSnap.exists
+      ? (counterSnap.data()?.nextReceiptNumber as number) ?? 1
+      : 1;
+    return nextNum.toString().padStart(4, '0');
+  } catch (err) {
+    if (isFirestoreUnavailableError(err)) {
+      console.warn('Firestore unavailable (getNextReceiptNumber), using default 0001:', (err as Error).message);
+      return '0001';
+    }
+    throw err;
   }
-  const counterRef = db.collection(COUNTERS_COLLECTION).doc(RECEIPT_COUNTER_ID);
-  const counterSnap = await counterRef.get();
-  const nextNum = counterSnap.exists
-    ? (counterSnap.data()?.nextReceiptNumber as number) ?? 1
-    : 1;
-  return nextNum.toString().padStart(4, '0');
 }
 
 function startOfDayISO(isoDate: string): Date {
@@ -166,28 +176,38 @@ function endExclusiveISO(isoDate: string): Date {
  * List check-ins in a date range. Dates are YYYY-MM-DD and interpreted in America/Puerto_Rico.
  * For a single calendar day, pass the same ISO date for both startISO and endISO
  * (e.g. listCheckinsByDateRange('2026-02-15', '2026-02-15')).
+ * If Firestore/Google auth is unavailable, returns [] so the app can run.
  */
 export async function listCheckinsByDateRange(
   startISO?: string,
   endISO?: string
 ): Promise<CheckIn[]> {
-  const db = getAdminDb();
-  const now = DateTime.now().setZone('America/Puerto_Rico');
-  const start = startISO
-    ? Timestamp.fromDate(startOfDayISO(startISO))
-    : Timestamp.fromDate(new Date(0));
-  const endExclusive = endISO
-    ? Timestamp.fromDate(endExclusiveISO(endISO))
-    : Timestamp.fromDate(now.plus({ days: 1 }).startOf('day').toJSDate());
+  try {
+    const db = getAdminDb();
+    const now = DateTime.now().setZone('America/Puerto_Rico');
+    const start = startISO
+      ? Timestamp.fromDate(startOfDayISO(startISO))
+      : Timestamp.fromDate(new Date(0));
+    const endExclusive = endISO
+      ? Timestamp.fromDate(endExclusiveISO(endISO))
+      : Timestamp.fromDate(now.plus({ days: 1 }).startOf('day').toJSDate());
 
-  const snapshot = await db
-    .collection(CHECKINS_COLLECTION)
-    .where('checkInAt', '>=', start)
-    .where('checkInAt', '<', endExclusive)
-    .orderBy('checkInAt', 'desc')
-    .get();
+    const snapshot = await db
+      .collection(CHECKINS_COLLECTION)
+      .where('checkInAt', '>=', start)
+      .where('checkInAt', '<', endExclusive)
+      .orderBy('checkInAt', 'desc')
+      .get();
 
-  return snapshot.docs.map((doc) => normalizeCheckin(doc.id, doc.data()));
+    return snapshot.docs.map((doc) => normalizeCheckin(doc.id, doc.data()));
+  } catch (err) {
+    if (isFirestoreUnavailableError(err)) {
+      if (isProduction()) throw err;
+      console.warn('Firestore unavailable (listCheckinsByDateRange), returning empty list:', (err as Error).message);
+      return [];
+    }
+    throw err;
+  }
 }
 
 export async function deleteCheckinById(id: string): Promise<void> {
@@ -391,11 +411,23 @@ export interface CheckinEditRecord {
  * List edit history for a check-in (subcollection checkins/{id}/edits).
  * Fetches without orderBy to avoid index requirement; sorts newest first in memory.
  * editedAt returned as ISO string in America/Puerto_Rico.
+ * If Firestore/Google auth is unavailable, returns [] so the app can run.
  */
 export async function getCheckinEdits(checkinId: string): Promise<CheckinEditRecord[]> {
-  const db = getAdminDb();
-  const ref = db.collection(CHECKINS_COLLECTION).doc(checkinId).collection(EDITS_SUBCOLLECTION);
-  const snapshot = await ref.get();
+  let snapshot;
+  try {
+    const db = getAdminDb();
+    const ref = db.collection(CHECKINS_COLLECTION).doc(checkinId).collection(EDITS_SUBCOLLECTION);
+    snapshot = await ref.get();
+  } catch (err) {
+    if (isFirestoreUnavailableError(err)) {
+      if (isProduction()) throw err;
+      console.warn('Firestore unavailable (getCheckinEdits), returning empty list:', (err as Error).message);
+      return [];
+    }
+    throw err;
+  }
+
   const zone = 'America/Puerto_Rico';
   const records: CheckinEditRecord[] = snapshot.docs.map((doc) => {
     const d = doc.data();

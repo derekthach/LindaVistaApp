@@ -1,5 +1,6 @@
 import { Timestamp } from 'firebase-admin/firestore';
 import { getAdminDb } from './firebaseAdmin';
+import { isFirestoreUnavailableError } from './firestoreError';
 
 const CAR_MAKES_COLLECTION = 'carMakes';
 
@@ -9,23 +10,32 @@ export interface CarMakeDoc {
   createdAt: Date;
 }
 
-/** Fetch all car makes, sorted alphabetically by nameUpper. */
+/** Fetch all car makes, sorted alphabetically by nameUpper. If Firestore/Google auth is unavailable, returns [] so the app can run. */
 export async function getCarMakes(): Promise<CarMakeDoc[]> {
-  const db = getAdminDb();
-  const snapshot = await db
-    .collection(CAR_MAKES_COLLECTION)
-    .orderBy('nameUpper')
-    .get();
+  try {
+    const db = getAdminDb();
+    const snapshot = await db
+      .collection(CAR_MAKES_COLLECTION)
+      .orderBy('nameUpper')
+      .get();
 
-  return snapshot.docs.map((doc) => {
-    const d = doc.data();
-    const createdAt = d.createdAt?.toDate?.() ?? new Date();
-    return {
-      id: doc.id,
-      nameUpper: (d.nameUpper as string) ?? '',
-      createdAt,
-    };
-  });
+    return snapshot.docs.map((doc) => {
+      const d = doc.data();
+      const createdAt = d.createdAt?.toDate?.() ?? new Date();
+      return {
+        id: doc.id,
+        nameUpper: (d.nameUpper as string) ?? '',
+        createdAt,
+      };
+    });
+  } catch (err) {
+    if (isFirestoreUnavailableError(err)) {
+      if (isProduction()) throw err;
+      console.warn('Firestore unavailable (getCarMakes), returning empty list:', (err as Error).message);
+      return [];
+    }
+    throw err;
+  }
 }
 
 /**
