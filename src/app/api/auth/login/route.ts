@@ -6,24 +6,31 @@ import { authenticateUser } from '@/server/auth/users';
 
 export const runtime = 'nodejs';
 
+/** Use the same origin the browser sees (Vercel sets these). */
+function getOrigin(request: NextRequest): string {
+  const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || request.nextUrl.host;
+  const proto = request.headers.get('x-forwarded-proto') || request.nextUrl.protocol || 'https';
+  return `${proto}://${host}`;
+}
+
 export async function POST(request: NextRequest) {
+  const origin = getOrigin(request);
   try {
     const formData = await request.formData();
     const username = (formData.get('username') as string)?.trim();
     const password = formData.get('password') as string;
 
     if (!username || !password) {
-      return NextResponse.redirect(new URL('/login', request.url));
+      return NextResponse.redirect(new URL('/login', origin));
     }
 
     const user = await authenticateUser(username, password);
     if (!user) {
-      return NextResponse.redirect(new URL('/login', request.url));
+      return NextResponse.redirect(new URL('/login', origin));
     }
 
-    const redirectUrl = user.role === 'admin' ? '/dashboard' : '/checkins/new';
-    // 303 See Other so browser does GET and accepts Set-Cookie (avoids redirect loops)
-    const res = NextResponse.redirect(new URL(redirectUrl, request.url), 303);
+    const path = user.role === 'admin' ? '/dashboard' : '/checkins/new';
+    const res = NextResponse.redirect(new URL(path, origin), 303);
     const session = await getIronSession<SessionData>(request, res, sessionOptions);
     session.username = user.username;
     session.role = user.role;
@@ -34,12 +41,13 @@ export async function POST(request: NextRequest) {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 7,
         path: '/',
+        maxAge: 60 * 60 * 24 * 7,
       });
     }
     return res;
-  } catch {
-    return NextResponse.redirect(new URL('/login', request.url));
+  } catch (err) {
+    console.error('[auth/login] POST error', err);
+    return NextResponse.redirect(new URL('/login', origin));
   }
 }
