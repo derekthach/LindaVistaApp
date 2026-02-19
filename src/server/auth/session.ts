@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation';
 import { getIronSession, type SessionOptions } from 'iron-session';
 import { cookies } from 'next/headers';
 import type { SessionData } from '@/types';
@@ -24,11 +25,11 @@ export async function requireAuth(requiredRole?: 'admin' | 'employee') {
   const session = await getSession();
 
   if (!session.isLoggedIn || !session.username) {
-    throw new Error('Not authenticated');
+    redirect('/login');
   }
 
   if (requiredRole && session.role !== requiredRole && session.role !== 'admin') {
-    throw new Error('Insufficient permissions');
+    redirect('/checkins/new');
   }
 
   return session;

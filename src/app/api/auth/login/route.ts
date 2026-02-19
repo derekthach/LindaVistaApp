@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/server/auth/session';
+import { getIronSession } from 'iron-session';
+import { sessionOptions } from '@/server/auth/session';
+import type { SessionData } from '@/types';
 import { authenticateUser } from '@/server/auth/users';
 
 export const runtime = 'nodejs';
@@ -19,14 +21,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
 
-    const session = await getSession();
+    const redirectUrl = user.role === 'admin' ? '/dashboard' : '/checkins/new';
+    // 303 See Other so browser does GET and accepts Set-Cookie (avoids redirect loops)
+    const res = NextResponse.redirect(new URL(redirectUrl, request.url), 303);
+    const session = await getIronSession<SessionData>(request, res, sessionOptions);
     session.username = user.username;
     session.role = user.role;
     session.isLoggedIn = true;
     await session.save();
-
-    const redirectUrl = user.role === 'admin' ? '/dashboard' : '/checkins/new';
-    const res = NextResponse.redirect(new URL(redirectUrl, request.url));
     if (user.role === 'admin' && process.env.LV_ADMIN_SECRET) {
       res.cookies.set('lv_admin', process.env.LV_ADMIN_SECRET, {
         httpOnly: true,

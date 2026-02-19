@@ -1,4 +1,12 @@
-export default function LoginPage() {
+import { redirect } from 'next/navigation';
+import { getSession } from '@/server/auth/session';
+
+export default async function LoginPage() {
+  const session = await getSession();
+  if (session.isLoggedIn) {
+    redirect(session.role === 'admin' ? '/dashboard' : '/checkins/new');
+  }
+
   return (
     <div
       style={{
