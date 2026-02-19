@@ -29,8 +29,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.redirect(new URL('/login', origin));
     }
 
-    const path = user.role === 'admin' ? '/dashboard' : '/checkins/new';
-    const res = NextResponse.redirect(new URL(path, origin), 303);
+    // Redirect everyone to /checkins/new first so the first GET hits a path that works
+    // (e.g. under Vercel Deployment Protection); then client can send admin to /dashboard.
+    const res = NextResponse.redirect(new URL('/checkins/new', origin), 303);
+    res.headers.set('Cache-Control', 'private, no-store, max-age=0');
     const session = await getIronSession<SessionData>(request, res, sessionOptions);
     session.username = user.username;
     session.role = user.role;

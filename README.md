@@ -52,6 +52,16 @@ Set these **Environment Variables** in your Vercel project:
 
 After adding `LV_ADMIN_SECRET`, redeploy and log in again as admin so the `lv_admin` cookie is set; then Export and Delete will work.
 
+### Preview login redirects back to login (401 or session not sticking)
+
+If you use **Vercel Deployment Protection** (Vercel Authentication or Password Protection) on **Preview** deployments, it can return **401 Unauthorized** for requests (including after you log in). That blocks the app’s own session from working.
+
+**Fix:** In Vercel → **Project Settings** → **Deployment Protection**, either:
+- Turn off protection for **Preview**, or  
+- Add a **Deployment Protection Bypass** for the preview URL / branch so the app’s login can run without Vercel’s 401.
+
+Also ensure **SESSION_SECRET** is set for the **Preview** environment (same value or different from Production is fine).
+
 ## View Check-Ins date filter
 
 The **View Check-Ins** page filters by a single calendar day. The date is sent as `date=YYYY-MM-DD` (e.g. `GET /checkins?date=2026-02-15`). **Date normalization and timezone:** The backend interprets the date in **America/Puerto_Rico**. Firestore stores `checkInAt` as a Timestamp; the query uses start-of-day and end-of-day (exclusive) for that calendar day in that zone, so records are included when their normalized `date` (YYYY-MM-DD in America/Puerto_Rico) matches the selected day. CSV export uses the same `date` param and produces `checkins_YYYY-MM-DD.csv`.

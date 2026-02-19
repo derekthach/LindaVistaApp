@@ -3,6 +3,8 @@ import { getSummaryMetrics } from '@/lib/server/checkinsRepo';
 import AppLayout from '@/components/AppLayout';
 import DashboardCharts from '@/components/DashboardCharts';
 
+export const dynamic = 'force-dynamic';
+
 const DEFAULT_METRICS = {
   carsToday: 0,
   carsThisWeek: 0,
