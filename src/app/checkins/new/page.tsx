@@ -1,11 +1,18 @@
-import { redirect } from 'next/navigation';
 import { requireAuth } from '@/server/auth/session';
 import AppLayout from '@/components/AppLayout';
 import CheckInTypeSelector from '@/components/checkins/CheckInTypeSelector';
+import AdminRedirectToDashboard from '@/components/AdminRedirectToDashboard';
 
 export default async function NewCheckinPage() {
   const session = await requireAuth();
-  if (session.role === 'admin') redirect('/dashboard');
+
+  if (session.role === 'admin') {
+    return (
+      <AppLayout role={session.role}>
+        <AdminRedirectToDashboard />
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout role={session.role}>

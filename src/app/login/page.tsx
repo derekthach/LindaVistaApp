@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/server/auth/session';
+import LoginPageLogger from '@/components/LoginPageLogger';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,7 +11,9 @@ export default async function LoginPage() {
   }
 
   return (
-    <div
+    <>
+      <LoginPageLogger />
+      <div
       style={{
         minHeight: '100vh',
         display: 'grid',
@@ -73,5 +76,6 @@ export default async function LoginPage() {
         </form>
       </div>
     </div>
+    </>
   );
 }

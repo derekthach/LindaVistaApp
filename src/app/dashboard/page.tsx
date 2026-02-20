@@ -2,6 +2,7 @@ import { requireAuth } from '@/server/auth/session';
 import { getSummaryMetrics } from '@/lib/server/checkinsRepo';
 import AppLayout from '@/components/AppLayout';
 import DashboardCharts from '@/components/DashboardCharts';
+import DashboardLogger from '@/components/DashboardLogger';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +24,7 @@ export default async function DashboardPage() {
 
   return (
     <AppLayout role={session.role}>
+      <DashboardLogger />
       <div className="container">
         <h1 className="page-title">Dashboard</h1>
         <p className="page-subtitle">Overview of motel activity</p>
