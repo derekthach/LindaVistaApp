@@ -3,6 +3,7 @@ import { getSummaryMetrics } from '@/lib/server/checkinsRepo';
 import AppLayout from '@/components/AppLayout';
 import DashboardCharts from '@/components/DashboardCharts';
 import DashboardLogger from '@/components/DashboardLogger';
+import DashboardEnsureAdminCookie from '@/components/DashboardEnsureAdminCookie';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +25,7 @@ export default async function DashboardPage() {
 
   return (
     <AppLayout role={session.role}>
+      <DashboardEnsureAdminCookie />
       <DashboardLogger />
       <div className="container">
         <h1 className="page-title">Dashboard</h1>

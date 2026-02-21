@@ -1,18 +1,44 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/server/auth/session';
 import LoginPageLogger from '@/components/LoginPageLogger';
-
 export const dynamic = 'force-dynamic';
 
-export default async function LoginPage() {
+type SearchParams = Promise<{ error?: string }>;
+
+export default async function LoginPage({ searchParams }: { searchParams: SearchParams }) {
   const session = await getSession();
   if (session.isLoggedIn) {
     redirect(session.role === 'admin' ? '/dashboard' : '/checkins/new');
   }
 
+  const params = await searchParams;
+  const configError = params.error === 'config';
+
   return (
     <>
       <LoginPageLogger />
+      {configError && (
+        <div
+          role="alert"
+          style={{
+            position: 'fixed',
+            top: 16,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 50,
+            maxWidth: 480,
+            padding: 16,
+            background: '#fef2f2',
+            border: '1px solid #fecaca',
+            borderRadius: 8,
+            color: '#991b1b',
+            fontSize: 14,
+            boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+          }}
+        >
+          <strong>Preview/Production config:</strong> Set <code>SESSION_SECRET</code> and <code>LV_ADMIN_SECRET</code> in Vercel → Project → Settings → Environment Variables for <strong>Preview</strong> (and Production). Then redeploy and try again.
+        </div>
+      )}
       <div
       style={{
         minHeight: '100vh',

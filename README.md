@@ -60,7 +60,7 @@ If you use **Vercel Deployment Protection** (Vercel Authentication or Password P
 - Turn off protection for **Preview**, or  
 - Add a **Deployment Protection Bypass** for the preview URL / branch so the app’s login can run without Vercel’s 401.
 
-Also ensure **SESSION_SECRET** is set for the **Preview** environment (same value or different from Production is fine).
+Also ensure **SESSION_SECRET** and **LV_ADMIN_SECRET** are set for the **Preview** environment (same values or different from Production is fine). If either is missing on Preview, admin login can fail (session not persisting or admin cookie not set) while employee login may still work. In Vercel → Project → Settings → Environment Variables, add both variables and select **Preview** (and Production) before redeploying.
 
 ## View Check-Ins date filter
 

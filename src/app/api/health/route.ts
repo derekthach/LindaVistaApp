@@ -15,6 +15,7 @@ export async function GET() {
   }
   const envChecks = {
     SESSION_SECRET: Boolean(process.env.SESSION_SECRET),
+    LV_ADMIN_SECRET: Boolean(process.env.LV_ADMIN_SECRET),
     SQLITE_PATH: Boolean(process.env.SQLITE_PATH),
     VERCEL: Boolean(process.env.VERCEL),
   };

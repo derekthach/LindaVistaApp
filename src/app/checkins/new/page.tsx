@@ -3,10 +3,18 @@ import AppLayout from '@/components/AppLayout';
 import CheckInTypeSelector from '@/components/checkins/CheckInTypeSelector';
 import AdminRedirectToDashboard from '@/components/AdminRedirectToDashboard';
 
-export default async function NewCheckinPage() {
+export default async function NewCheckinPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string }>;
+}) {
   const session = await requireAuth();
+  const params = await searchParams;
+  const fromLogin = params.from === 'login';
 
-  if (session.role === 'admin') {
+  // Only redirect admins to dashboard when they landed here from login (single-cookie / Preview flow).
+  // When an admin clicks "Check-In" in the sidebar, they get the normal check-in page.
+  if (session.role === 'admin' && fromLogin) {
     return (
       <AppLayout role={session.role}>
         <AdminRedirectToDashboard />

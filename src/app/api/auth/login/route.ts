@@ -16,6 +16,12 @@ function getOrigin(request: NextRequest): string {
 export async function POST(request: NextRequest) {
   const origin = getOrigin(request);
   try {
+    // In production (including Preview), SESSION_SECRET is required or the session cookie
+    // won’t be valid. Without it, redirect so the user sees the config error on the login page.
+    if (process.env.NODE_ENV === 'production' && !process.env.SESSION_SECRET) {
+      return NextResponse.redirect(new URL('/login?error=config', origin), 303);
+    }
+
     const formData = await request.formData();
     const username = (formData.get('username') as string)?.trim();
     const password = formData.get('password') as string;
@@ -29,24 +35,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.redirect(new URL('/login', origin));
     }
 
-    // Redirect everyone to /checkins/new first so the first GET hits a path that works
-    // (e.g. under Vercel Deployment Protection); then client can send admin to /dashboard.
-    const res = NextResponse.redirect(new URL('/checkins/new', origin), 303);
+    // Single redirect + single Set-Cookie so the session sticks in production/preview
+    // (some runtimes drop a second cookie; an extra GET can also lose cookies).
+    // Admin goes straight to /dashboard; DashboardEnsureAdminCookie sets lv_admin in a follow-up request.
+    const redirectPath = user.role === 'admin' ? '/dashboard' : '/checkins/new';
+    const res = NextResponse.redirect(new URL(redirectPath, origin), 303);
     res.headers.set('Cache-Control', 'private, no-store, max-age=0');
     const session = await getIronSession<SessionData>(request, res, sessionOptions);
     session.username = user.username;
     session.role = user.role;
     session.isLoggedIn = true;
     await session.save();
-    if (user.role === 'admin' && process.env.LV_ADMIN_SECRET) {
-      res.cookies.set('lv_admin', process.env.LV_ADMIN_SECRET, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/',
-        maxAge: 60 * 60 * 24 * 7,
-      });
-    }
     return res;
   } catch (err) {
     console.error('[auth/login] POST error', err);
