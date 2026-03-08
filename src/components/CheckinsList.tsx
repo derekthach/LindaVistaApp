@@ -14,6 +14,8 @@ import EditCheckinModal, { type EditCheckinDraft } from '@/components/checkins/E
 import ConfirmDiffModal, { type DiffLine } from '@/components/checkins/ConfirmDiffModal';
 import EditHistoryPanel from '@/components/checkins/EditHistoryPanel';
 import { formatReceiptNumber } from '@/lib/checkins/receipt';
+import { getPaymentMethodTranslationKey } from '@/lib/checkins/paymentMethods';
+import { useLanguage, type TranslationKey } from '@/components/LanguageToggle';
 
 function TrashIcon() {
   return (
@@ -77,7 +79,7 @@ function orDash(value: string | undefined): string {
   return value?.trim() ? value.trim() : '—';
 }
 
-function DetailsPanel({ checkin }: { checkin: CheckIn }) {
+function DetailsPanel({ checkin, t }: { checkin: CheckIn; t: (key: TranslationKey) => string }) {
   const isRoom = checkin.checkInType !== 'food' && checkin.checkInType !== 'beer';
   const gridStyle = {
     display: 'grid',
@@ -90,7 +92,9 @@ function DetailsPanel({ checkin }: { checkin: CheckIn }) {
   const valueStyle = { fontWeight: 500 };
 
   if (isRoom) {
-    const paymentLabel = checkin.payment_method === 'ath_mobil' ? 'ATH Móvil' : 'Cash';
+    const paymentLabel = checkin.payment_method
+      ? t(getPaymentMethodTranslationKey(checkin.payment_method))
+      : '—';
     return (
       <div style={{ padding: '12px 16px', backgroundColor: '#f9fafb', borderRadius: 8, margin: 4 }}>
         <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8, fontWeight: 600 }}>Room check-in details</div>
@@ -98,7 +102,7 @@ function DetailsPanel({ checkin }: { checkin: CheckIn }) {
           <dt style={labelStyle}>License Plate</dt>
           <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.car_plate)}</dd>
           <dt style={labelStyle}>Payment Method</dt>
-          <dd style={{ margin: 0, ...valueStyle }}>{checkin.payment_method ? paymentLabel : '—'}</dd>
+          <dd style={{ margin: 0, ...valueStyle }}>{paymentLabel}</dd>
           <dt style={labelStyle}>Car Make</dt>
           <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.car_make)}</dd>
           <dt style={labelStyle}>Car Color</dt>
@@ -152,6 +156,7 @@ export default function CheckinsList({
   role?: UserRole;
 }) {
   const router = useRouter();
+  const { t } = useLanguage();
   const [selectedDate, setSelectedDate] = useState(initialDate ?? '');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingCheckin, setEditingCheckin] = useState<CheckIn | null>(null);
@@ -424,7 +429,7 @@ export default function CheckinsList({
                       <td colSpan={colCount} style={{ padding: 0, borderBottom: '1px solid #e5e7eb', verticalAlign: 'top' }}>
                         <div className="checkin-expanded-grid">
                           <div style={{ minWidth: 0 }}>
-                            <DetailsPanel checkin={checkin} />
+                            <DetailsPanel checkin={checkin} t={t} />
                           </div>
                           <div style={{ minWidth: 0 }}>
                             <EditHistoryPanel checkinId={checkin.id ?? ''} checkin={checkin} />
@@ -469,7 +474,7 @@ export default function CheckinsList({
             <td colSpan={colCount} style={{ padding: 0, borderBottom: '1px solid #e5e7eb', verticalAlign: 'top' }}>
               <div className="checkin-expanded-grid">
                 <div style={{ minWidth: 0 }}>
-                  <DetailsPanel checkin={checkin} />
+                  <DetailsPanel checkin={checkin} t={t} />
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <EditHistoryPanel checkinId={checkin.id ?? ''} checkin={checkin} />

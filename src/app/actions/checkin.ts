@@ -5,6 +5,7 @@ import { requireAuth } from '@/server/auth/session';
 import { createCheckin, createSimpleCheckin } from '@/lib/server/checkinsRepo';
 import { validateSimpleCheckin } from '@/lib/checkins/validation';
 import { validateRoomCheckin, normalizeReceipt } from '@/lib/checkins/validation/room';
+import { normalizePaymentMethod } from '@/lib/checkins/paymentMethods';
 import { summarizeLineItems } from '@/lib/checkins/summarize';
 import type { CheckIn, LineItem, SummarizedItem } from '@/types';
 import type { FoodBeerDraft } from '@/lib/checkins/draft';
@@ -50,7 +51,7 @@ export async function submitCheckinAction(formData: FormData): Promise<RoomCheck
     date: String(raw.date).trim(),
     time: String(raw.time).trim(),
     cost: Number(raw.cost),
-    payment_method: (raw.payment_method as 'cash' | 'ath_mobil') ?? 'cash',
+    payment_method: normalizePaymentMethod(raw.payment_method != null ? String(raw.payment_method) : undefined),
     staff_name: String(raw.staff_name).trim(),
     car_plate: carPlate,
     car_make: carMake,

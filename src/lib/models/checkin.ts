@@ -1,6 +1,7 @@
 import { DateTime } from 'luxon';
 import type { Timestamp } from 'firebase-admin/firestore';
 import type { CheckIn, CheckInType, LineItem, SummarizedItem } from '@/types';
+import { normalizePaymentMethod } from '@/lib/checkins/paymentMethods';
 
 export type { CheckIn };
 
@@ -57,8 +58,7 @@ export function normalizeCheckin(id: string, data: Record<string, unknown>): Che
     : totalAmountCollected(data);
 
   const paymentRaw = (data.paymentMethod ?? data.payment) as string | undefined;
-  const paymentMethod =
-    paymentRaw === 'cash' || paymentRaw === 'ath_mobil' ? paymentRaw : 'cash';
+  const paymentMethod = normalizePaymentMethod(paymentRaw);
   const noteRaw = (data.note ?? data.notes) as string | undefined;
   const note = typeof noteRaw === 'string' && noteRaw.trim() ? noteRaw.trim() : undefined;
 

@@ -51,7 +51,7 @@ export default function Sidebar({ role }: { role: UserRole }) {
         )}
       </nav>
 
-      <div style={{ marginTop: 'auto', padding: 16 }}>
+      <div style={{ marginTop: 16, padding: 16 }}>
         <form action={logoutAction}>
           <button
             type="submit"

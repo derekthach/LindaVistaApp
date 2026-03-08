@@ -40,7 +40,7 @@ export interface CheckIn {
   time: string;
   room_id: number;
   cost: number;
-  payment_method: 'cash' | 'ath_mobil';
+  payment_method: string;
   staff_name: string;
   car_plate: string;
   car_make: string;

@@ -4,9 +4,12 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { submitCheckinAction } from '@/app/actions/checkin';
 import { getCarColorLabel } from '@/lib/checkins/colors';
+import { useLanguage } from '@/components/LanguageToggle';
+import { getPaymentMethodTranslationKey } from '@/lib/checkins/paymentMethods';
 
 export default function VerifyCheckinForm() {
   const router = useRouter();
+  const { t } = useLanguage();
   const [formData, setFormData] = useState<Record<string, string> | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -44,7 +47,7 @@ export default function VerifyCheckinForm() {
     { label: 'Date', value: formData.date },
     { label: 'Time', value: formData.time },
     { label: 'Cost', value: `$${formData.cost}` },
-    { label: 'Payment Method', value: formData.payment_method === 'cash' ? 'Cash' : 'ATH Móvil' },
+    { label: 'Payment Method', value: t(getPaymentMethodTranslationKey(formData.payment_method)) },
     { label: 'License Plate', value: formData.car_plate },
     { label: 'Car Make', value: formData.car_make },
     { label: 'Car Color', value: getCarColorLabel(formData.car_color) || formData.car_color },

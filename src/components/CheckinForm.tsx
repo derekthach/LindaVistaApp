@@ -11,6 +11,7 @@ import {
 } from '@/lib/checkins/validation/room';
 import { formatReceiptNumber } from '@/lib/checkins/receipt';
 import { getStaffOptionsForRole } from '@/lib/checkins/constants';
+import { PAYMENT_METHODS } from '@/lib/checkins/paymentMethods';
 import StaffDropdown from '@/components/checkins/StaffDropdown';
 
 const ZONE = 'America/Puerto_Rico';
@@ -26,7 +27,7 @@ type FormState = {
   date: string;
   time: string;
   cost: string;
-  payment_method: 'cash' | 'ath_mobil';
+  payment_method: string;
   car_plate: string;
   car_make: string;
   car_color: string;
@@ -305,12 +306,15 @@ function CheckinFormContent({
             <select
               name="payment_method"
               value={form.payment_method}
-              onChange={(e) => update({ payment_method: e.target.value as 'cash' | 'ath_mobil' })}
+              onChange={(e) => update({ payment_method: e.target.value })}
               onBlur={() => setTouchedField('payment_method')}
               style={inputStyle}
             >
-              <option value="cash">{t('cash')}</option>
-              <option value="ath_mobil">{t('ath_mobil')}</option>
+              {PAYMENT_METHODS.map((method) => (
+                <option key={method} value={method}>
+                  {t(method)}
+                </option>
+              ))}
             </select>
           </label>
 

@@ -1,5 +1,6 @@
 import { isValidCarColorKey } from '../colors';
 import { normalizeReceiptNumber, RECEIPT_MAX } from '../receipt';
+import { PAYMENT_METHODS } from '../paymentMethods';
 
 export interface RoomCheckinPayload {
   room_id: number;
@@ -30,7 +31,6 @@ const CAR_MAKE_MAX = 30;
 const NOTE_MAX = 500;
 const PLATE_MAX = 10;
 
-const PAYMENT_OPTIONS = ['cash', 'ath_mobil'] as const;
 
 /** Normalize receipt to 5 digits (pad with zeros). Returns null if not a valid number in 0–99999. Re-export for backward compatibility. */
 export const normalizeReceipt = normalizeReceiptNumber;
@@ -93,7 +93,7 @@ export function validateRoomCheckin(raw: Record<string, unknown>): RoomCheckinVa
   const payment = raw.payment_method != null ? String(raw.payment_method).trim() : '';
   if (!payment) {
     errors.payment_method = 'Payment method is required';
-  } else if (!PAYMENT_OPTIONS.includes(payment as (typeof PAYMENT_OPTIONS)[number])) {
+  } else if (!PAYMENT_METHODS.includes(payment as (typeof PAYMENT_METHODS)[number])) {
     errors.payment_method = 'Invalid payment method';
   }
 
