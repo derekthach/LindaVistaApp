@@ -38,7 +38,7 @@ export interface CheckIn {
   receipt_number: string;
   date: string;
   time: string;
-  room_id: number;
+  room_id: number | string;
   cost: number;
   payment_method: string;
   staff_name: string;

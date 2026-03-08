@@ -1,9 +1,10 @@
 import { isValidCarColorKey } from '../colors';
 import { normalizeReceiptNumber, RECEIPT_MAX } from '../receipt';
 import { PAYMENT_METHODS } from '../paymentMethods';
+import { isValidRoomId } from '../rooms';
 
 export interface RoomCheckinPayload {
-  room_id: number;
+  room_id: number | string;
   receipt_number: string;
   date: string;
   time: string;
@@ -24,8 +25,6 @@ export interface RoomCheckinValidationResult {
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_24 = /^([01]?\d|2[0-3]):[0-5]\d$/;
 const LICENSE_PLATE = /^[A-Za-z0-9\- ]+$/;
-const ROOM_MIN = 1;
-const ROOM_MAX = 999;
 const COST_MAX = 1000;
 const CAR_MAKE_MAX = 30;
 const NOTE_MAX = 500;
@@ -45,11 +44,8 @@ export function validateRoomCheckin(raw: Record<string, unknown>): RoomCheckinVa
   const roomId = raw.room_id;
   if (roomId === undefined || roomId === null) {
     errors.room_id = 'Room number is required';
-  } else {
-    const n = Number(roomId);
-    if (Number.isNaN(n) || !Number.isInteger(n) || n < ROOM_MIN || n > ROOM_MAX) {
-      errors.room_id = 'Please select a valid room';
-    }
+  } else if (!isValidRoomId(roomId)) {
+    errors.room_id = 'Please select a valid room';
   }
 
   const receiptRaw = raw.receipt_number != null ? String(raw.receipt_number).trim() : '';

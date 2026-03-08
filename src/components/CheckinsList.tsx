@@ -270,7 +270,7 @@ export default function CheckinsList({
           to: `$${Number(draft.cost).toFixed(2)}`,
         });
       }
-      if (draft.room_id != null && draft.room_id !== (checkin.room_id ?? 0)) {
+      if (draft.room_id != null && String(draft.room_id) !== String(checkin.room_id ?? '')) {
         lines.push({ label: 'Room', from: String(checkin.room_id ?? ''), to: String(draft.room_id) });
       }
     } else {

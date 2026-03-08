@@ -245,7 +245,7 @@ export interface UpdateCheckinInput {
   receipt_number: string;
   staff_name: string;
   cost: number;
-  room_id?: number;
+  room_id?: number | string;
 }
 
 /**
@@ -274,7 +274,7 @@ export async function updateCheckin(
     receiptNumber: data.receiptNumber ?? '',
     staffName: data.staffName ?? '',
     cost: data.cost != null ? Number(data.cost) : 0,
-    ...(isRoom && { roomId: data.roomId != null ? Number(data.roomId) : 0 }),
+    ...(isRoom && { roomId: data.roomId != null && data.roomId !== '' ? data.roomId : 0 }),
   };
   const after: Record<string, unknown> = {
     receiptNumber,
@@ -286,7 +286,7 @@ export async function updateCheckin(
   if (String(before.receiptNumber) !== String(after.receiptNumber)) changedFields.push('receiptNumber');
   if (String(before.staffName) !== String(after.staffName)) changedFields.push('staffName');
   if (Number(before.cost) !== Number(after.cost)) changedFields.push('cost');
-  if (isRoom && Number(before.roomId) !== Number(after.roomId)) changedFields.push('roomId');
+  if (isRoom && String(before.roomId) !== String(after.roomId)) changedFields.push('roomId');
 
   if (changedFields.length === 0) {
     return;
@@ -543,9 +543,11 @@ export async function get7DayTrends(): Promise<DashboardData> {
 
 export async function getRoomUsageTop15(): Promise<RoomUsageData> {
   const checkins = await listCheckinsByDateRange();
-  const byRoom = new Map<number, number>();
+  const byRoom = new Map<number | string, number>();
   for (const c of checkins) {
-    byRoom.set(c.room_id, (byRoom.get(c.room_id) ?? 0) + 1);
+    const rid = c.room_id;
+    if (rid == null || rid === '' || (typeof rid === 'number' && rid <= 0)) continue;
+    byRoom.set(rid, (byRoom.get(rid) ?? 0) + 1);
   }
   const sorted = [...byRoom.entries()]
     .sort((a, b) => b[1] - a[1])
@@ -579,11 +581,11 @@ export async function getRoomUsageFrequency(params: {
 
   const checkins = await listCheckinsByDateRange(startISO, endISO);
 
-  const byRoom = new Map<number, number>();
+  const byRoom = new Map<number | string, number>();
   for (const c of checkins) {
     if (c.checkInType !== 'room') continue;
     const roomId = c.room_id;
-    if (roomId == null || Number.isNaN(Number(roomId)) || roomId <= 0) continue;
+    if (roomId == null || roomId === '' || (typeof roomId === 'number' && (Number.isNaN(roomId) || roomId <= 0))) continue;
     byRoom.set(roomId, (byRoom.get(roomId) ?? 0) + 1);
   }
 

@@ -5,6 +5,7 @@ import { requireAuth } from '@/server/auth/session';
 import { createCheckin, createSimpleCheckin } from '@/lib/server/checkinsRepo';
 import { validateSimpleCheckin } from '@/lib/checkins/validation';
 import { validateRoomCheckin, normalizeReceipt } from '@/lib/checkins/validation/room';
+import { parseRoomOptionValue } from '@/lib/checkins/rooms';
 import { normalizePaymentMethod } from '@/lib/checkins/paymentMethods';
 import { summarizeLineItems } from '@/lib/checkins/summarize';
 import type { CheckIn, LineItem, SummarizedItem } from '@/types';
@@ -46,7 +47,7 @@ export async function submitCheckinAction(formData: FormData): Promise<RoomCheck
   const note = raw.note != null ? String(raw.note).trim().slice(0, 500) : undefined;
 
   const data: Omit<CheckIn, 'checkin_id'> = {
-    room_id: Number(raw.room_id),
+    room_id: parseRoomOptionValue(String(raw.room_id ?? '1')),
     receipt_number: receiptPadded,
     date: String(raw.date).trim(),
     time: String(raw.time).trim(),

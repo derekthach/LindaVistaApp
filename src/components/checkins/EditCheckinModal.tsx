@@ -8,9 +8,8 @@ import type { ItemOption } from '@/lib/checkins/items';
 import { normalizeReceipt } from '@/lib/checkins/validation/room';
 import { formatReceiptNumber } from '@/lib/checkins/receipt';
 import { ALLOWED_STAFF } from '@/lib/checkins/validation/updateCheckin';
+import { ROOM_OPTIONS, parseRoomOptionValue, isValidRoomId } from '@/lib/checkins/rooms';
 
-const ROOM_MIN = 1;
-const ROOM_MAX = 40;
 const COST_MAX = 1000;
 const AMOUNT_COLLECTED_MAX = 1000;
 const QUANTITY_MIN = 1;
@@ -20,7 +19,7 @@ export interface EditCheckinDraft {
   receipt_number: string;
   staff_name: string;
   cost?: number;
-  room_id?: number;
+  room_id?: number | string;
   itemId?: string;
   itemLabel?: string;
   quantity?: number;
@@ -85,7 +84,7 @@ export default function EditCheckinModal({
   const [receipt_number, setReceiptNumber] = useState('');
   const [staff_name, setStaffName] = useState('');
   const [cost, setCost] = useState('');
-  const [room_id, setRoomId] = useState(1);
+  const [room_id, setRoomId] = useState<number | string>(1);
   const [itemId, setItemId] = useState('');
   const [quantity, setQuantity] = useState('');
   const [amountCollected, setAmountCollected] = useState('');
@@ -124,7 +123,7 @@ export default function EditCheckinModal({
     receiptNormalized !== formatReceiptNumber(checkin?.receipt_number ?? '') ||
     staff_name !== (checkin?.staff_name ?? '') ||
     String(costNum) !== String(checkin?.cost ?? '') ||
-    room_id !== (checkin?.room_id ?? 1);
+    String(room_id) !== String(checkin?.room_id ?? 1);
   const hasChangesFoodBeer =
     receiptNormalized !== formatReceiptNumber(checkin?.receipt_number ?? '') ||
     staff_name !== (checkin?.staff_name ?? '') ||
@@ -137,8 +136,7 @@ export default function EditCheckinModal({
     receiptNormalized !== null &&
     staffValid &&
     costValid &&
-    room_id >= ROOM_MIN &&
-    room_id <= ROOM_MAX;
+    isValidRoomId(room_id);
   const formValidFoodBeer =
     receiptNormalized !== null &&
     staffValid &&
@@ -267,12 +265,12 @@ export default function EditCheckinModal({
               <label>
                 <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Room number</div>
                 <select
-                  value={room_id}
-                  onChange={(e) => setRoomId(parseInt(e.target.value, 10))}
+                  value={String(room_id)}
+                  onChange={(e) => setRoomId(parseRoomOptionValue(e.target.value))}
                   style={inputStyle}
                 >
-                  {Array.from({ length: ROOM_MAX - ROOM_MIN + 1 }, (_, i) => ROOM_MIN + i).map((r) => (
-                    <option key={r} value={r}>
+                  {ROOM_OPTIONS.map((r) => (
+                    <option key={String(r)} value={String(r)}>
                       Room {r}
                     </option>
                   ))}

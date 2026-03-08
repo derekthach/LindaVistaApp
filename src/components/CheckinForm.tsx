@@ -12,17 +12,16 @@ import {
 import { formatReceiptNumber } from '@/lib/checkins/receipt';
 import { getStaffOptionsForRole } from '@/lib/checkins/constants';
 import { PAYMENT_METHODS } from '@/lib/checkins/paymentMethods';
+import { ROOM_OPTIONS, parseRoomOptionValue } from '@/lib/checkins/rooms';
 import StaffDropdown from '@/components/checkins/StaffDropdown';
 
 const ZONE = 'America/Puerto_Rico';
-const ROOM_MIN = 1;
-const ROOM_MAX = 40;
 const PLATE_MAX = 10;
 const LICENSE_PLATE_REGEX = /^[A-Za-z0-9\- ]*$/;
 const NOTE_MAX = 500;
 
 type FormState = {
-  room_id: number;
+  room_id: number | string;
   receipt_number: string;
   date: string;
   time: string;
@@ -224,13 +223,13 @@ function CheckinFormContent({
             <div>{t('room_number')}</div>
             <select
               name="room_id"
-              value={form.room_id}
-              onChange={(e) => update({ room_id: parseInt(e.target.value, 10) })}
+              value={String(form.room_id)}
+              onChange={(e) => update({ room_id: parseRoomOptionValue(e.target.value) })}
               onBlur={() => setTouchedField('room_id')}
               style={inputStyle}
             >
-              {Array.from({ length: ROOM_MAX - ROOM_MIN + 1 }, (_, i) => ROOM_MIN + i).map((room) => (
-                <option key={room} value={room}>
+              {ROOM_OPTIONS.map((room) => (
+                <option key={String(room)} value={String(room)}>
                   Room {room}
                 </option>
               ))}

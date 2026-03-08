@@ -1,4 +1,5 @@
 import { normalizeReceipt } from './room';
+import { isValidRoomId } from '../rooms';
 
 const ALLOWED_STAFF = ['Keith Thach', 'Duyen Thach', 'Derek Thach'] as const;
 const COST_MAX = 1000;
@@ -7,7 +8,7 @@ export interface UpdateCheckinPayload {
   receipt_number: string;
   staff_name: string;
   cost: number;
-  room_id?: number;
+  room_id?: number | string;
 }
 
 export interface UpdateCheckinValidationResult {
@@ -60,11 +61,8 @@ export function validateUpdateCheckin(
     const roomVal = raw.room_id;
     if (roomVal === undefined || roomVal === null) {
       errors.room_id = 'Room number is required';
-    } else {
-      const n = Number(roomVal);
-      if (Number.isNaN(n) || !Number.isInteger(n) || n < 1 || n > 999) {
-        errors.room_id = 'Please select a valid room';
-      }
+    } else if (!isValidRoomId(roomVal)) {
+      errors.room_id = 'Please select a valid room';
     }
   }
 

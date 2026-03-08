@@ -10,7 +10,7 @@ export interface CheckinDoc {
   receiptNo?: string;
   checkInAt: Timestamp;
   checkInType?: CheckInType;
-  roomId?: number;
+  roomId?: number | string;
   cost?: number;
   paymentMethod?: string;
   staffName?: string;
@@ -69,7 +69,13 @@ export function normalizeCheckin(id: string, data: Record<string, unknown>): Che
     receipt_number: String(receiptNumber),
     date,
     time,
-    room_id: isRoom ? (Number(data.roomId) || 0) : 0,
+    room_id: isRoom
+      ? data.roomId != null && data.roomId !== ''
+        ? typeof data.roomId === 'number'
+          ? data.roomId
+          : String(data.roomId)
+        : 0
+      : 0,
     cost,
     payment_method: paymentMethod,
     staff_name: String(staffName),

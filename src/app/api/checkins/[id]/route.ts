@@ -90,7 +90,7 @@ export async function PATCH(
         receipt_number: receiptPadded,
         staff_name: String(raw.staff_name).trim(),
         cost: Number(raw.cost),
-        room_id: Number(raw.room_id),
+        room_id: raw.room_id as number | string,
       };
       await updateCheckin(id, payload, payload.staff_name);
     } else {
