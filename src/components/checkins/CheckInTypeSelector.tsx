@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { LanguageProvider, useLanguage } from '@/components/LanguageToggle';
+import { useLanguage } from '@/components/LanguageToggle';
 
 const OPTIONS = [
   { type: 'room' as const, slug: 'room', labelKey: 'room' as const },
@@ -9,7 +9,7 @@ const OPTIONS = [
   { type: 'beer' as const, slug: 'beer', labelKey: 'beer' as const },
 ] as const;
 
-function SelectorContent() {
+export default function CheckInTypeSelector() {
   const { t } = useLanguage();
 
   return (
@@ -45,13 +45,5 @@ function SelectorContent() {
         </Link>
       ))}
     </div>
-  );
-}
-
-export default function CheckInTypeSelector() {
-  return (
-    <LanguageProvider>
-      <SelectorContent />
-    </LanguageProvider>
   );
 }

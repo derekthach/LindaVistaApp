@@ -13,6 +13,7 @@ import { getCarColorLabel } from '@/lib/checkins/colors';
 import EditCheckinModal, { type EditCheckinDraft } from '@/components/checkins/EditCheckinModal';
 import ConfirmDiffModal, { type DiffLine } from '@/components/checkins/ConfirmDiffModal';
 import EditHistoryPanel from '@/components/checkins/EditHistoryPanel';
+import { formatReceiptNumber } from '@/lib/checkins/receipt';
 
 function TrashIcon() {
   return (
@@ -248,7 +249,7 @@ export default function CheckinsList({
 
   function buildDiffLines(checkin: CheckIn, draft: EditCheckinDraft): DiffLine[] {
     const lines: DiffLine[] = [];
-    const receiptFrom = checkin.receipt_number?.padStart(4, '0') ?? '';
+    const receiptFrom = formatReceiptNumber(checkin.receipt_number ?? '');
     if (draft.receipt_number !== receiptFrom) {
       lines.push({ label: 'Receipt #', from: receiptFrom, to: draft.receipt_number });
     }
@@ -409,7 +410,7 @@ export default function CheckinsList({
               {sectioned.buckets[idx].map((checkin) => (
                 <Fragment key={checkin.id ?? checkin.receipt_number}>
                   <tr>
-                    <td style={{ padding: 8 }}>{checkin.receipt_number}</td>
+                    <td style={{ padding: 8 }}>{formatReceiptNumber(checkin.receipt_number ?? '')}</td>
                     <td style={{ padding: 8 }}>{checkin.date}</td>
                     <td style={{ padding: 8 }}>{checkin.time}</td>
                     <td style={{ padding: 8 }}>{checkin.checkInType ?? 'room'}</td>
@@ -454,7 +455,7 @@ export default function CheckinsList({
     return initialCheckins.map((checkin) => (
       <Fragment key={checkin.id ?? checkin.receipt_number}>
         <tr>
-          <td style={{ padding: 8 }}>{checkin.receipt_number}</td>
+          <td style={{ padding: 8 }}>{formatReceiptNumber(checkin.receipt_number ?? '')}</td>
           <td style={{ padding: 8 }}>{checkin.date}</td>
           <td style={{ padding: 8 }}>{checkin.time}</td>
           <td style={{ padding: 8 }}>{checkin.checkInType ?? 'room'}</td>
@@ -581,7 +582,7 @@ export default function CheckinsList({
             <dl style={{ margin: '0 0 20px', fontSize: 14 }}>
               <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
                 <dt style={{ fontWeight: 500 }}>Receipt #</dt>
-                <dd style={{ margin: 0 }}>{pendingDelete.receipt_number}</dd>
+                <dd style={{ margin: 0 }}>{formatReceiptNumber(pendingDelete.receipt_number ?? '')}</dd>
               </div>
               <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
                 <dt style={{ fontWeight: 500 }}>Date</dt>

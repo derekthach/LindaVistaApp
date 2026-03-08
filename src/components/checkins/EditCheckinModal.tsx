@@ -6,6 +6,7 @@ import Button from '@/components/Button';
 import { FOOD_ITEMS, BEER_ITEMS } from '@/lib/checkins/items';
 import type { ItemOption } from '@/lib/checkins/items';
 import { normalizeReceipt } from '@/lib/checkins/validation/room';
+import { formatReceiptNumber } from '@/lib/checkins/receipt';
 import { ALLOWED_STAFF } from '@/lib/checkins/validation/updateCheckin';
 
 const ROOM_MIN = 1;
@@ -94,7 +95,7 @@ export default function EditCheckinModal({
 
   useEffect(() => {
     if (checkin) {
-      setReceiptNumber(checkin.receipt_number?.padStart(4, '0') ?? '');
+      setReceiptNumber(formatReceiptNumber(checkin.receipt_number ?? ''));
       setStaffName(checkin.staff_name ?? '');
       setCost(String(checkin.cost ?? ''));
       setRoomId(checkin.room_id ?? 1);
@@ -120,12 +121,12 @@ export default function EditCheckinModal({
   const amountValid = !Number.isNaN(amountNum) && amountNum >= 0 && amountNum <= AMOUNT_COLLECTED_MAX;
 
   const hasChangesRoom =
-    receiptNormalized !== (checkin?.receipt_number?.padStart(4, '0') ?? '') ||
+    receiptNormalized !== formatReceiptNumber(checkin?.receipt_number ?? '') ||
     staff_name !== (checkin?.staff_name ?? '') ||
     String(costNum) !== String(checkin?.cost ?? '') ||
     room_id !== (checkin?.room_id ?? 1);
   const hasChangesFoodBeer =
-    receiptNormalized !== (checkin?.receipt_number?.padStart(4, '0') ?? '') ||
+    receiptNormalized !== formatReceiptNumber(checkin?.receipt_number ?? '') ||
     staff_name !== (checkin?.staff_name ?? '') ||
     itemId !== getFirstItemId(checkin ?? ({} as CheckIn)) ||
     qtyNum !== getFirstQuantity(checkin ?? ({} as CheckIn)) ||
@@ -228,7 +229,7 @@ export default function EditCheckinModal({
               onChange={(e) => setReceiptNumber(e.target.value)}
               onBlur={handleReceiptBlur}
               style={inputStyle}
-              maxLength={4}
+              maxLength={5}
               inputMode="numeric"
             />
           </label>

@@ -91,6 +91,6 @@ export function initDbIfMissing() {
       .prepare(
         'INSERT INTO Settings (setting_name, setting_value) VALUES (?, ?)'
       )
-      .run('next_receipt_number', '0001');
+      .run('next_receipt_number', '00001');
   }
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { LanguageProvider, LanguageToggle, useLanguage } from '@/components/LanguageToggle';
+import { useLanguage } from '@/components/LanguageToggle';
 import type { TranslationKey } from '@/components/LanguageToggle';
 import { getDraft, clearDraft } from '@/lib/checkins/draft';
 import type { FoodBeerDraft } from '@/lib/checkins/draft';
@@ -67,7 +67,6 @@ function ValidateContent({ type }: { type: 'food' | 'beer' }) {
 
   return (
     <div className="card">
-      <LanguageToggle />
       <div style={{ display: 'grid', gap: 12, marginBottom: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <strong>Type:</strong>
@@ -167,9 +166,5 @@ function ValidateContent({ type }: { type: 'food' | 'beer' }) {
 }
 
 export default function FoodBeerValidateClient({ type }: { type: 'food' | 'beer' }) {
-  return (
-    <LanguageProvider>
-      <ValidateContent type={type} />
-    </LanguageProvider>
-  );
+  return <ValidateContent type={type} />;
 }

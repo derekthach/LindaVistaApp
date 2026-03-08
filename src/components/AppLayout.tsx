@@ -1,4 +1,5 @@
 import Sidebar from './Sidebar';
+import AppContentWithLanguage from './AppContentWithLanguage';
 import type { UserRole } from '@/types';
 
 export default function AppLayout({
@@ -11,7 +12,9 @@ export default function AppLayout({
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       <Sidebar role={role} />
-      <main style={{ flex: 1, padding: 24 }}>{children}</main>
+      <main style={{ flex: 1, padding: 24 }}>
+        <AppContentWithLanguage role={role}>{children}</AppContentWithLanguage>
+      </main>
     </div>
   );
 }

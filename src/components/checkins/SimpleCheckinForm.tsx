@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { LanguageProvider, LanguageToggle, useLanguage } from '@/components/LanguageToggle';
+import { useLanguage } from '@/components/LanguageToggle';
 import StaffDropdown from '@/components/checkins/StaffDropdown';
 import { getDefaultDateAndTime } from '@/lib/checkins/defaults';
 import { FOOD_ITEMS, BEER_ITEMS } from '@/lib/checkins/items';
@@ -21,7 +21,7 @@ const initialRow = (): LineItem => ({
   amountCollected: 0,
 });
 
-function SimpleCheckinFormContent({ type }: { type: 'food' | 'beer' }) {
+function SimpleCheckinFormContent({ type, isAdmin = false }: { type: 'food' | 'beer'; isAdmin?: boolean }) {
   const router = useRouter();
   const { t, language } = useLanguage();
   const itemOptions: ItemOption[] = type === 'food' ? FOOD_ITEMS : BEER_ITEMS;
@@ -175,7 +175,6 @@ function SimpleCheckinFormContent({ type }: { type: 'food' | 'beer' }) {
 
   return (
     <div className="card">
-      <LanguageToggle />
       <form onSubmit={handleSubmit} style={{ display: 'grid', gap: 16 }} noValidate>
         <input type="hidden" name="checkInType" value={type} />
 
@@ -190,15 +189,19 @@ function SimpleCheckinFormContent({ type }: { type: 'food' | 'beer' }) {
             <div>{t('date')}</div>
             <input
               name="date"
-              type="text"
+              type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
+              readOnly={!isAdmin}
+              disabled={!isAdmin}
               required
+              aria-readonly={!isAdmin}
               style={{
                 width: '100%',
                 padding: '8px 12px',
                 borderRadius: 8,
                 border: '1px solid #d1d5db',
+                ...(!isAdmin && { backgroundColor: '#f9fafb' }),
               }}
             />
             {hasAttemptedReview && displayErrors.date && (
@@ -210,16 +213,18 @@ function SimpleCheckinFormContent({ type }: { type: 'food' | 'beer' }) {
             <div>{t('time')}</div>
             <input
               name="time"
-              type="text"
+              type="time"
               value={time}
-              readOnly
-              aria-readonly
+              onChange={(e) => setTime(e.target.value)}
+              readOnly={!isAdmin}
+              disabled={!isAdmin}
+              aria-readonly={!isAdmin}
               style={{
                 width: '100%',
                 padding: '8px 12px',
                 borderRadius: 8,
                 border: '1px solid #d1d5db',
-                backgroundColor: '#f9fafb',
+                ...(!isAdmin && { backgroundColor: '#f9fafb' }),
               }}
             />
             {hasAttemptedReview && displayErrors.time && (
@@ -227,7 +232,7 @@ function SimpleCheckinFormContent({ type }: { type: 'food' | 'beer' }) {
             )}
           </label>
 
-          <StaffDropdown value={staffName} onChange={setStaffName} />
+          <StaffDropdown value={staffName} onChange={setStaffName} isAdmin={isAdmin} />
           {hasAttemptedReview && displayErrors.staff_name && (
             <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 4 }}>{msg(displayErrors.staff_name)}</div>
           )}
@@ -409,13 +414,15 @@ function SimpleCheckinFormContent({ type }: { type: 'food' | 'beer' }) {
   );
 }
 
-export default function SimpleCheckinForm({ type }: { type: 'food' | 'beer' }) {
+export default function SimpleCheckinForm({
+  type,
+  isAdmin = false,
+}: {
+  type: 'food' | 'beer';
+  isAdmin?: boolean;
+}) {
   if (!SIMPLE_TYPES.includes(type)) {
     return null;
   }
-  return (
-    <LanguageProvider>
-      <SimpleCheckinFormContent type={type} />
-    </LanguageProvider>
-  );
+  return <SimpleCheckinFormContent type={type} isAdmin={isAdmin} />;
 }

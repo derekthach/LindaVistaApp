@@ -1,4 +1,5 @@
 import { isValidCarColorKey } from '../colors';
+import { normalizeReceiptNumber, RECEIPT_MAX } from '../receipt';
 
 export interface RoomCheckinPayload {
   room_id: number;
@@ -24,7 +25,6 @@ const TIME_24 = /^([01]?\d|2[0-3]):[0-5]\d$/;
 const LICENSE_PLATE = /^[A-Za-z0-9\- ]+$/;
 const ROOM_MIN = 1;
 const ROOM_MAX = 999;
-const RECEIPT_DIGITS = 4;
 const COST_MAX = 1000;
 const CAR_MAKE_MAX = 30;
 const NOTE_MAX = 500;
@@ -32,14 +32,8 @@ const PLATE_MAX = 10;
 
 const PAYMENT_OPTIONS = ['cash', 'ath_mobil'] as const;
 
-/** Normalize receipt to 4 digits (pad with zeros). Returns null if not a valid number in 0-9999. */
-export function normalizeReceipt(input: string): string | null {
-  const trimmed = String(input).trim();
-  if (trimmed === '') return null;
-  const num = parseInt(trimmed, 10);
-  if (Number.isNaN(num) || num < 0 || num > 9999) return null;
-  return num.toString().padStart(RECEIPT_DIGITS, '0');
-}
+/** Normalize receipt to 5 digits (pad with zeros). Returns null if not a valid number in 0–99999. Re-export for backward compatibility. */
+export const normalizeReceipt = normalizeReceiptNumber;
 
 /**
  * Strict server-side validation for room check-in.
@@ -62,9 +56,9 @@ export function validateRoomCheckin(raw: Record<string, unknown>): RoomCheckinVa
   if (!receiptRaw) {
     errors.receipt_number = 'Receipt number is required';
   } else {
-    const normalized = normalizeReceipt(receiptRaw);
+    const normalized = normalizeReceiptNumber(receiptRaw);
     if (normalized === null) {
-      errors.receipt_number = 'Receipt must be 4 digits (0000–9999)';
+      errors.receipt_number = `Receipt must be 5 digits (00000–${RECEIPT_MAX})`;
     }
   }
 

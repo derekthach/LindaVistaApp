@@ -133,15 +133,31 @@ type LanguageContextValue = {
 
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
-export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [language, setLanguageState] = useState<Language>('en');
+export function LanguageProvider({
+  children,
+  defaultLanguage,
+}: {
+  children: React.ReactNode;
+  /** When 'es', initial language is Spanish and we do not restore from localStorage (e.g. employee default). */
+  defaultLanguage?: Language;
+}) {
+  const [language, setLanguageState] = useState<Language>(() => {
+    if (defaultLanguage) return defaultLanguage;
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('preferredLanguage') as Language | null;
+      if (saved) return saved;
+    }
+    return 'en';
+  });
 
   useEffect(() => {
-    const saved = localStorage.getItem('preferredLanguage') as Language | null;
-    if (saved) {
-      setLanguageState(saved);
+    if (defaultLanguage === 'es') {
+      setLanguageState('es');
+      return;
     }
-  }, []);
+    const saved = localStorage.getItem('preferredLanguage') as Language | null;
+    if (saved) setLanguageState(saved);
+  }, [defaultLanguage]);
 
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);

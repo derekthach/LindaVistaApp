@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import { DateTime } from 'luxon';
 import type { CheckIn } from '@/types';
+import { formatReceiptNumber } from '@/lib/checkins/receipt';
 
 export interface CheckinEditRecord {
   id: string;
@@ -29,7 +30,7 @@ function formatDiffValue(field: string, value: unknown): string {
   if (value === undefined || value === null) return 'Unknown';
   switch (field) {
     case 'receiptNumber':
-      return String(value).padStart(4, '0');
+      return formatReceiptNumber(value == null ? '' : String(value));
     case 'cost':
     case 'amountCollected':
       return `$${Number(value).toFixed(2)}`;

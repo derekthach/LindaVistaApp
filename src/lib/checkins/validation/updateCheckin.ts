@@ -31,7 +31,7 @@ export function validateUpdateCheckin(
   } else {
     const normalized = normalizeReceipt(receiptRaw);
     if (normalized === null) {
-      errors.receipt_number = 'Receipt must be 4 digits (0000-9999)';
+      errors.receipt_number = 'Receipt must be 5 digits (00000-99999)';
     }
   }
 
@@ -103,7 +103,7 @@ export function validateUpdateFoodBeerCheckin(
   } else {
     const normalized = normalizeReceipt(receiptRaw);
     if (normalized === null) {
-      errors.receipt_number = 'Receipt must be 4 digits (0000-9999)';
+      errors.receipt_number = 'Receipt must be 5 digits (00000-99999)';
     }
   }
 

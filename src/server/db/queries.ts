@@ -7,20 +7,22 @@ import type {
   MonthlyComparisonData,
 } from '@/types';
 import { getDb } from './sqlite';
+import { formatReceiptNumber, incrementReceiptNumber } from '@/lib/checkins/receipt';
+
+const DEFAULT_RECEIPT = '00001';
 
 export function getNextReceiptNumber() {
   const db = getDb();
   const result = db
     .prepare('SELECT setting_value FROM Settings WHERE setting_name = ?')
     .get('next_receipt_number') as { setting_value: string } | undefined;
-  return result?.setting_value || '0001';
+  const value = result?.setting_value?.trim() || DEFAULT_RECEIPT;
+  return formatReceiptNumber(value);
 }
 
-export function incrementReceiptNumber(currentReceipt: string) {
+export function incrementReceiptNumberInDb(currentReceipt: string) {
   const db = getDb();
-  const nextReceipt = (parseInt(currentReceipt, 10) + 1)
-    .toString()
-    .padStart(4, '0');
+  const nextReceipt = incrementReceiptNumber(currentReceipt);
   db.prepare('UPDATE Settings SET setting_value = ? WHERE setting_name = ?').run(
     nextReceipt,
     'next_receipt_number'
@@ -50,7 +52,7 @@ export function insertCheckin(data: Omit<CheckIn, 'checkin_id'>) {
       data.staff_name,
       data.note || ''
     );
-    incrementReceiptNumber(data.receipt_number);
+    incrementReceiptNumberInDb(data.receipt_number);
   });
   transaction();
 }

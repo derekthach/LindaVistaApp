@@ -3,6 +3,7 @@ import { DateTime } from 'luxon';
 import { getAdminDb } from './firebaseAdmin';
 import { isFirestoreUnavailableError, isProduction } from './firestoreError';
 import { normalizeCheckin } from '@/lib/models/checkin';
+import { formatReceiptNumber, parseReceiptNumber, RECEIPT_MAX } from '@/lib/checkins/receipt';
 import type {
   CheckIn,
   CheckInType,
@@ -24,7 +25,7 @@ export type CreateCheckinInput = Omit<CheckIn, 'checkin_id'>;
 
 /**
  * Room check-in: uses the provided receipt number and updates the single source of truth
- * (settings/receipts.nextReceiptNumber) to (providedReceiptNumber + 1) mod 10000 so the next
+ * (settings/receipts.nextReceiptNumber) to (providedReceiptNumber + 1) so the next
  * form load shows the next receipt. Duplicates allowed; no duplicate check.
  */
 export async function createCheckin(data: CreateCheckinInput): Promise<string> {
@@ -32,9 +33,9 @@ export async function createCheckin(data: CreateCheckinInput): Promise<string> {
   const settingsRef = db.collection(SETTINGS_COLLECTION).doc(RECEIPTS_DOC_ID);
   const checkinsRef = db.collection(CHECKINS_COLLECTION);
 
-  const receiptNumber = data.receipt_number.padStart(4, '0');
-  const receiptNum = parseInt(receiptNumber, 10);
-  if (Number.isNaN(receiptNum) || receiptNum < 0 || receiptNum > 9999) {
+  const receiptNumber = formatReceiptNumber(data.receipt_number);
+  const receiptNum = parseReceiptNumber(data.receipt_number);
+  if (receiptNum < 0 || receiptNum > RECEIPT_MAX) {
     throw new Error('Invalid receipt number');
   }
 
@@ -49,6 +50,7 @@ export async function createCheckin(data: CreateCheckinInput): Promise<string> {
     const doc = {
       receiptNumber,
       checkInAt,
+      createdAt: Timestamp.now(),
       checkInType: 'room' as const,
       roomId: data.room_id,
       cost: data.cost,
@@ -63,7 +65,7 @@ export async function createCheckin(data: CreateCheckinInput): Promise<string> {
     const newRef = checkinsRef.doc();
     tx.set(newRef, doc);
 
-    const nextReceiptNumber = (receiptNum + 1) % 10000;
+    const nextReceiptNumber = receiptNum + 1;
     tx.set(settingsRef, { nextReceiptNumber }, { merge: true });
 
     return { id: newRef.id, receiptNumber };
@@ -102,8 +104,8 @@ export async function createSimpleCheckin(
         ? (counterSnap.data()?.nextReceiptNumber as number) ?? 1
         : 1;
     }
-    const receiptNumber = (nextNum % 10000).toString().padStart(4, '0');
-    const nextReceiptNumber = (nextNum + 1) % 10000;
+    const receiptNumber = formatReceiptNumber(nextNum);
+    const nextReceiptNumber = nextNum + 1;
 
     const dt = DateTime.fromFormat(
       `${data.date} ${data.time}`,
@@ -115,6 +117,7 @@ export async function createSimpleCheckin(
     const doc = {
       receiptNumber,
       checkInAt,
+      createdAt: Timestamp.now(),
       checkInType,
       staffName: data.staff_name,
       lineItems: data.lineItems,
@@ -134,7 +137,7 @@ export async function createSimpleCheckin(
 /**
  * Single source of truth for next receipt: settings/receipts.nextReceiptNumber.
  * Falls back to counters/receipt if settings doc does not exist (migration).
- * If Firestore/Google auth is unavailable, returns "0001" so the app can run.
+ * If Firestore/Google auth is unavailable, returns "00001" so the app can run.
  */
 export async function getNextReceiptNumber(): Promise<string> {
   try {
@@ -143,18 +146,18 @@ export async function getNextReceiptNumber(): Promise<string> {
     const settingsSnap = await settingsRef.get();
     if (settingsSnap.exists) {
       const nextNum = (settingsSnap.data()?.nextReceiptNumber as number) ?? 0;
-      return (nextNum % 10000).toString().padStart(4, '0');
+      return formatReceiptNumber(nextNum);
     }
     const counterRef = db.collection(COUNTERS_COLLECTION).doc(RECEIPT_COUNTER_ID);
     const counterSnap = await counterRef.get();
     const nextNum = counterSnap.exists
       ? (counterSnap.data()?.nextReceiptNumber as number) ?? 1
       : 1;
-    return nextNum.toString().padStart(4, '0');
+    return formatReceiptNumber(nextNum);
   } catch (err) {
     if (isFirestoreUnavailableError(err)) {
-      console.warn('Firestore unavailable (getNextReceiptNumber), using default 0001:', (err as Error).message);
-      return '0001';
+      console.warn('Firestore unavailable (getNextReceiptNumber), using default 00001:', (err as Error).message);
+      return '00001';
     }
     throw err;
   }
@@ -172,10 +175,20 @@ function endExclusiveISO(isoDate: string): Date {
   return dt.toJSDate();
 }
 
+const UNFILTERED_LIMIT = 3000;
+
+/** Timestamp for "creation" sort: createdAt if present, else checkInAt (for legacy docs). */
+function getCreationTime(data: Record<string, unknown>): number {
+  const created = (data.createdAt as Timestamp | undefined)?.toDate?.();
+  const checkIn = (data.checkInAt as Timestamp | undefined)?.toDate?.();
+  const d = created ?? checkIn ?? new Date(0);
+  return d.getTime();
+}
+
 /**
  * List check-ins in a date range. Dates are YYYY-MM-DD and interpreted in America/Puerto_Rico.
- * For a single calendar day, pass the same ISO date for both startISO and endISO
- * (e.g. listCheckinsByDateRange('2026-02-15', '2026-02-15')).
+ * - Filtered (startISO and endISO provided): filter by business date (checkInAt), order by checkInAt desc.
+ * - Unfiltered (both omitted): return recent records ordered by creation/submission time desc (createdAt, with fallback to checkInAt for legacy docs).
  * If Firestore/Google auth is unavailable, returns [] so the app can run.
  */
 export async function listCheckinsByDateRange(
@@ -185,21 +198,31 @@ export async function listCheckinsByDateRange(
   try {
     const db = getAdminDb();
     const now = DateTime.now().setZone('America/Puerto_Rico');
+    const filteredMode = startISO != null && startISO !== '' && endISO != null && endISO !== '';
+
     const start = startISO
       ? Timestamp.fromDate(startOfDayISO(startISO))
       : Timestamp.fromDate(new Date(0));
     const endExclusive = endISO
       ? Timestamp.fromDate(endExclusiveISO(endISO))
-      : Timestamp.fromDate(now.plus({ days: 1 }).startOf('day').toJSDate());
+      : Timestamp.fromDate(now.plus({ years: 1 }).toJSDate());
 
-    const snapshot = await db
+    let query = db
       .collection(CHECKINS_COLLECTION)
       .where('checkInAt', '>=', start)
       .where('checkInAt', '<', endExclusive)
-      .orderBy('checkInAt', 'desc')
-      .get();
+      .orderBy('checkInAt', 'desc');
+    if (!filteredMode) {
+      query = query.limit(UNFILTERED_LIMIT);
+    }
+    const snapshot = await query.get();
 
-    return snapshot.docs.map((doc) => normalizeCheckin(doc.id, doc.data()));
+    const docs = snapshot.docs;
+    if (filteredMode) {
+      return docs.map((doc) => normalizeCheckin(doc.id, doc.data()));
+    }
+    const sorted = [...docs].sort((a, b) => getCreationTime(b.data()) - getCreationTime(a.data()));
+    return sorted.map((doc) => normalizeCheckin(doc.id, doc.data()));
   } catch (err) {
     if (isFirestoreUnavailableError(err)) {
       if (isProduction()) throw err;
@@ -246,7 +269,7 @@ export async function updateCheckin(
   const checkInType = (data.checkInType as string) ?? 'room';
   const isRoom = checkInType === 'room';
 
-  const receiptNumber = payload.receipt_number.padStart(4, '0');
+  const receiptNumber = formatReceiptNumber(payload.receipt_number);
   const before: Record<string, unknown> = {
     receiptNumber: data.receiptNumber ?? '',
     staffName: data.staffName ?? '',
@@ -326,7 +349,7 @@ export async function updateCheckinFoodBeer(
     throw new Error('Check-in is not food or beer');
   }
 
-  const receiptNumber = payload.receipt_number.padStart(4, '0');
+  const receiptNumber = formatReceiptNumber(payload.receipt_number);
   const itemId = payload.itemId.trim();
   const itemLabel = payload.itemLabel.trim() || itemId;
   const lineItems: LineItem[] = [

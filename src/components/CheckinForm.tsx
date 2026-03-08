@@ -3,25 +3,17 @@
 import { useEffect, useState, useCallback } from 'react';
 import { DateTime } from 'luxon';
 import { useRouter } from 'next/navigation';
-import { LanguageProvider, LanguageToggle, useLanguage } from './LanguageToggle';
+import { useLanguage } from './LanguageToggle';
 import { CAR_COLORS } from '@/lib/checkins/colors';
 import {
   validateRoomCheckin,
   normalizeReceipt,
 } from '@/lib/checkins/validation/room';
+import { formatReceiptNumber } from '@/lib/checkins/receipt';
+import { getStaffOptionsForRole } from '@/lib/checkins/constants';
+import StaffDropdown from '@/components/checkins/StaffDropdown';
 
 const ZONE = 'America/Puerto_Rico';
-const STAFF_MEMBERS = [
-  'Benjamin (Siky)',
-  'Luis',
-  'Tonito',
-  'Tono',
-  'Jose (Ivan)',
-  'Makito',
-  'Keith Thach',
-  'Duyen Thach',
-  'Derek Thach',
-];
 const ROOM_MIN = 1;
 const ROOM_MAX = 40;
 const PLATE_MAX = 10;
@@ -56,7 +48,13 @@ const defaultState: FormState = {
   note: '',
 };
 
-function CheckinFormContent() {
+function CheckinFormContent({
+  allowAddCarMake = true,
+  allowEditDateTime = true,
+}: {
+  allowAddCarMake?: boolean;
+  allowEditDateTime?: boolean;
+}) {
   const router = useRouter();
   const { t } = useLanguage();
   const [form, setForm] = useState<FormState>(defaultState);
@@ -72,7 +70,7 @@ function CheckinFormContent() {
     fetch('/api/next-receipt')
       .then((res) => res.json())
       .then((data) => {
-        const next = (data.next_receipt_number || '0001').toString().padStart(4, '0');
+        const next = formatReceiptNumber((data.next_receipt_number ?? '00001').toString());
         setForm((f) => ({ ...f, receipt_number: next }));
       });
 
@@ -219,7 +217,6 @@ function CheckinFormContent() {
 
   return (
     <div className="card">
-      <LanguageToggle />
       <form onSubmit={handleSubmit} style={{ display: 'grid', gap: 16 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
           <label>
@@ -248,8 +245,8 @@ function CheckinFormContent() {
               onChange={(e) => update({ receipt_number: e.target.value })}
               onBlur={handleReceiptBlur}
               style={inputStyle}
-              placeholder="0000"
-              maxLength={4}
+              placeholder="00000"
+              maxLength={5}
               inputMode="numeric"
             />
             {showError('receipt_number') && <div style={errorStyle}>{validation.errors.receipt_number}</div>}
@@ -263,7 +260,10 @@ function CheckinFormContent() {
               value={form.date}
               onChange={(e) => update({ date: e.target.value })}
               onBlur={() => setTouchedField('date')}
+              readOnly={!allowEditDateTime}
+              disabled={!allowEditDateTime}
               style={inputStyle}
+              aria-readonly={!allowEditDateTime}
             />
             {showError('date') && <div style={errorStyle}>{validation.errors.date}</div>}
           </label>
@@ -276,7 +276,10 @@ function CheckinFormContent() {
               value={form.time}
               onChange={(e) => update({ time: e.target.value })}
               onBlur={() => setTouchedField('time')}
+              readOnly={!allowEditDateTime}
+              disabled={!allowEditDateTime}
               style={inputStyle}
+              aria-readonly={!allowEditDateTime}
             />
             {showError('time') && <div style={errorStyle}>{validation.errors.time}</div>}
           </label>
@@ -342,27 +345,29 @@ function CheckinFormContent() {
                   </option>
                 ))}
               </select>
-              {addMakeOpen ? (
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <input
-                    type="text"
-                    value={newMakeInput}
-                    onChange={(e) => setNewMakeInput(e.target.value.toUpperCase().slice(0, 30))}
-                    placeholder="New make"
-                    style={{ ...inputStyle, flex: 1, minWidth: 100 }}
-                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddCarMake())}
-                  />
-                  <button type="button" onClick={handleAddCarMake} className="btn btn-primary" style={{ padding: '6px 12px' }}>
-                    Add
+              {allowAddCarMake && (
+                addMakeOpen ? (
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input
+                      type="text"
+                      value={newMakeInput}
+                      onChange={(e) => setNewMakeInput(e.target.value.toUpperCase().slice(0, 30))}
+                      placeholder="New make"
+                      style={{ ...inputStyle, flex: 1, minWidth: 100 }}
+                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddCarMake())}
+                    />
+                    <button type="button" onClick={handleAddCarMake} className="btn btn-primary" style={{ padding: '6px 12px' }}>
+                      Add
+                    </button>
+                    <button type="button" onClick={() => { setAddMakeOpen(false); setNewMakeInput(''); setAddMakeError(''); }} style={{ padding: '6px 12px' }}>
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => setAddMakeOpen(true)} style={{ fontSize: 13, color: '#166534' }}>
+                    + Add new make
                   </button>
-                  <button type="button" onClick={() => { setAddMakeOpen(false); setNewMakeInput(''); setAddMakeError(''); }} style={{ padding: '6px 12px' }}>
-                    Cancel
-                  </button>
-                </div>
-              ) : (
-                <button type="button" onClick={() => setAddMakeOpen(true)} style={{ fontSize: 13, color: '#166534' }}>
-                  + Add new make
-                </button>
+                )
               )}
               {addMakeError && <div style={errorStyle}>{addMakeError}</div>}
             </div>
@@ -387,24 +392,13 @@ function CheckinFormContent() {
             {showError('car_color') && <div style={errorStyle}>{validation.errors.car_color}</div>}
           </label>
 
-          <label>
-            <div>{t('staff_name')}</div>
-            <select
-              name="staff_name"
-              value={form.staff_name}
-              onChange={(e) => update({ staff_name: e.target.value })}
-              onBlur={() => setTouchedField('staff_name')}
-              style={inputStyle}
-            >
-              <option value="">{t('staff_select_placeholder')}</option>
-              {STAFF_MEMBERS.map((staff) => (
-                <option key={staff} value={staff}>
-                  {staff}
-                </option>
-              ))}
-            </select>
-            {showError('staff_name') && <div style={errorStyle}>{validation.errors.staff_name}</div>}
-          </label>
+          <StaffDropdown
+            value={form.staff_name}
+            onChange={(v) => update({ staff_name: v })}
+            onBlur={() => setTouchedField('staff_name')}
+            isAdmin={allowEditDateTime}
+          />
+          {showError('staff_name') && <div style={errorStyle}>{validation.errors.staff_name}</div>}
         </div>
 
         <label>
@@ -440,10 +434,11 @@ function CheckinFormContent() {
   );
 }
 
-export default function CheckinForm() {
+export default function CheckinForm({
+  allowAddCarMake = true,
+  allowEditDateTime = true,
+}: { allowAddCarMake?: boolean; allowEditDateTime?: boolean } = {}) {
   return (
-    <LanguageProvider>
-      <CheckinFormContent />
-    </LanguageProvider>
+    <CheckinFormContent allowAddCarMake={allowAddCarMake} allowEditDateTime={allowEditDateTime} />
   );
 }
