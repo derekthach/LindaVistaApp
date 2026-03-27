@@ -18,6 +18,7 @@ import {
 import type { RoomPaymentSplit } from '@/types';
 import { ROOM_OPTIONS, parseRoomOptionValue } from '@/lib/checkins/rooms';
 import StaffDropdown from '@/components/checkins/StaffDropdown';
+import CarMakeCombobox from '@/components/checkins/CarMakeCombobox';
 
 const ZONE = 'America/Puerto_Rico';
 const PLATE_MAX = 10;
@@ -66,9 +67,6 @@ function CheckinFormContent({
   const [touched, setTouched] = useState<Partial<Record<keyof FormState | 'payment_splits', boolean>>>({});
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [carMakes, setCarMakes] = useState<string[]>([]);
-  const [addMakeOpen, setAddMakeOpen] = useState(false);
-  const [newMakeInput, setNewMakeInput] = useState('');
-  const [addMakeError, setAddMakeError] = useState('');
 
   useEffect(() => {
     fetch('/api/next-receipt')
@@ -188,35 +186,27 @@ function CheckinFormContent({
     [update]
   );
 
-  const handleAddCarMake = useCallback(async () => {
-    const name = newMakeInput.trim();
-    if (!name) {
-      setAddMakeError('Enter a make name');
-      return;
-    }
-    setAddMakeError('');
+  const persistNewCarMake = useCallback(async (trimmedName: string) => {
     try {
       const res = await fetch('/api/car-makes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name: trimmedName }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setAddMakeError(data.error || 'Failed to add');
-        return;
+        return {
+          ok: false as const,
+          error: typeof data.error === 'string' ? data.error : 'Failed to add',
+        };
       }
       const nameUpper = data.nameUpper as string;
-      if (!carMakes.includes(nameUpper)) {
-        setCarMakes((prev) => [...prev, nameUpper].sort());
-      }
-      setForm((f) => ({ ...f, car_make: nameUpper }));
-      setNewMakeInput('');
-      setAddMakeOpen(false);
+      setCarMakes((prev) => (prev.includes(nameUpper) ? prev : [...prev, nameUpper]).sort());
+      return { ok: true as const, nameUpper };
     } catch {
-      setAddMakeError('Failed to add car make');
+      return { ok: false as const, error: 'Failed to add car make' };
     }
-  }, [newMakeInput, carMakes]);
+  }, []);
 
   const handleSubmit = useCallback(
     (e: React.FormEvent<HTMLFormElement>) => {
@@ -433,47 +423,15 @@ function CheckinFormContent({
 
           <label>
             <div>{t('car_make')}</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <select
-                name="car_make"
-                value={form.car_make}
-                onChange={(e) => update({ car_make: e.target.value })}
-                onBlur={() => setTouchedField('car_make')}
-                style={inputStyle}
-              >
-                <option value="">Select make</option>
-                {carMakes.map((make) => (
-                  <option key={make} value={make}>
-                    {make}
-                  </option>
-                ))}
-              </select>
-              {allowAddCarMake && (
-                addMakeOpen ? (
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <input
-                      type="text"
-                      value={newMakeInput}
-                      onChange={(e) => setNewMakeInput(e.target.value.toUpperCase().slice(0, 30))}
-                      placeholder="New make"
-                      style={{ ...inputStyle, flex: 1, minWidth: 100 }}
-                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddCarMake())}
-                    />
-                    <button type="button" onClick={handleAddCarMake} className="btn btn-primary" style={{ padding: '6px 12px' }}>
-                      Add
-                    </button>
-                    <button type="button" onClick={() => { setAddMakeOpen(false); setNewMakeInput(''); setAddMakeError(''); }} style={{ padding: '6px 12px' }}>
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <button type="button" onClick={() => setAddMakeOpen(true)} style={{ fontSize: 13, color: '#166534' }}>
-                    + Add new make
-                  </button>
-                )
-              )}
-              {addMakeError && <div style={errorStyle}>{addMakeError}</div>}
-            </div>
+            <CarMakeCombobox
+              name="car_make"
+              options={carMakes}
+              value={form.car_make}
+              onChange={(make) => update({ car_make: make })}
+              onBlur={() => setTouchedField('car_make')}
+              inputStyle={inputStyle}
+              persistNewCarMake={allowAddCarMake ? persistNewCarMake : undefined}
+            />
             {showError('car_make') && <div style={errorStyle}>{validation.errors.car_make}</div>}
           </label>
 
