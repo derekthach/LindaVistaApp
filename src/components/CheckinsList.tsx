@@ -97,29 +97,79 @@ function DetailsPanel({ checkin, t }: { checkin: CheckIn; t: (key: TranslationKe
 
   if (isRoom) {
     const pay = getRoomPaymentBreakdownDisplay(checkin);
+    const hasCheckoutData = checkin.is_checked_out === true;
+    const sectionHeaderStyle: React.CSSProperties = {
+      fontSize: 12,
+      color: '#6b7280',
+      marginBottom: 8,
+      fontWeight: 600,
+    };
+    const columnStyle: React.CSSProperties = {
+      flex: '1 1 260px',
+      minWidth: 0,
+      maxWidth: '100%',
+    };
     return (
       <div style={{ padding: '12px 16px', backgroundColor: '#f9fafb', borderRadius: 8, margin: 4 }}>
-        <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8, fontWeight: 600 }}>Room check-in details</div>
-        <dl style={{ margin: 0, ...gridStyle } as React.CSSProperties}>
-          <dt style={labelStyle}>License Plate</dt>
-          <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.car_plate)}</dd>
-          <dt style={labelStyle}>Payment Breakdown</dt>
-          <dd style={{ margin: 0, ...valueStyle }}>
-            <ul style={{ margin: 0, paddingLeft: 18 }}>
-              {pay.lines.map((line, i) => (
-                <li key={i}>{line}</li>
-              ))}
-            </ul>
-          </dd>
-          <dt style={labelStyle}>Total Collected</dt>
-          <dd style={{ margin: 0, ...valueStyle }}>${pay.total.toFixed(2)}</dd>
-          <dt style={labelStyle}>Car Make</dt>
-          <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.car_make)}</dd>
-          <dt style={labelStyle}>Car Color</dt>
-          <dd style={{ margin: 0, ...valueStyle }}>{checkin.car_color ? getCarColorLabel(checkin.car_color) : '—'}</dd>
-          <dt style={labelStyle}>Notes</dt>
-          <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.note)}</dd>
-        </dl>
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 24,
+            alignItems: 'flex-start',
+          }}
+        >
+          <div style={columnStyle}>
+            <div style={sectionHeaderStyle}>Check-In Info</div>
+            <dl style={{ margin: 0, ...gridStyle } as React.CSSProperties}>
+              <dt style={labelStyle}>Receipt #</dt>
+              <dd style={{ margin: 0, ...valueStyle }}>{formatReceiptNumber(checkin.receipt_number ?? '')}</dd>
+              <dt style={labelStyle}>Room</dt>
+              <dd style={{ margin: 0, ...valueStyle }}>{checkin.room_id}</dd>
+              <dt style={labelStyle}>Date</dt>
+              <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.date)}</dd>
+              <dt style={labelStyle}>Time</dt>
+              <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.time)}</dd>
+              <dt style={labelStyle}>Staff (check-in)</dt>
+              <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.staff_name)}</dd>
+              <dt style={labelStyle}>License Plate</dt>
+              <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.car_plate)}</dd>
+              <dt style={labelStyle}>Payment Breakdown</dt>
+              <dd style={{ margin: 0, ...valueStyle }}>
+                <ul style={{ margin: 0, paddingLeft: 18 }}>
+                  {pay.lines.map((line, i) => (
+                    <li key={i}>{line}</li>
+                  ))}
+                </ul>
+              </dd>
+              <dt style={labelStyle}>Total Collected</dt>
+              <dd style={{ margin: 0, ...valueStyle }}>${pay.total.toFixed(2)}</dd>
+              <dt style={labelStyle}>Car Make</dt>
+              <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.car_make)}</dd>
+              <dt style={labelStyle}>Car Color</dt>
+              <dd style={{ margin: 0, ...valueStyle }}>{checkin.car_color ? getCarColorLabel(checkin.car_color) : '—'}</dd>
+              <dt style={labelStyle}>Notes</dt>
+              <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.note)}</dd>
+            </dl>
+          </div>
+          <div style={columnStyle}>
+            <div style={sectionHeaderStyle}>Checkout Info</div>
+            {hasCheckoutData ? (
+              <dl style={{ margin: 0, ...gridStyle } as React.CSSProperties}>
+                <dt style={labelStyle}>Checkout Time</dt>
+                <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.checked_out_at)}</dd>
+                <dt style={labelStyle}>Cleaning Time</dt>
+                <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.cleaned_at)}</dd>
+                <dt style={labelStyle}>Checked out by</dt>
+                <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.checked_out_by)}</dd>
+                <dt style={labelStyle}>Cleaned by</dt>
+                <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.cleaned_by)}</dd>
+              </dl>
+            ) : (
+              <p style={{ margin: 0, fontSize: 13, color: '#6b7280', fontWeight: 500 }}>Not checked out yet</p>
+            )}
+          </div>
+        </div>
       </div>
     );
   }

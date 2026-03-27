@@ -16,7 +16,8 @@ import {
   validatePaymentSplits,
 } from '@/lib/checkins/roomPaymentSplits';
 import type { RoomPaymentSplit } from '@/types';
-import { ROOM_OPTIONS, parseRoomOptionValue } from '@/lib/checkins/rooms';
+import { ROOM_OPTIONS, parseRoomOptionValue, type RoomId } from '@/lib/checkins/rooms';
+import { getAvailableRoomOptions } from '@/lib/checkins/roomOccupancy';
 import StaffDropdown from '@/components/checkins/StaffDropdown';
 import CarMakeCombobox from '@/components/checkins/CarMakeCombobox';
 
@@ -28,7 +29,8 @@ const NOTE_MAX = 500;
 type PaymentRow = { method: string; amount: string };
 
 type FormState = {
-  room_id: number | string;
+  /** Empty string when no room is selectable (all occupied). */
+  room_id: number | string | '';
   receipt_number: string;
   date: string;
   time: string;
@@ -56,9 +58,12 @@ const defaultPaymentRow = (): PaymentRow => ({ method: 'cash', amount: '' });
 function CheckinFormContent({
   allowAddCarMake = true,
   allowEditDateTime = true,
+  occupiedRoomIds = [],
 }: {
   allowAddCarMake?: boolean;
   allowEditDateTime?: boolean;
+  /** Room ids (string form) currently occupied — not shown in room dropdown. */
+  occupiedRoomIds?: string[];
 }) {
   const router = useRouter();
   const { t } = useLanguage();
@@ -138,6 +143,23 @@ function CheckinFormContent({
   }, [paymentRows]);
 
   const liveTotalCollected = splitPreview ? calculatePaymentSplitTotal(splitPreview) : null;
+
+  const occupiedSet = useMemo(() => new Set(occupiedRoomIds.map(String)), [occupiedRoomIds]);
+  const availableRooms = useMemo(
+    () => getAvailableRoomOptions(ROOM_OPTIONS, occupiedSet),
+    [occupiedSet]
+  );
+
+  useEffect(() => {
+    setForm((f) => {
+      if (availableRooms.length === 0) {
+        return { ...f, room_id: '' };
+      }
+      const cur = String(f.room_id);
+      if (availableRooms.some((r) => String(r) === cur)) return f;
+      return { ...f, room_id: availableRooms[0] as RoomId };
+    });
+  }, [availableRooms]);
 
   const updatePaymentRow = useCallback((index: number, patch: Partial<PaymentRow>) => {
     setPaymentRows((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -253,16 +275,24 @@ function CheckinFormContent({
             <div>{t('room_number')}</div>
             <select
               name="room_id"
-              value={String(form.room_id)}
-              onChange={(e) => update({ room_id: parseRoomOptionValue(e.target.value) })}
+              value={availableRooms.length === 0 ? '' : String(form.room_id)}
+              onChange={(e) => {
+                const v = e.target.value;
+                update({ room_id: v === '' ? '' : parseRoomOptionValue(v) });
+              }}
               onBlur={() => setTouchedField('room_id')}
               style={inputStyle}
+              disabled={availableRooms.length === 0}
             >
-              {ROOM_OPTIONS.map((room) => (
-                <option key={String(room)} value={String(room)}>
-                  Room {room}
-                </option>
-              ))}
+              {availableRooms.length === 0 ? (
+                <option value="">All rooms occupied — complete a checkout first</option>
+              ) : (
+                availableRooms.map((room) => (
+                  <option key={String(room)} value={String(room)}>
+                    Room {room}
+                  </option>
+                ))
+              )}
             </select>
             {showError('room_id') && <div style={errorStyle}>{validation.errors.room_id}</div>}
           </label>
@@ -477,15 +507,15 @@ function CheckinFormContent({
 
         <button
           type="submit"
-          disabled={!isValid}
+          disabled={!isValid || availableRooms.length === 0}
           style={{
             padding: '10px 12px',
             borderRadius: 8,
             border: 'none',
-            background: isValid ? '#166534' : '#9ca3af',
+            background: isValid && availableRooms.length > 0 ? '#166534' : '#9ca3af',
             color: '#fff',
             fontWeight: 600,
-            cursor: isValid ? 'pointer' : 'not-allowed',
+            cursor: isValid && availableRooms.length > 0 ? 'pointer' : 'not-allowed',
           }}
         >
           {t('submit')}
@@ -498,8 +528,13 @@ function CheckinFormContent({
 export default function CheckinForm({
   allowAddCarMake = true,
   allowEditDateTime = true,
-}: { allowAddCarMake?: boolean; allowEditDateTime?: boolean } = {}) {
+  occupiedRoomIds = [],
+}: { allowAddCarMake?: boolean; allowEditDateTime?: boolean; occupiedRoomIds?: string[] } = {}) {
   return (
-    <CheckinFormContent allowAddCarMake={allowAddCarMake} allowEditDateTime={allowEditDateTime} />
+    <CheckinFormContent
+      allowAddCarMake={allowAddCarMake}
+      allowEditDateTime={allowEditDateTime}
+      occupiedRoomIds={occupiedRoomIds}
+    />
   );
 }

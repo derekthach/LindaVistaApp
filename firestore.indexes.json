@@ -1,0 +1,13 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "checkins",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "checkInType", "order": "ASCENDING" },
+        { "fieldPath": "isCheckedOut", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

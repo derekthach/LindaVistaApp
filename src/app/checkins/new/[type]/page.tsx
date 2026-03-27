@@ -4,6 +4,8 @@ import AppLayout from '@/components/AppLayout';
 import { isCheckInType } from '@/lib/checkins/types';
 import RoomCheckinForm from '@/components/checkins/RoomCheckinForm';
 import SimpleCheckinForm from '@/components/checkins/SimpleCheckinForm';
+import { listActiveOccupiedRoomCheckins } from '@/lib/server/checkinsRepo';
+import { getOccupiedRoomIdsFromCheckins } from '@/lib/checkins/roomOccupancy';
 
 interface PageProps {
   params: Promise<{ type: string }>;
@@ -15,6 +17,12 @@ export default async function NewCheckinByTypePage({ params }: PageProps) {
 
   if (!isCheckInType(type)) {
     notFound();
+  }
+
+  let occupiedRoomIds: string[] = [];
+  if (type === 'room') {
+    const active = await listActiveOccupiedRoomCheckins();
+    occupiedRoomIds = Array.from(getOccupiedRoomIdsFromCheckins(active));
   }
 
   return (
@@ -32,7 +40,9 @@ export default async function NewCheckinByTypePage({ params }: PageProps) {
             ? 'Register a new guest check-in'
             : 'Register date, time, and staff'}
         </p>
-        {type === 'room' && <RoomCheckinForm isAdmin={session.role === 'admin'} />}
+        {type === 'room' && (
+          <RoomCheckinForm isAdmin={session.role === 'admin'} occupiedRoomIds={occupiedRoomIds} />
+        )}
         {(type === 'food' || type === 'beer') && (
           <SimpleCheckinForm type={type} isAdmin={session.role === 'admin'} />
         )}

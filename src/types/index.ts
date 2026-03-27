@@ -60,6 +60,16 @@ export interface CheckIn {
   lineItems?: LineItem[];
   /** Food/beer only. Aggregated totals by itemId. */
   summarizedItems?: SummarizedItem[];
+  /** Room: false = active stay awaiting checkout; true = checked out; omitted on legacy docs. */
+  is_checked_out?: boolean;
+  /** Room: ISO timestamp string (America/Puerto_Rico) when guest checkout recorded. */
+  checked_out_at?: string;
+  /** Room: ISO timestamp when room marked cleaned/ready (same as checkout for now). */
+  cleaned_at?: string;
+  /** Room: staff who performed checkout action. */
+  checked_out_by?: string;
+  /** Room: staff who cleaned / verified room ready. */
+  cleaned_by?: string;
 }
 
 export interface SummaryMetrics {

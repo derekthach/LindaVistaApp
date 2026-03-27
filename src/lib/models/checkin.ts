@@ -28,6 +28,11 @@ export interface CheckinDoc {
   summarizedItems?: SummarizedItem[];
   paymentSplits?: RoomPaymentSplit[];
   totalCollected?: number;
+  isCheckedOut?: boolean;
+  checkedOutAt?: Timestamp;
+  cleanedAt?: Timestamp;
+  checkedOutBy?: string;
+  cleanedBy?: string;
 }
 
 /** Compute total amount collected for food/beer from summarizedItems or lineItems. */
@@ -83,6 +88,44 @@ export function normalizeCheckin(id: string, data: Record<string, unknown>): Che
   const noteRaw = (data.note ?? data.notes) as string | undefined;
   const note = typeof noteRaw === 'string' && noteRaw.trim() ? noteRaw.trim() : undefined;
 
+  const formatCheckoutTs = (raw: unknown): string | undefined => {
+    if (raw == null) return undefined;
+    try {
+      const d =
+        typeof (raw as { toDate?: () => Date }).toDate === 'function'
+          ? (raw as { toDate: () => Date }).toDate()
+          : null;
+      if (!d) return undefined;
+      const t = DateTime.fromJSDate(d, { zone: 'America/Puerto_Rico' });
+      return t.toFormat('MMM d, yyyy h:mm a');
+    } catch {
+      return undefined;
+    }
+  };
+
+  let is_checked_out: boolean | undefined;
+  let checked_out_at: string | undefined;
+  let cleaned_at: string | undefined;
+  let checked_out_by: string | undefined;
+  let cleaned_by: string | undefined;
+  if (isRoom) {
+    if (data.isCheckedOut === true) {
+      is_checked_out = true;
+      checked_out_at = formatCheckoutTs(data.checkedOutAt);
+      cleaned_at = formatCheckoutTs(data.cleanedAt ?? data.checkedOutAt);
+      checked_out_by =
+        typeof data.checkedOutBy === 'string' && data.checkedOutBy.trim()
+          ? data.checkedOutBy.trim()
+          : undefined;
+      cleaned_by =
+        typeof data.cleanedBy === 'string' && data.cleanedBy.trim()
+          ? data.cleanedBy.trim()
+          : undefined;
+    } else if (data.isCheckedOut === false) {
+      is_checked_out = false;
+    }
+  }
+
   return {
     id,
     checkin_id: undefined,
@@ -113,6 +156,19 @@ export function normalizeCheckin(id: string, data: Record<string, unknown>): Che
             totalCollectedRaw != null && !Number.isNaN(totalCollectedRaw)
               ? roundMoney(totalCollectedRaw)
               : cost,
+        }
+      : {}),
+    ...(isRoom && is_checked_out !== undefined
+      ? {
+          is_checked_out,
+          ...(is_checked_out === true
+            ? {
+                checked_out_at,
+                cleaned_at,
+                checked_out_by,
+                cleaned_by,
+              }
+            : {}),
         }
       : {}),
   };

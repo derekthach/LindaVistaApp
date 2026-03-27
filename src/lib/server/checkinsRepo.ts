@@ -22,6 +22,7 @@ import {
   getRoomCollectedTotalFromDoc,
   roundMoney,
 } from '@/lib/checkins/roomPaymentSplits';
+import { sortRoomsForDisplay } from '@/lib/checkins/roomOccupancy';
 
 const CHECKINS_COLLECTION = 'checkins';
 const COUNTERS_COLLECTION = 'counters';
@@ -82,6 +83,8 @@ export async function createCheckin(data: CreateCheckinInput): Promise<string> {
     } else {
       doc.paymentMethod = data.payment_method;
     }
+
+    doc.isCheckedOut = false;
 
     const newRef = checkinsRef.doc();
     tx.set(newRef, doc);
@@ -258,6 +261,85 @@ export async function deleteCheckinById(id: string): Promise<void> {
   const db = getAdminDb();
   const ref = db.collection(CHECKINS_COLLECTION).doc(id);
   await ref.delete();
+}
+
+/**
+ * Room stays awaiting checkout: checkInType room and isCheckedOut === false. Sorted by room number.
+ * Legacy room docs without isCheckedOut are excluded (not considered active stays).
+ */
+export async function listActiveOccupiedRoomCheckins(): Promise<CheckIn[]> {
+  try {
+    const db = getAdminDb();
+    const snapshot = await db
+      .collection(CHECKINS_COLLECTION)
+      .where('checkInType', '==', 'room')
+      .where('isCheckedOut', '==', false)
+      .get();
+    const list = snapshot.docs.map((doc) => normalizeCheckin(doc.id, doc.data()));
+    return sortRoomsForDisplay(list);
+  } catch (err) {
+    if (isFirestoreUnavailableError(err)) {
+      if (isProduction()) throw err;
+      console.warn('Firestore unavailable (listActiveOccupiedRoomCheckins):', (err as Error).message);
+      return [];
+    }
+    throw err;
+  }
+}
+
+export interface CheckoutRoomInput {
+  cleanedBy: string;
+  /** Session user performing the action (stored on checkedOutBy / audit). */
+  performedBy: string;
+}
+
+export async function checkoutRoomCheckin(id: string, payload: CheckoutRoomInput): Promise<void> {
+  const db = getAdminDb();
+  const ref = db.collection(CHECKINS_COLLECTION).doc(id);
+  const editsRef = ref.collection(EDITS_SUBCOLLECTION);
+  const snapshot = await ref.get();
+  if (!snapshot.exists) {
+    throw new Error('Check-in not found');
+  }
+  const data = snapshot.data()!;
+  if ((data.checkInType as string | undefined) !== 'room') {
+    throw new Error('Check-in is not a room record');
+  }
+  if (data.isCheckedOut === true) {
+    throw new Error('Room already checked out');
+  }
+
+  const now = Timestamp.now();
+  const before = {
+    roomCheckout: 'Active stay' as const,
+  };
+  const after = {
+    roomCheckout: `Checked out and cleaned by ${payload.cleanedBy}`,
+    checkedOutAt: now,
+    cleanedAt: now,
+  };
+
+  await ref.update({
+    isCheckedOut: true,
+    checkedOutAt: now,
+    cleanedAt: now,
+    checkedOutBy: payload.performedBy,
+    cleanedBy: payload.cleanedBy,
+    updatedAt: now,
+    updatedBy: payload.performedBy,
+  });
+
+  try {
+    await editsRef.add({
+      before,
+      after,
+      editedAt: now,
+      editedBy: payload.performedBy,
+      changedFields: ['roomCheckout'],
+    });
+  } catch (auditErr) {
+    console.error('checkinsRepo.checkoutRoomCheckin: audit write failed', auditErr);
+  }
 }
 
 const EDITS_SUBCOLLECTION = 'edits';

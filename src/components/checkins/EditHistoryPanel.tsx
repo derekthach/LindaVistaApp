@@ -26,6 +26,7 @@ const FIELD_LABELS: Record<string, string> = {
   item: 'Item',
   quantity: 'Quantity',
   amountCollected: 'Amount Collected',
+  roomCheckout: 'Room checkout / cleaning',
 };
 
 function formatDiffValue(field: string, value: unknown): string {
@@ -42,6 +43,8 @@ function formatDiffValue(field: string, value: unknown): string {
     case 'quantity':
     case 'roomId':
       return String(Number(value));
+    case 'roomCheckout':
+      return String(value);
     default:
       return String(value);
   }
