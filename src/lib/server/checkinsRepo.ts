@@ -8,12 +8,20 @@ import type {
   CheckIn,
   CheckInType,
   LineItem,
+  RoomPaymentSplit,
   SummarizedItem,
   SummaryMetrics,
   DashboardData,
   RoomUsageData,
   MonthlyComparisonData,
 } from '@/types';
+import {
+  calculatePaymentSplitTotal,
+  formatPaymentBreakdownComma,
+  formatPaymentBreakdownForAuditDoc,
+  getRoomCollectedTotalFromDoc,
+  roundMoney,
+} from '@/lib/checkins/roomPaymentSplits';
 
 const CHECKINS_COLLECTION = 'checkins';
 const COUNTERS_COLLECTION = 'counters';
@@ -47,20 +55,33 @@ export async function createCheckin(data: CreateCheckinInput): Promise<string> {
     );
     const checkInAt = dt.isValid ? Timestamp.fromDate(dt.toJSDate()) : Timestamp.now();
 
-    const doc = {
+    const splits = data.payment_splits;
+    const hasSplits = Array.isArray(splits) && splits.length > 0;
+    const totalCollected = hasSplits
+      ? roundMoney(calculatePaymentSplitTotal(splits))
+      : roundMoney(Number(data.cost) || 0);
+
+    const doc: Record<string, unknown> = {
       receiptNumber,
       checkInAt,
       createdAt: Timestamp.now(),
       checkInType: 'room' as const,
       roomId: data.room_id,
-      cost: data.cost,
-      paymentMethod: data.payment_method,
+      cost: totalCollected,
       staffName: data.staff_name,
       carPlate: data.car_plate,
       carMake: data.car_make,
       carColor: data.car_color,
       note: data.note ?? '',
     };
+
+    if (hasSplits) {
+      doc.paymentSplits = splits as RoomPaymentSplit[];
+      doc.totalCollected = totalCollected;
+      doc.paymentMethod = splits![0].method;
+    } else {
+      doc.paymentMethod = data.payment_method;
+    }
 
     const newRef = checkinsRef.doc();
     tx.set(newRef, doc);
@@ -244,8 +265,8 @@ const EDITS_SUBCOLLECTION = 'edits';
 export interface UpdateCheckinInput {
   receipt_number: string;
   staff_name: string;
-  cost: number;
   room_id?: number | string;
+  payment_splits: RoomPaymentSplit[];
 }
 
 /**
@@ -267,26 +288,40 @@ export async function updateCheckin(
   }
   const data = snapshot.data()!;
   const checkInType = (data.checkInType as string) ?? 'room';
-  const isRoom = checkInType === 'room';
+  if (checkInType !== 'room') {
+    throw new Error('Check-in is not a room record');
+  }
 
   const receiptNumber = formatReceiptNumber(payload.receipt_number);
+  const splits = payload.payment_splits;
+  const totalAfter = roundMoney(calculatePaymentSplitTotal(splits));
+  const breakdownAfter = formatPaymentBreakdownComma(splits);
+
   const before: Record<string, unknown> = {
     receiptNumber: data.receiptNumber ?? '',
     staffName: data.staffName ?? '',
-    cost: data.cost != null ? Number(data.cost) : 0,
-    ...(isRoom && { roomId: data.roomId != null && data.roomId !== '' ? data.roomId : 0 }),
+    roomId: data.roomId != null && data.roomId !== '' ? data.roomId : 0,
+    paymentBreakdown: formatPaymentBreakdownForAuditDoc(data),
+    totalCollected: getRoomCollectedTotalFromDoc(data),
   };
   const after: Record<string, unknown> = {
     receiptNumber,
     staffName: payload.staff_name,
-    cost: payload.cost,
-    ...(isRoom && { roomId: payload.room_id ?? 0 }),
+    roomId: payload.room_id ?? 0,
+    paymentBreakdown: breakdownAfter,
+    totalCollected: totalAfter,
   };
+
   const changedFields: string[] = [];
   if (String(before.receiptNumber) !== String(after.receiptNumber)) changedFields.push('receiptNumber');
   if (String(before.staffName) !== String(after.staffName)) changedFields.push('staffName');
-  if (Number(before.cost) !== Number(after.cost)) changedFields.push('cost');
-  if (isRoom && String(before.roomId) !== String(after.roomId)) changedFields.push('roomId');
+  if (String(before.roomId) !== String(after.roomId)) changedFields.push('roomId');
+  if (String(before.paymentBreakdown) !== String(after.paymentBreakdown)) {
+    changedFields.push('paymentBreakdown');
+  }
+  if (Number(before.totalCollected) !== Number(after.totalCollected)) {
+    changedFields.push('totalCollected');
+  }
 
   if (changedFields.length === 0) {
     return;
@@ -295,13 +330,14 @@ export async function updateCheckin(
   const updateData: Record<string, unknown> = {
     receiptNumber,
     staffName: payload.staff_name,
-    cost: payload.cost,
+    roomId: payload.room_id ?? 0,
+    cost: totalAfter,
+    totalCollected: totalAfter,
+    paymentSplits: splits,
+    paymentMethod: splits[0]?.method,
     updatedAt: Timestamp.now(),
     updatedBy: editedBy,
   };
-  if (isRoom) {
-    updateData.roomId = payload.room_id ?? 0;
-  }
 
   await ref.update(updateData);
   try {

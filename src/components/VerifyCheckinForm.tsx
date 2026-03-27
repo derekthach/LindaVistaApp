@@ -5,7 +5,11 @@ import { useRouter } from 'next/navigation';
 import { submitCheckinAction } from '@/app/actions/checkin';
 import { getCarColorLabel } from '@/lib/checkins/colors';
 import { useLanguage } from '@/components/LanguageToggle';
-import { getPaymentMethodTranslationKey } from '@/lib/checkins/paymentMethods';
+import {
+  calculatePaymentSplitTotal,
+  formatPaymentBreakdownLines,
+  validatePaymentSplits,
+} from '@/lib/checkins/roomPaymentSplits';
 
 export default function VerifyCheckinForm() {
   const router = useRouter();
@@ -19,7 +23,12 @@ export default function VerifyCheckinForm() {
       router.push('/checkins/new');
       return;
     }
-    setFormData(JSON.parse(data));
+    const parsed = JSON.parse(data) as Record<string, string>;
+    if (!parsed.payment_splits) {
+      router.push('/checkins/new');
+      return;
+    }
+    setFormData(parsed);
   }, [router]);
 
   const handleConfirm = async () => {
@@ -41,13 +50,21 @@ export default function VerifyCheckinForm() {
     return <div>Loading...</div>;
   }
 
+  const splitResult = validatePaymentSplits(formData.payment_splits);
+  const paymentLines =
+    splitResult.valid && splitResult.splits
+      ? formatPaymentBreakdownLines(splitResult.splits)
+      : [];
+  const totalCollected =
+    splitResult.valid && splitResult.splits
+      ? calculatePaymentSplitTotal(splitResult.splits)
+      : null;
+
   const fields = [
     { label: 'Room Number', value: `Room ${formData.room_id}` },
     { label: 'Receipt Number', value: formData.receipt_number },
     { label: 'Date', value: formData.date },
     { label: 'Time', value: formData.time },
-    { label: 'Cost', value: `$${formData.cost}` },
-    { label: 'Payment Method', value: t(getPaymentMethodTranslationKey(formData.payment_method)) },
     { label: 'License Plate', value: formData.car_plate },
     { label: 'Car Make', value: formData.car_make },
     { label: 'Car Color', value: getCarColorLabel(formData.car_color) || formData.car_color },
@@ -69,6 +86,28 @@ export default function VerifyCheckinForm() {
             <span>{field.value}</span>
           </div>
         ))}
+        <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 12, marginTop: 4 }}>
+          <strong>{t('payment_breakdown')}</strong>
+          <ul style={{ margin: '8px 0 0', paddingLeft: 20 }}>
+            {paymentLines.map((line, i) => (
+              <li key={i} style={{ marginBottom: 4 }}>
+                {line}
+              </li>
+            ))}
+          </ul>
+          <div
+            style={{
+              marginTop: 12,
+              display: 'flex',
+              justifyContent: 'space-between',
+              fontWeight: 700,
+              fontSize: 16,
+            }}
+          >
+            <span>{t('total_collected')}</span>
+            <span>{totalCollected != null ? `$${totalCollected.toFixed(2)}` : '—'}</span>
+          </div>
+        </div>
       </div>
       <div style={{ display: 'flex', gap: 10 }}>
         <button

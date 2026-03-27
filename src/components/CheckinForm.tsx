@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { DateTime } from 'luxon';
 import { useRouter } from 'next/navigation';
 import { useLanguage } from './LanguageToggle';
@@ -10,8 +10,12 @@ import {
   normalizeReceipt,
 } from '@/lib/checkins/validation/room';
 import { formatReceiptNumber } from '@/lib/checkins/receipt';
-import { getStaffOptionsForRole } from '@/lib/checkins/constants';
 import { PAYMENT_METHODS } from '@/lib/checkins/paymentMethods';
+import {
+  calculatePaymentSplitTotal,
+  validatePaymentSplits,
+} from '@/lib/checkins/roomPaymentSplits';
+import type { RoomPaymentSplit } from '@/types';
 import { ROOM_OPTIONS, parseRoomOptionValue } from '@/lib/checkins/rooms';
 import StaffDropdown from '@/components/checkins/StaffDropdown';
 
@@ -20,13 +24,13 @@ const PLATE_MAX = 10;
 const LICENSE_PLATE_REGEX = /^[A-Za-z0-9\- ]*$/;
 const NOTE_MAX = 500;
 
+type PaymentRow = { method: string; amount: string };
+
 type FormState = {
   room_id: number | string;
   receipt_number: string;
   date: string;
   time: string;
-  cost: string;
-  payment_method: string;
   car_plate: string;
   car_make: string;
   car_color: string;
@@ -39,14 +43,14 @@ const defaultState: FormState = {
   receipt_number: '',
   date: '',
   time: '',
-  cost: '',
-  payment_method: 'cash',
   car_plate: '',
   car_make: '',
   car_color: CAR_COLORS[0]?.key ?? 'black',
   staff_name: '',
   note: '',
 };
+
+const defaultPaymentRow = (): PaymentRow => ({ method: 'cash', amount: '' });
 
 function CheckinFormContent({
   allowAddCarMake = true,
@@ -58,8 +62,8 @@ function CheckinFormContent({
   const router = useRouter();
   const { t } = useLanguage();
   const [form, setForm] = useState<FormState>(defaultState);
-  const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
-  const [touched, setTouched] = useState<Partial<Record<keyof FormState, boolean>>>({});
+  const [paymentRows, setPaymentRows] = useState<PaymentRow[]>([defaultPaymentRow()]);
+  const [touched, setTouched] = useState<Partial<Record<keyof FormState | 'payment_splits', boolean>>>({});
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [carMakes, setCarMakes] = useState<string[]>([]);
   const [addMakeOpen, setAddMakeOpen] = useState(false);
@@ -87,27 +91,31 @@ function CheckinFormContent({
   }, []);
 
   const rawForValidation = useCallback((): Record<string, unknown> => {
-    const costNum = form.cost.trim() === '' ? undefined : Number(form.cost);
+    const splitsPayload: { method: string; amount: number | string }[] = paymentRows.map((r) => ({
+      method: r.method,
+      amount: r.amount.trim() === '' ? '' : Number(r.amount),
+    }));
     return {
       room_id: form.room_id,
       receipt_number: form.receipt_number.trim(),
       date: form.date.trim(),
       time: form.time.trim(),
-      cost: costNum,
-      payment_method: form.payment_method,
+      payment_splits: JSON.stringify(splitsPayload),
       car_plate: form.car_plate.trim(),
       car_make: form.car_make.trim(),
       car_color: form.car_color,
       staff_name: form.staff_name.trim(),
       note: form.note.trim() || undefined,
     };
-  }, [form]);
+  }, [form, paymentRows]);
 
   const validation = validateRoomCheckin(rawForValidation());
   const isValid = validation.valid;
 
   const showError = useCallback(
-    (field: keyof FormState) => (touched[field] || submitAttempted) && validation.errors[field],
+    (field: keyof FormState | 'payment_splits') =>
+      (touched[field] || submitAttempted) &&
+      Boolean(validation.errors[field as keyof typeof validation.errors]),
     [touched, submitAttempted, validation.errors]
   );
 
@@ -115,8 +123,37 @@ function CheckinFormContent({
     setForm((f) => ({ ...f, ...updates }));
   }, []);
 
-  const setTouchedField = useCallback((field: keyof FormState) => {
+  const setTouchedField = useCallback((field: keyof FormState | 'payment_splits') => {
     setTouched((t) => ({ ...t, [field]: true }));
+  }, []);
+
+  const splitPreview = useMemo((): RoomPaymentSplit[] | null => {
+    const v = validatePaymentSplits(
+      JSON.stringify(
+        paymentRows.map((r) => ({
+          method: r.method,
+          amount: r.amount.trim() === '' ? '' : Number(r.amount),
+        }))
+      )
+    );
+    return v.valid && v.splits ? v.splits : null;
+  }, [paymentRows]);
+
+  const liveTotalCollected = splitPreview ? calculatePaymentSplitTotal(splitPreview) : null;
+
+  const updatePaymentRow = useCallback((index: number, patch: Partial<PaymentRow>) => {
+    setPaymentRows((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  }, []);
+
+  const addPaymentRow = useCallback(() => {
+    const used = new Set(paymentRows.map((r) => r.method));
+    const next = PAYMENT_METHODS.find((m) => !used.has(m));
+    if (!next) return;
+    setPaymentRows((rows) => [...rows, { method: next, amount: '' }]);
+  }, [paymentRows]);
+
+  const removePaymentRow = useCallback((index: number) => {
+    setPaymentRows((rows) => (rows.length <= 1 ? rows : rows.filter((_, i) => i !== index)));
   }, []);
 
   const handleReceiptBlur = useCallback(() => {
@@ -187,13 +224,16 @@ function CheckinFormContent({
       setSubmitAttempted(true);
       if (!validation.valid) return;
 
+      const splitsPayload = paymentRows.map((r) => ({
+        method: r.method,
+        amount: r.amount.trim() === '' ? '' : Number(r.amount),
+      }));
       const data: Record<string, string> = {
         room_id: String(form.room_id),
         receipt_number: normalizeReceipt(form.receipt_number) ?? form.receipt_number,
         date: form.date.trim(),
         time: form.time.trim(),
-        cost: form.cost.trim(),
-        payment_method: form.payment_method,
+        payment_splits: JSON.stringify(splitsPayload),
         car_plate: form.car_plate.trim().toUpperCase(),
         car_make: form.car_make.trim().toUpperCase(),
         car_color: form.car_color,
@@ -203,7 +243,7 @@ function CheckinFormContent({
       sessionStorage.setItem('checkinData', JSON.stringify(data));
       router.push('/checkin/verify');
     },
-    [form, validation.valid, router]
+    [form, paymentRows, validation.valid, router]
   );
 
   const inputStyle = {
@@ -284,38 +324,98 @@ function CheckinFormContent({
             {showError('time') && <div style={errorStyle}>{validation.errors.time}</div>}
           </label>
 
-          <label>
-            <div>{t('cost')}</div>
-            <input
-              name="cost"
-              type="number"
-              step="0.01"
-              min={0}
-              max={1000}
-              value={form.cost}
-              onChange={(e) => update({ cost: e.target.value })}
-              onBlur={() => setTouchedField('cost')}
-              style={inputStyle}
-            />
-            {showError('cost') && <div style={errorStyle}>{validation.errors.cost}</div>}
-          </label>
-
-          <label>
-            <div>{t('payment_method')}</div>
-            <select
-              name="payment_method"
-              value={form.payment_method}
-              onChange={(e) => update({ payment_method: e.target.value })}
-              onBlur={() => setTouchedField('payment_method')}
-              style={inputStyle}
+          <div style={{ gridColumn: '1 / -1' }}>
+            <div style={{ fontWeight: 600, marginBottom: 8 }}>{t('payment_breakdown')}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {paymentRows.map((row, idx) => {
+                const usedElsewhere = new Set(
+                  paymentRows.filter((_, i) => i !== idx).map((r) => r.method)
+                );
+                return (
+                  <div
+                    key={idx}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'minmax(140px, 1fr) minmax(100px, 1fr) auto',
+                      gap: 8,
+                      alignItems: 'end',
+                    }}
+                  >
+                    <label style={{ margin: 0 }}>
+                      <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('payment_method')}</div>
+                      <select
+                        value={row.method}
+                        onChange={(e) => updatePaymentRow(idx, { method: e.target.value })}
+                        onBlur={() => setTouchedField('payment_splits')}
+                        style={inputStyle}
+                      >
+                        {PAYMENT_METHODS.map((method) => (
+                          <option key={method} value={method} disabled={usedElsewhere.has(method)}>
+                            {t(method)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label style={{ margin: 0 }}>
+                      <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('amount')}</div>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min={0}
+                        max={1000}
+                        value={row.amount}
+                        onChange={(e) => updatePaymentRow(idx, { amount: e.target.value })}
+                        onBlur={() => setTouchedField('payment_splits')}
+                        style={inputStyle}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => removePaymentRow(idx)}
+                      disabled={paymentRows.length <= 1}
+                      style={{
+                        padding: '8px 10px',
+                        borderRadius: 8,
+                        border: '1px solid #e5e7eb',
+                        background: paymentRows.length <= 1 ? '#f3f4f6' : '#fff',
+                        cursor: paymentRows.length <= 1 ? 'not-allowed' : 'pointer',
+                        fontSize: 13,
+                      }}
+                    >
+                      {t('remove')}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            <button
+              type="button"
+              onClick={addPaymentRow}
+              disabled={paymentRows.length >= PAYMENT_METHODS.length}
+              style={{
+                marginTop: 10,
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: '1px solid #166534',
+                background: '#fff',
+                color: '#166534',
+                fontWeight: 600,
+                cursor: paymentRows.length >= PAYMENT_METHODS.length ? 'not-allowed' : 'pointer',
+                fontSize: 13,
+              }}
             >
-              {PAYMENT_METHODS.map((method) => (
-                <option key={method} value={method}>
-                  {t(method)}
-                </option>
-              ))}
-            </select>
-          </label>
+              {t('add_payment_method')}
+            </button>
+            <div style={{ marginTop: 12, fontSize: 15, fontWeight: 600 }}>
+              {t('total_collected')}:{' '}
+              {liveTotalCollected != null
+                ? `$${liveTotalCollected.toFixed(2)}`
+                : '—'}
+            </div>
+            {showError('payment_splits') && (
+              <div style={errorStyle}>{validation.errors.payment_splits}</div>
+            )}
+          </div>
 
           <label>
             <div>{t('car_plate')}</div>

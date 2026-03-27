@@ -14,8 +14,12 @@ import EditCheckinModal, { type EditCheckinDraft } from '@/components/checkins/E
 import ConfirmDiffModal, { type DiffLine } from '@/components/checkins/ConfirmDiffModal';
 import EditHistoryPanel from '@/components/checkins/EditHistoryPanel';
 import { formatReceiptNumber } from '@/lib/checkins/receipt';
-import { getPaymentMethodTranslationKey } from '@/lib/checkins/paymentMethods';
 import { useLanguage, type TranslationKey } from '@/components/LanguageToggle';
+import {
+  calculatePaymentSplitTotal,
+  formatPaymentBreakdownComma,
+  getRoomPaymentBreakdownDisplay,
+} from '@/lib/checkins/roomPaymentSplits';
 
 function TrashIcon() {
   return (
@@ -92,17 +96,23 @@ function DetailsPanel({ checkin, t }: { checkin: CheckIn; t: (key: TranslationKe
   const valueStyle = { fontWeight: 500 };
 
   if (isRoom) {
-    const paymentLabel = checkin.payment_method
-      ? t(getPaymentMethodTranslationKey(checkin.payment_method))
-      : '—';
+    const pay = getRoomPaymentBreakdownDisplay(checkin);
     return (
       <div style={{ padding: '12px 16px', backgroundColor: '#f9fafb', borderRadius: 8, margin: 4 }}>
         <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8, fontWeight: 600 }}>Room check-in details</div>
         <dl style={{ margin: 0, ...gridStyle } as React.CSSProperties}>
           <dt style={labelStyle}>License Plate</dt>
           <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.car_plate)}</dd>
-          <dt style={labelStyle}>Payment Method</dt>
-          <dd style={{ margin: 0, ...valueStyle }}>{paymentLabel}</dd>
+          <dt style={labelStyle}>Payment Breakdown</dt>
+          <dd style={{ margin: 0, ...valueStyle }}>
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              {pay.lines.map((line, i) => (
+                <li key={i}>{line}</li>
+              ))}
+            </ul>
+          </dd>
+          <dt style={labelStyle}>Total Collected</dt>
+          <dd style={{ margin: 0, ...valueStyle }}>${pay.total.toFixed(2)}</dd>
           <dt style={labelStyle}>Car Make</dt>
           <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.car_make)}</dd>
           <dt style={labelStyle}>Car Color</dt>
@@ -263,12 +273,25 @@ export default function CheckinsList({
     }
     const isRoom = checkin.checkInType !== 'food' && checkin.checkInType !== 'beer';
     if (isRoom) {
-      if (draft.cost != null && Number(draft.cost) !== Number(checkin.cost)) {
-        lines.push({
-          label: 'Cost',
-          from: `$${Number(checkin.cost).toFixed(2)}`,
-          to: `$${Number(draft.cost).toFixed(2)}`,
-        });
+      const fromPay = getRoomPaymentBreakdownDisplay(checkin);
+      const toSplits = draft.payment_splits;
+      if (toSplits && toSplits.length > 0) {
+        const toBreakdown = formatPaymentBreakdownComma(toSplits);
+        const toTotal = calculatePaymentSplitTotal(toSplits);
+        if (fromPay.compactComma !== toBreakdown) {
+          lines.push({
+            label: 'Payment Breakdown',
+            from: fromPay.compactComma,
+            to: toBreakdown,
+          });
+        }
+        if (fromPay.total !== toTotal) {
+          lines.push({
+            label: 'Total Collected',
+            from: `$${fromPay.total.toFixed(2)}`,
+            to: `$${toTotal.toFixed(2)}`,
+          });
+        }
       }
       if (draft.room_id != null && String(draft.room_id) !== String(checkin.room_id ?? '')) {
         lines.push({ label: 'Room', from: String(checkin.room_id ?? ''), to: String(draft.room_id) });
@@ -314,8 +337,8 @@ export default function CheckinsList({
             ? {
                 receipt_number: pendingUpdate.draft.receipt_number,
                 staff_name: pendingUpdate.draft.staff_name,
-                cost: pendingUpdate.draft.cost,
                 room_id: pendingUpdate.draft.room_id,
+                payment_splits: pendingUpdate.draft.payment_splits,
               }
             : {
                 receipt_number: pendingUpdate.draft.receipt_number,
@@ -530,7 +553,7 @@ export default function CheckinsList({
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              {['Receipt #', 'Date', 'Time', 'Type', 'Room', 'Staff', 'Cost'].map((h) => (
+              {['Receipt #', 'Date', 'Time', 'Type', 'Room', 'Staff', 'Total'].map((h) => (
                 <th key={h} style={{ textAlign: 'left', padding: 8, borderBottom: '1px solid #e5e7eb' }}>
                   {h}
                 </th>
@@ -602,7 +625,7 @@ export default function CheckinsList({
                 <dd style={{ margin: 0 }}>{pendingDelete.room_id}</dd>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <dt style={{ fontWeight: 500 }}>Cost</dt>
+                <dt style={{ fontWeight: 500 }}>Total</dt>
                 <dd style={{ margin: 0 }}>${Number(pendingDelete.cost).toFixed(2)}</dd>
               </div>
             </dl>

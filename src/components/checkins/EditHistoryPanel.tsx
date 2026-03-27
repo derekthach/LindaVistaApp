@@ -21,6 +21,8 @@ const FIELD_LABELS: Record<string, string> = {
   staffName: 'Staff',
   cost: 'Cost',
   roomId: 'Room',
+  paymentBreakdown: 'Payment Breakdown',
+  totalCollected: 'Total Collected',
   item: 'Item',
   quantity: 'Quantity',
   amountCollected: 'Amount Collected',
@@ -33,7 +35,10 @@ function formatDiffValue(field: string, value: unknown): string {
       return formatReceiptNumber(value == null ? '' : String(value));
     case 'cost':
     case 'amountCollected':
+    case 'totalCollected':
       return `$${Number(value).toFixed(2)}`;
+    case 'paymentBreakdown':
+      return String(value);
     case 'quantity':
     case 'roomId':
       return String(Number(value));

@@ -75,11 +75,11 @@ export async function PATCH(
       const raw = {
         receipt_number: body.receipt_number,
         staff_name: body.staff_name,
-        cost: body.cost,
         room_id: body.room_id,
+        payment_splits: body.payment_splits,
       };
       const validation = validateUpdateCheckin(raw as Record<string, unknown>, true);
-      if (!validation.valid) {
+      if (!validation.valid || !validation.payment_splits) {
         return NextResponse.json(
           { error: Object.values(validation.errors).find(Boolean) ?? 'Validation failed', fieldErrors: validation.errors },
           { status: 400 }
@@ -89,8 +89,8 @@ export async function PATCH(
       const payload = {
         receipt_number: receiptPadded,
         staff_name: String(raw.staff_name).trim(),
-        cost: Number(raw.cost),
         room_id: raw.room_id as number | string,
+        payment_splits: validation.payment_splits,
       };
       await updateCheckin(id, payload, payload.staff_name);
     } else {

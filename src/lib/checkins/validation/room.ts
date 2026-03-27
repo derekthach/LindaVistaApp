@@ -2,6 +2,8 @@ import { isValidCarColorKey } from '../colors';
 import { normalizeReceiptNumber, RECEIPT_MAX } from '../receipt';
 import { PAYMENT_METHODS } from '../paymentMethods';
 import { isValidRoomId } from '../rooms';
+import { validatePaymentSplits } from '../roomPaymentSplits';
+import type { RoomPaymentSplit } from '@/types';
 
 export interface RoomCheckinPayload {
   room_id: number | string;
@@ -10,6 +12,7 @@ export interface RoomCheckinPayload {
   time: string;
   cost: number;
   payment_method: string;
+  payment_splits?: RoomPaymentSplit[];
   car_plate: string;
   car_make: string;
   car_color: string;
@@ -19,7 +22,7 @@ export interface RoomCheckinPayload {
 
 export interface RoomCheckinValidationResult {
   valid: boolean;
-  errors: Partial<Record<keyof RoomCheckinPayload, string>>;
+  errors: Partial<Record<keyof RoomCheckinPayload | 'payment_splits', string>>;
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -72,25 +75,37 @@ export function validateRoomCheckin(raw: Record<string, unknown>): RoomCheckinVa
     errors.time = 'Invalid time format (HH:mm, 24-hour)';
   }
 
-  const costVal = raw.cost;
-  if (costVal === undefined || costVal === null || costVal === '') {
-    errors.cost = 'Cost is required';
-  } else {
-    const cost = Number(costVal);
-    if (Number.isNaN(cost)) {
-      errors.cost = 'Cost must be a number';
-    } else if (cost < 0) {
-      errors.cost = 'Cost cannot be negative';
-    } else if (cost > COST_MAX) {
-      errors.cost = `Cost cannot exceed $${COST_MAX}`;
-    }
-  }
+  const hasSplitPayload =
+    raw.payment_splits != null &&
+    raw.payment_splits !== '' &&
+    !(typeof raw.payment_splits === 'string' && String(raw.payment_splits).trim() === '');
 
-  const payment = raw.payment_method != null ? String(raw.payment_method).trim() : '';
-  if (!payment) {
-    errors.payment_method = 'Payment method is required';
-  } else if (!PAYMENT_METHODS.includes(payment as (typeof PAYMENT_METHODS)[number])) {
-    errors.payment_method = 'Invalid payment method';
+  if (hasSplitPayload) {
+    const splitResult = validatePaymentSplits(raw.payment_splits);
+    if (!splitResult.valid) {
+      errors.payment_splits = splitResult.error ?? 'Invalid payment breakdown';
+    }
+  } else {
+    const costVal = raw.cost;
+    if (costVal === undefined || costVal === null || costVal === '') {
+      errors.cost = 'Cost is required';
+    } else {
+      const cost = Number(costVal);
+      if (Number.isNaN(cost)) {
+        errors.cost = 'Cost must be a number';
+      } else if (cost < 0) {
+        errors.cost = 'Cost cannot be negative';
+      } else if (cost > COST_MAX) {
+        errors.cost = `Cost cannot exceed $${COST_MAX}`;
+      }
+    }
+
+    const payment = raw.payment_method != null ? String(raw.payment_method).trim() : '';
+    if (!payment) {
+      errors.payment_method = 'Payment method is required';
+    } else if (!PAYMENT_METHODS.includes(payment as (typeof PAYMENT_METHODS)[number])) {
+      errors.payment_method = 'Invalid payment method';
+    }
   }
 
   const carPlate = raw.car_plate != null ? String(raw.car_plate).trim() : '';

@@ -1,3 +1,5 @@
+import type { PaymentMethodValue } from '@/lib/checkins/paymentMethods';
+
 export type UserRole = 'admin' | 'employee';
 
 export interface User {
@@ -13,6 +15,9 @@ export interface SessionData {
 }
 
 export type CheckInType = 'room' | 'food' | 'beer';
+
+/** Room split payment row (Firestore: paymentSplits). */
+export type RoomPaymentSplit = { method: PaymentMethodValue; amount: number };
 
 /** Line item for food/beer check-ins (stable itemId + snapshot label). Raw row as entered by staff. */
 export interface LineItem {
@@ -40,7 +45,12 @@ export interface CheckIn {
   time: string;
   room_id: number | string;
   cost: number;
+  /** Room: legacy single method when payment_splits is absent. */
   payment_method: string;
+  /** Room: multi-method splits (authoritative total with cost when present). */
+  payment_splits?: RoomPaymentSplit[];
+  /** Room: optional denormalized total from Firestore (same as cost for split records). */
+  total_collected?: number;
   staff_name: string;
   car_plate: string;
   car_make: string;

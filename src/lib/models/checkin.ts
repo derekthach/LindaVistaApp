@@ -1,7 +1,12 @@
 import { DateTime } from 'luxon';
 import type { Timestamp } from 'firebase-admin/firestore';
-import type { CheckIn, CheckInType, LineItem, SummarizedItem } from '@/types';
+import type { CheckIn, CheckInType, LineItem, RoomPaymentSplit, SummarizedItem } from '@/types';
 import { normalizePaymentMethod } from '@/lib/checkins/paymentMethods';
+import {
+  calculatePaymentSplitTotal,
+  parsePaymentSplitsFromFirestore,
+  roundMoney,
+} from '@/lib/checkins/roomPaymentSplits';
 
 export type { CheckIn };
 
@@ -21,6 +26,8 @@ export interface CheckinDoc {
   note?: string;
   lineItems?: LineItem[];
   summarizedItems?: SummarizedItem[];
+  paymentSplits?: RoomPaymentSplit[];
+  totalCollected?: number;
 }
 
 /** Compute total amount collected for food/beer from summarizedItems or lineItems. */
@@ -53,12 +60,26 @@ export function normalizeCheckin(id: string, data: Record<string, unknown>): Che
     (data.receiptNumber as string) ?? (data.receiptNo as string) ?? '';
   const staffName =
     (data.staffName as string) ?? (data.staffId as string) ?? '';
-  const cost = isRoom
-    ? (Number(data.cost) || 0)
-    : totalAmountCollected(data);
+
+  const paymentSplitsParsed = isRoom ? parsePaymentSplitsFromFirestore(data.paymentSplits) : undefined;
+  const totalCollectedRaw =
+    isRoom && data.totalCollected != null ? Number(data.totalCollected) : undefined;
+
+  let cost: number;
+  if (isRoom) {
+    if (paymentSplitsParsed && paymentSplitsParsed.length > 0) {
+      cost = roundMoney(calculatePaymentSplitTotal(paymentSplitsParsed));
+    } else {
+      cost = Number(data.cost) || 0;
+    }
+  } else {
+    cost = totalAmountCollected(data);
+  }
 
   const paymentRaw = (data.paymentMethod ?? data.payment) as string | undefined;
-  const paymentMethod = normalizePaymentMethod(paymentRaw);
+  const paymentMethod = isRoom && paymentSplitsParsed?.length
+    ? paymentSplitsParsed[0].method
+    : normalizePaymentMethod(paymentRaw);
   const noteRaw = (data.note ?? data.notes) as string | undefined;
   const note = typeof noteRaw === 'string' && noteRaw.trim() ? noteRaw.trim() : undefined;
 
@@ -85,5 +106,14 @@ export function normalizeCheckin(id: string, data: Record<string, unknown>): Che
     note,
     lineItems,
     summarizedItems,
+    ...(isRoom && paymentSplitsParsed && paymentSplitsParsed.length > 0
+      ? {
+          payment_splits: paymentSplitsParsed,
+          total_collected:
+            totalCollectedRaw != null && !Number.isNaN(totalCollectedRaw)
+              ? roundMoney(totalCollectedRaw)
+              : cost,
+        }
+      : {}),
   };
 }

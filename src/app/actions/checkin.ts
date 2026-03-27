@@ -8,6 +8,7 @@ import { validateRoomCheckin, normalizeReceipt } from '@/lib/checkins/validation
 import { parseRoomOptionValue } from '@/lib/checkins/rooms';
 import { normalizePaymentMethod } from '@/lib/checkins/paymentMethods';
 import { summarizeLineItems } from '@/lib/checkins/summarize';
+import { calculatePaymentSplitTotal, validatePaymentSplits } from '@/lib/checkins/roomPaymentSplits';
 import type { CheckIn, LineItem, SummarizedItem } from '@/types';
 import type { FoodBeerDraft } from '@/lib/checkins/draft';
 
@@ -25,6 +26,7 @@ export async function submitCheckinAction(formData: FormData): Promise<RoomCheck
     time: formData.get('time'),
     cost: formData.get('cost'),
     payment_method: formData.get('payment_method'),
+    payment_splits: formData.get('payment_splits'),
     car_plate: formData.get('car_plate'),
     car_make: formData.get('car_make'),
     car_color: formData.get('car_color'),
@@ -46,13 +48,30 @@ export async function submitCheckinAction(formData: FormData): Promise<RoomCheck
   const carMake = String(raw.car_make ?? '').trim().toUpperCase().slice(0, 30);
   const note = raw.note != null ? String(raw.note).trim().slice(0, 500) : undefined;
 
+  const psRaw = raw.payment_splits;
+  const hasSplitPayload =
+    psRaw != null &&
+    psRaw !== '' &&
+    !(typeof psRaw === 'string' && String(psRaw).trim() === '');
+  const splitResult = hasSplitPayload ? validatePaymentSplits(psRaw) : { valid: false as const };
+  const resolvedSplits =
+    splitResult.valid && splitResult.splits && splitResult.splits.length > 0
+      ? splitResult.splits
+      : null;
+  const totalCollected = resolvedSplits
+    ? calculatePaymentSplitTotal(resolvedSplits)
+    : Number(raw.cost);
+
   const data: Omit<CheckIn, 'checkin_id'> = {
     room_id: parseRoomOptionValue(String(raw.room_id ?? '1')),
     receipt_number: receiptPadded,
     date: String(raw.date).trim(),
     time: String(raw.time).trim(),
-    cost: Number(raw.cost),
-    payment_method: normalizePaymentMethod(raw.payment_method != null ? String(raw.payment_method) : undefined),
+    cost: totalCollected,
+    payment_method: resolvedSplits
+      ? resolvedSplits[0].method
+      : normalizePaymentMethod(raw.payment_method != null ? String(raw.payment_method) : undefined),
+    ...(resolvedSplits ? { payment_splits: resolvedSplits } : {}),
     staff_name: String(raw.staff_name).trim(),
     car_plate: carPlate,
     car_make: carMake,

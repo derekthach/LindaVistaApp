@@ -3,6 +3,7 @@ import {
   SECTION_LABELS,
   buildSectionedData,
 } from './sectioning';
+import { formatPaymentBreakdownPipe, getRoomPaymentBreakdownDisplay } from '@/lib/checkins/roomPaymentSplits';
 
 export type ExportRow = Record<string, string | number | null>;
 
@@ -19,6 +20,15 @@ function roomCell(checkin: CheckIn): string {
 function plateCell(checkin: CheckIn): string {
   if (checkin.checkInType === 'food' || checkin.checkInType === 'beer') return '—';
   return checkin.car_plate ?? '';
+}
+
+function roomPaymentBreakdownCsv(checkin: CheckIn): string {
+  if (checkin.checkInType === 'food' || checkin.checkInType === 'beer') return '—';
+  const d = getRoomPaymentBreakdownDisplay(checkin);
+  if (checkin.payment_splits && checkin.payment_splits.length > 0) {
+    return formatPaymentBreakdownPipe(checkin.payment_splits);
+  }
+  return d.compactPipe;
 }
 
 function blankRow(
@@ -39,6 +49,7 @@ function blankRow(
     staff: '',
     plate: '',
     cost: '',
+    paymentBreakdown: '',
     notes: '',
     roomTotal: roomTotal ?? '',
     foodTotal: foodTotal ?? '',
@@ -71,6 +82,7 @@ export function buildCheckinsExportRows(options: {
         staff: c.staff_name ?? '',
         plate: plateCell(c),
         cost: Number(c.cost),
+        paymentBreakdown: roomPaymentBreakdownCsv(c),
         notes: c.note ?? '',
         roomTotal: '',
         foodTotal: '',
@@ -98,6 +110,7 @@ export function buildCheckinsExportRows(options: {
         staff: c.staff_name ?? '',
         plate: plateCell(c),
         cost: Number(c.cost),
+        paymentBreakdown: roomPaymentBreakdownCsv(c),
         notes: c.note ?? '',
         roomTotal: '',
         foodTotal: '',
@@ -142,6 +155,7 @@ export const EXPORT_COLUMNS = [
   'Staff',
   'Plate',
   'Cost',
+  'Payment Breakdown',
   'Notes',
   'Room Total',
   'Food Total',
@@ -159,6 +173,7 @@ const EXPORT_KEYS: (keyof ExportRow)[] = [
   'staff',
   'plate',
   'cost',
+  'paymentBreakdown',
   'notes',
   'roomTotal',
   'foodTotal',

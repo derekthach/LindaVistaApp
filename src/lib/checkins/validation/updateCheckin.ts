@@ -1,19 +1,22 @@
 import { normalizeReceipt } from './room';
 import { isValidRoomId } from '../rooms';
+import { validatePaymentSplits } from '../roomPaymentSplits';
+import type { RoomPaymentSplit } from '@/types';
 
 const ALLOWED_STAFF = ['Keith Thach', 'Duyen Thach', 'Derek Thach'] as const;
-const COST_MAX = 1000;
 
 export interface UpdateCheckinPayload {
   receipt_number: string;
   staff_name: string;
-  cost: number;
   room_id?: number | string;
+  payment_splits: RoomPaymentSplit[];
 }
 
 export interface UpdateCheckinValidationResult {
   valid: boolean;
   errors: Partial<Record<keyof UpdateCheckinPayload, string>>;
+  /** Populated when valid and isRoomType. */
+  payment_splits?: RoomPaymentSplit[];
 }
 
 /**
@@ -43,21 +46,14 @@ export function validateUpdateCheckin(
     errors.staff_name = 'Staff must be one of: ' + ALLOWED_STAFF.join(', ');
   }
 
-  const costVal = raw.cost;
-  if (costVal === undefined || costVal === null || costVal === '') {
-    errors.cost = 'Cost is required';
-  } else {
-    const cost = Number(costVal);
-    if (Number.isNaN(cost)) {
-      errors.cost = 'Cost must be a number';
-    } else if (cost < 0) {
-      errors.cost = 'Cost cannot be negative';
-    } else if (cost > COST_MAX) {
-      errors.cost = `Cost cannot exceed $${COST_MAX}`;
-    }
-  }
-
+  let parsedSplits: RoomPaymentSplit[] | undefined;
   if (isRoomType) {
+    const splitResult = validatePaymentSplits(raw.payment_splits);
+    if (!splitResult.valid) {
+      errors.payment_splits = splitResult.error ?? 'Invalid payment breakdown';
+    } else {
+      parsedSplits = splitResult.splits;
+    }
     const roomVal = raw.room_id;
     if (roomVal === undefined || roomVal === null) {
       errors.room_id = 'Room number is required';
@@ -66,9 +62,11 @@ export function validateUpdateCheckin(
     }
   }
 
+  const valid = Object.keys(errors).length === 0;
   return {
-    valid: Object.keys(errors).length === 0,
+    valid,
     errors,
+    ...(valid && isRoomType && parsedSplits ? { payment_splits: parsedSplits } : {}),
   };
 }
 

@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import type { CheckIn } from '@/types';
+import { useEffect, useMemo, useState, useCallback } from 'react';
+import type { CheckIn, RoomPaymentSplit } from '@/types';
 import Button from '@/components/Button';
 import { FOOD_ITEMS, BEER_ITEMS } from '@/lib/checkins/items';
 import type { ItemOption } from '@/lib/checkins/items';
@@ -9,6 +9,12 @@ import { normalizeReceipt } from '@/lib/checkins/validation/room';
 import { formatReceiptNumber } from '@/lib/checkins/receipt';
 import { ALLOWED_STAFF } from '@/lib/checkins/validation/updateCheckin';
 import { ROOM_OPTIONS, parseRoomOptionValue, isValidRoomId } from '@/lib/checkins/rooms';
+import { PAYMENT_METHODS } from '@/lib/checkins/paymentMethods';
+import {
+  calculatePaymentSplitTotal,
+  getRoomPaymentMethodEnglishLabel,
+  validatePaymentSplits,
+} from '@/lib/checkins/roomPaymentSplits';
 
 const COST_MAX = 1000;
 const AMOUNT_COLLECTED_MAX = 1000;
@@ -18,8 +24,9 @@ const QUANTITY_MAX = 999;
 export interface EditCheckinDraft {
   receipt_number: string;
   staff_name: string;
-  cost?: number;
   room_id?: number | string;
+  /** Room check-in: split payments (replaces single cost field). */
+  payment_splits?: RoomPaymentSplit[];
   itemId?: string;
   itemLabel?: string;
   quantity?: number;
@@ -83,8 +90,9 @@ export default function EditCheckinModal({
 }: EditCheckinModalProps) {
   const [receipt_number, setReceiptNumber] = useState('');
   const [staff_name, setStaffName] = useState('');
-  const [cost, setCost] = useState('');
   const [room_id, setRoomId] = useState<number | string>(1);
+  type PayRow = { method: string; amount: string };
+  const [paymentRows, setPaymentRows] = useState<PayRow[]>([{ method: 'cash', amount: '' }]);
   const [itemId, setItemId] = useState('');
   const [quantity, setQuantity] = useState('');
   const [amountCollected, setAmountCollected] = useState('');
@@ -96,8 +104,23 @@ export default function EditCheckinModal({
     if (checkin) {
       setReceiptNumber(formatReceiptNumber(checkin.receipt_number ?? ''));
       setStaffName(checkin.staff_name ?? '');
-      setCost(String(checkin.cost ?? ''));
       setRoomId(checkin.room_id ?? 1);
+      const isRoom = checkin.checkInType !== 'food' && checkin.checkInType !== 'beer';
+      if (isRoom) {
+        const splits = checkin.payment_splits;
+        if (splits && splits.length > 0) {
+          setPaymentRows(
+            splits.map((s) => ({ method: s.method, amount: String(s.amount) }))
+          );
+        } else {
+          setPaymentRows([
+            {
+              method: checkin.payment_method || 'cash',
+              amount: String(Number(checkin.cost) || 0),
+            },
+          ]);
+        }
+      }
       const options = checkin.checkInType === 'beer' ? BEER_ITEMS : FOOD_ITEMS;
       const firstId = getFirstItemId(checkin);
       const firstLabel = getFirstItemLabel(checkin);
@@ -111,18 +134,52 @@ export default function EditCheckinModal({
   }, [checkin]);
 
   const receiptNormalized = normalizeReceipt(receipt_number);
-  const costNum = cost.trim() === '' ? NaN : Number(cost);
-  const costValid = !Number.isNaN(costNum) && costNum >= 0 && costNum <= COST_MAX;
   const staffValid = ALLOWED_STAFF.includes(staff_name as (typeof ALLOWED_STAFF)[number]);
   const qtyNum = quantity.trim() === '' ? NaN : Math.floor(Number(quantity));
   const qtyValid = !Number.isNaN(qtyNum) && Number.isInteger(qtyNum) && qtyNum >= QUANTITY_MIN && qtyNum <= QUANTITY_MAX;
   const amountNum = amountCollected.trim() === '' ? NaN : Number(amountCollected);
   const amountValid = !Number.isNaN(amountNum) && amountNum >= 0 && amountNum <= AMOUNT_COLLECTED_MAX;
 
+  const splitValidation = useMemo(
+    () =>
+      validatePaymentSplits(
+        JSON.stringify(
+          paymentRows.map((r) => ({
+            method: r.method,
+            amount: r.amount.trim() === '' ? '' : Number(r.amount),
+          }))
+        )
+      ),
+    [paymentRows]
+  );
+  const splitsValid = splitValidation.valid && !!splitValidation.splits?.length;
+  const liveRoomTotal = splitsValid
+    ? calculatePaymentSplitTotal(splitValidation.splits!)
+    : null;
+
+  const initialSplitsJson = useMemo(() => {
+    if (!checkin || checkin.checkInType === 'food' || checkin.checkInType === 'beer') return '';
+    const splits = checkin.payment_splits;
+    if (splits && splits.length > 0) {
+      return JSON.stringify(splits);
+    }
+    return JSON.stringify([
+      {
+        method: checkin.payment_method || 'cash',
+        amount: Number(checkin.cost) || 0,
+      },
+    ]);
+  }, [checkin]);
+
+  const currentSplitsJson = useMemo(() => {
+    if (!splitValidation.valid || !splitValidation.splits) return '';
+    return JSON.stringify(splitValidation.splits);
+  }, [splitValidation]);
+
   const hasChangesRoom =
     receiptNormalized !== formatReceiptNumber(checkin?.receipt_number ?? '') ||
     staff_name !== (checkin?.staff_name ?? '') ||
-    String(costNum) !== String(checkin?.cost ?? '') ||
+    currentSplitsJson !== initialSplitsJson ||
     String(room_id) !== String(checkin?.room_id ?? 1);
   const hasChangesFoodBeer =
     receiptNormalized !== formatReceiptNumber(checkin?.receipt_number ?? '') ||
@@ -133,10 +190,7 @@ export default function EditCheckinModal({
   const hasChanges = isRoom ? hasChangesRoom : hasChangesFoodBeer;
 
   const formValidRoom =
-    receiptNormalized !== null &&
-    staffValid &&
-    costValid &&
-    isValidRoomId(room_id);
+    receiptNormalized !== null && staffValid && splitsValid && isValidRoomId(room_id);
   const formValidFoodBeer =
     receiptNormalized !== null &&
     staffValid &&
@@ -149,12 +203,12 @@ export default function EditCheckinModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSave || !receiptNormalized) return;
-    if (isRoom) {
+    if (isRoom && splitValidation.splits) {
       onSave({
         receipt_number: receiptNormalized,
         staff_name,
-        cost: costNum,
         room_id,
+        payment_splits: splitValidation.splits,
       });
     } else {
       const selected = itemOptions.find((o) => o.id === itemId);
@@ -173,6 +227,21 @@ export default function EditCheckinModal({
     const padded = normalizeReceipt(receipt_number);
     if (padded !== null) setReceiptNumber(padded);
   };
+
+  const updatePaymentRow = useCallback((index: number, patch: Partial<PayRow>) => {
+    setPaymentRows((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  }, []);
+
+  const addPaymentRow = useCallback(() => {
+    const used = new Set(paymentRows.map((r) => r.method));
+    const next = PAYMENT_METHODS.find((m) => !used.has(m));
+    if (!next) return;
+    setPaymentRows((rows) => [...rows, { method: next, amount: '' }]);
+  }, [paymentRows]);
+
+  const removePaymentRow = useCallback((index: number) => {
+    setPaymentRows((rows) => (rows.length <= 1 ? rows : rows.filter((_, i) => i !== index)));
+  }, []);
 
   if (!open) return null;
 
@@ -250,18 +319,93 @@ export default function EditCheckinModal({
 
           {isRoom ? (
             <>
-              <label>
-                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Cost</div>
-                <input
-                  type="number"
-                  step="0.01"
-                  min={0}
-                  max={COST_MAX}
-                  value={cost}
-                  onChange={(e) => setCost(e.target.value)}
-                  style={inputStyle}
-                />
-              </label>
+              <div>
+                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8, fontWeight: 600 }}>
+                  Payment breakdown
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {paymentRows.map((row, idx) => {
+                    const usedElsewhere = new Set(
+                      paymentRows.filter((_, i) => i !== idx).map((r) => r.method)
+                    );
+                    return (
+                      <div
+                        key={idx}
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 1fr auto',
+                          gap: 8,
+                          alignItems: 'end',
+                        }}
+                      >
+                        <label style={{ margin: 0 }}>
+                          <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Method</div>
+                          <select
+                            value={row.method}
+                            onChange={(e) => updatePaymentRow(idx, { method: e.target.value })}
+                            style={inputStyle}
+                          >
+                            {PAYMENT_METHODS.map((method) => (
+                              <option key={method} value={method} disabled={usedElsewhere.has(method)}>
+                                {getRoomPaymentMethodEnglishLabel(method)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label style={{ margin: 0 }}>
+                          <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Amount</div>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min={0}
+                            max={COST_MAX}
+                            value={row.amount}
+                            onChange={(e) => updatePaymentRow(idx, { amount: e.target.value })}
+                            style={inputStyle}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => removePaymentRow(idx)}
+                          disabled={paymentRows.length <= 1}
+                          style={{
+                            padding: '8px 10px',
+                            borderRadius: 8,
+                            border: '1px solid #e5e7eb',
+                            fontSize: 13,
+                            background: paymentRows.length <= 1 ? '#f3f4f6' : '#fff',
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+                <button
+                  type="button"
+                  onClick={addPaymentRow}
+                  disabled={paymentRows.length >= PAYMENT_METHODS.length}
+                  style={{
+                    marginTop: 10,
+                    padding: '8px 12px',
+                    borderRadius: 8,
+                    border: '1px solid #166534',
+                    background: '#fff',
+                    color: '#166534',
+                    fontSize: 13,
+                  }}
+                >
+                  Add payment method
+                </button>
+                <div style={{ marginTop: 10, fontWeight: 600 }}>
+                  Total collected:{' '}
+                  {liveRoomTotal != null ? `$${liveRoomTotal.toFixed(2)}` : '—'}
+                </div>
+                {!splitsValid && splitValidation.error && (
+                  <div style={{ color: '#dc2626', fontSize: 12, marginTop: 6 }}>{splitValidation.error}</div>
+                )}
+              </div>
               <label>
                 <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Room number</div>
                 <select
