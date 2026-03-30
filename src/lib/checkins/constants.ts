@@ -20,3 +20,8 @@ export function getStaffOptionsForRole(isAdmin: boolean): readonly string[] {
   const hidden = new Set<string>(STAFF_HIDDEN_FOR_EMPLOYEE);
   return STAFF_MEMBERS.filter((s) => !hidden.has(s));
 }
+
+/** Full staff list for room checkout / cleaning — same for employees and admins. */
+export function getStaffOptionsForCheckout(): readonly string[] {
+  return STAFF_MEMBERS;
+}

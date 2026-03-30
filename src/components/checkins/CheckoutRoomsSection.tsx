@@ -6,7 +6,7 @@ import type { CheckIn } from '@/types';
 import { formatRoomDisplay } from '@/lib/checkins/rooms';
 import RoomCheckoutModal from '@/components/checkins/RoomCheckoutModal';
 
-export default function CheckoutRoomsSection({ isAdmin }: { isAdmin: boolean }) {
+export default function CheckoutRoomsSection() {
   const router = useRouter();
   const [checkins, setCheckins] = useState<CheckIn[]>([]);
   const [loading, setLoading] = useState(true);
@@ -116,7 +116,6 @@ export default function CheckoutRoomsSection({ isAdmin }: { isAdmin: boolean }) 
       <RoomCheckoutModal
         open={modalOpen}
         checkin={selected}
-        isAdmin={isAdmin}
         onClose={() => {
           setModalOpen(false);
           setSelected(null);

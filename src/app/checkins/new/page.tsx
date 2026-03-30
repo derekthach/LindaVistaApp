@@ -29,7 +29,7 @@ export default async function NewCheckinPage({
         <h1 className="page-title">Check-In / Checkout</h1>
         <p className="page-subtitle">Choose what you are registering</p>
         <CheckInTypeSelector />
-        <CheckoutRoomsSection isAdmin={session.role === 'admin'} />
+        <CheckoutRoomsSection />
       </div>
     </AppLayout>
   );

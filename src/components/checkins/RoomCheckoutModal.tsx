@@ -6,7 +6,7 @@ import { formatReceiptNumber } from '@/lib/checkins/receipt';
 import { formatRoomDisplay } from '@/lib/checkins/rooms';
 import { getRoomPaymentBreakdownDisplay } from '@/lib/checkins/roomPaymentSplits';
 import { getCarColorLabel } from '@/lib/checkins/colors';
-import { getStaffOptionsForRole } from '@/lib/checkins/constants';
+import { getStaffOptionsForCheckout } from '@/lib/checkins/constants';
 import Button from '@/components/Button';
 
 const inputStyle = {
@@ -20,13 +20,11 @@ const inputStyle = {
 export default function RoomCheckoutModal({
   open,
   checkin,
-  isAdmin,
   onClose,
   onSuccess,
 }: {
   open: boolean;
   checkin: CheckIn | null;
-  isAdmin: boolean;
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -35,7 +33,7 @@ export default function RoomCheckoutModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const staffOptions = getStaffOptionsForRole(isAdmin);
+  const staffOptions = getStaffOptionsForCheckout();
 
   const reset = useCallback(() => {
     setCleanedBy('');
