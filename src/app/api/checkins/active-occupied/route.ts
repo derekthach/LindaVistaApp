@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/server/auth/session';
+import { requireSessionApi } from '@/server/auth/session';
 import { listActiveOccupiedRoomCheckins } from '@/lib/server/checkinsRepo';
 import { logError, logInfo } from '@/lib/server/log';
 import { HttpError, toErrorResponse } from '@/lib/server/httpError';
@@ -11,7 +11,7 @@ export async function GET() {
   logInfo('api.checkins.active-occupied.start', { requestId });
 
   try {
-    await requireAuth();
+    await requireSessionApi();
     const checkins = await listActiveOccupiedRoomCheckins();
     return NextResponse.json({ checkins });
   } catch (err) {

@@ -1,7 +1,13 @@
 import fs from 'fs';
 import path from 'path';
 import bcrypt from 'bcryptjs';
-import type { User } from '@/types';
+import type { User, UserRole } from '@/types';
+import {
+  getUserDocByUsername,
+  updateUserLastLogin,
+  userDisplaySnapshot,
+  type FirestoreUserDoc,
+} from '@/lib/server/usersRepo';
 
 const usersFilePath = path.join(process.cwd(), 'login-system', 'users.json');
 
@@ -18,12 +24,69 @@ export async function verifyPassword(password: string, hash: string) {
   return bcrypt.compare(password, hash);
 }
 
-export async function authenticateUser(username: string, password: string) {
-  const user = findUser(username);
-  if (!user) return null;
-
-  const isValid = await verifyPassword(password, user.password);
-  if (!isValid) return null;
-
-  return user;
+export async function hashPassword(plain: string): Promise<string> {
+  return bcrypt.hash(plain, 10);
 }
+
+export type AuthenticatedUser = {
+  username: string;
+  role: UserRole;
+  userId?: string;
+  displayName: string;
+  mustChangePassword: boolean;
+  source: 'firestore' | 'json';
+};
+
+async function authenticateFirestoreUser(
+  username: string,
+  password: string
+): Promise<AuthenticatedUser | null> {
+  const doc = await getUserDocByUsername(username);
+  if (!doc) return null;
+  if (doc.status !== 'active') return null;
+  const ok = await verifyPassword(password, doc.passwordHash);
+  if (!ok) return null;
+  return {
+    username: doc.username,
+    role: doc.role,
+    userId: doc.id,
+    displayName: userDisplaySnapshot(doc),
+    mustChangePassword: doc.mustChangePassword === true,
+    source: 'firestore',
+  };
+}
+
+function authenticateJsonUser(username: string, password: string): Promise<AuthenticatedUser | null> {
+  const user = findUser(username);
+  if (!user) return Promise.resolve(null);
+  return verifyPassword(password, user.password).then((ok) => {
+    if (!ok) return null;
+    return {
+      username: user.username,
+      role: user.role,
+      displayName: user.username === 'admin' ? 'Administrator' : user.username,
+      mustChangePassword: false,
+      source: 'json' as const,
+    };
+  });
+}
+
+/**
+ * Password check is server-side only. Tries Firestore `users` (by username), then legacy `users.json`.
+ */
+export async function authenticateUser(username: string, password: string): Promise<AuthenticatedUser | null> {
+  const trimmed = username.trim();
+  if (!trimmed) return null;
+
+  const fromFs = await authenticateFirestoreUser(trimmed, password);
+  if (fromFs) {
+    await updateUserLastLogin(fromFs.userId!).catch((e) =>
+      console.error('[auth] updateUserLastLogin', e)
+    );
+    return fromFs;
+  }
+
+  return authenticateJsonUser(trimmed, password);
+}
+
+export type { FirestoreUserDoc };

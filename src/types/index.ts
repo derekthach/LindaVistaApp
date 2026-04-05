@@ -12,6 +12,15 @@ export interface SessionData {
   username: string;
   role: UserRole;
   isLoggedIn: boolean;
+  /** Firestore `users` document id; omitted for legacy JSON login users. */
+  userId?: string;
+  /** Staff-facing display string (matches STAFF_MEMBERS / checkout). */
+  displayName?: string;
+  mustChangePassword?: boolean;
+  /** Unix ms — absolute end of session (employee 4h, admin 12h). */
+  hardExpiresAt?: number;
+  /** Unix ms — last request activity for inactivity logout. */
+  lastActivityAt?: number;
 }
 
 export type CheckInType = 'room' | 'food' | 'beer';
@@ -52,6 +61,11 @@ export interface CheckIn {
   /** Room: optional denormalized total from Firestore (same as cost for split records). */
   total_collected?: number;
   staff_name: string;
+  /** Firestore: employeeId (staff user doc id) when set. */
+  employee_id?: string;
+  /** Denormalized label at create time. */
+  employee_name_snapshot?: string;
+  created_by_role?: UserRole;
   car_plate: string;
   car_make: string;
   car_color: string;
@@ -88,6 +102,17 @@ export interface DashboardData {
 export interface RoomUsageData {
   room_numbers: string[];
   usage_counts: number[];
+}
+
+/** Bar chart series: staff display names and integer counts (room check-ins or cleanups). */
+export interface EmployeeRoomCountSeries {
+  labels: string[];
+  counts: number[];
+}
+
+export interface EmployeeRoomActivityData {
+  check_ins: EmployeeRoomCountSeries;
+  cleanups: EmployeeRoomCountSeries;
 }
 
 export interface MonthlyComparisonData {

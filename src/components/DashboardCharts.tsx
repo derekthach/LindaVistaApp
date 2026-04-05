@@ -4,7 +4,12 @@ import { useEffect, useState } from 'react';
 import { DateTime } from 'luxon';
 import LineChart from './charts/LineChart';
 import BarChart from './charts/BarChart';
-import type { DashboardData, RoomUsageData, MonthlyComparisonData } from '@/types';
+import type {
+  DashboardData,
+  RoomUsageData,
+  MonthlyComparisonData,
+  EmployeeRoomActivityData,
+} from '@/types';
 
 const ZONE = 'America/Puerto_Rico';
 const MONTH_OPTIONS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -19,6 +24,10 @@ const EMPTY_DASHBOARD: DashboardData = {
   revenue: [],
 };
 const EMPTY_ROOM_USAGE: RoomUsageData = { room_numbers: [], usage_counts: [] };
+const EMPTY_EMPLOYEE_ACTIVITY: EmployeeRoomActivityData = {
+  check_ins: { labels: [], counts: [] },
+  cleanups: { labels: [], counts: [] },
+};
 
 function emptyMonthly(month: number, year: number): MonthlyComparisonData {
   const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -44,6 +53,8 @@ export default function DashboardCharts() {
   const [monthly, setMonthly] = useState<MonthlyComparisonData | null>(null);
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
+  const [employeeActivity, setEmployeeActivity] = useState<EmployeeRoomActivityData | null>(null);
+  const [employeeActivityLoading, setEmployeeActivityLoading] = useState(true);
 
   useEffect(() => {
     fetch('/api/dashboard')
@@ -67,6 +78,22 @@ export default function DashboardCharts() {
   }, [roomUsageMonth, roomUsageYear]);
 
   useEffect(() => {
+    setEmployeeActivityLoading(true);
+    fetch(
+      `/api/dashboard/employee-room-activity?month=${roomUsageMonth}&year=${roomUsageYear}`
+    )
+      .then((res) => (res.ok ? res.json() : EMPTY_EMPLOYEE_ACTIVITY))
+      .then((data: EmployeeRoomActivityData) => {
+        setEmployeeActivity(data);
+        setEmployeeActivityLoading(false);
+      })
+      .catch(() => {
+        setEmployeeActivity(EMPTY_EMPLOYEE_ACTIVITY);
+        setEmployeeActivityLoading(false);
+      });
+  }, [roomUsageMonth, roomUsageYear]);
+
+  useEffect(() => {
     fetch(`/api/monthly-revenue?month=${month}&year=${year}`)
       .then((res) => (res.ok ? res.json() : emptyMonthly(month, year)))
       .then(setMonthly)
@@ -79,10 +106,10 @@ export default function DashboardCharts() {
         <h2 style={{ marginBottom: 12 }}>Trend Analytics</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
           <div className="card" style={{ height: 320 }}>
-            <h3>Check-Ins Over Time (7 days)</h3>
+            <h3>Room check-ins (7 days)</h3>
             <div style={{ height: 240 }}>
               {dashboard && dashboard.dates.length > 0 ? (
-                <LineChart labels={dashboard.dates} data={dashboard.checkins} label="Check-ins" />
+                <LineChart labels={dashboard.dates} data={dashboard.checkins} label="Room check-ins" />
               ) : (
                 <p style={{ color: '#6b7280', padding: 24 }}>No check-ins in the last 7 days.</p>
               )}
@@ -192,7 +219,7 @@ export default function DashboardCharts() {
                     {monthly.current_month.name} {monthly.current_month.year}
                   </strong>
                   <div>${monthly.current_month.total.toFixed(2)}</div>
-                  <div>{monthly.current_month.car_count} check-ins</div>
+                  <div>{monthly.current_month.car_count} room check-ins</div>
                 </div>
                 <div style={{ textAlign: 'center', color: '#6b7280' }}>vs</div>
                 <div className="card" style={{ background: '#f8fafc' }}>
@@ -200,10 +227,69 @@ export default function DashboardCharts() {
                     {monthly.prev_month.name} {monthly.prev_month.year}
                   </strong>
                   <div>${monthly.prev_month.total.toFixed(2)}</div>
-                  <div>{monthly.prev_month.car_count} check-ins</div>
+                  <div>{monthly.prev_month.car_count} room check-ins</div>
                 </div>
               </div>
             )}
+          </div>
+        </div>
+
+        <p style={{ margin: '16px 0 0', fontSize: 13, color: '#6b7280' }}>
+          Staff charts below use the same month and year as &quot;Room Usage Frequency&quot;.
+        </p>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+            gap: 16,
+            marginTop: 12,
+          }}
+        >
+          <div className="card" style={{ minHeight: 360 }}>
+            <h3 style={{ margin: '0 0 12px' }}>Room check-ins by staff</h3>
+            <p style={{ margin: '0 0 12px', fontSize: 13, color: '#6b7280' }}>
+              Guest room stays recorded in this month (who checked the guest in).
+            </p>
+            <div style={{ height: 280 }}>
+              {employeeActivityLoading ? (
+                <p style={{ color: '#6b7280', padding: 24 }}>Loading…</p>
+              ) : employeeActivity && employeeActivity.check_ins.labels.length > 0 ? (
+                <BarChart
+                  labels={employeeActivity.check_ins.labels}
+                  data={employeeActivity.check_ins.counts}
+                  label="Room check-ins"
+                  color="rgba(22, 163, 74, 1)"
+                  horizontal
+                />
+              ) : (
+                <p style={{ color: '#6b7280', padding: 24 }}>No room check-ins for this month.</p>
+              )}
+            </div>
+          </div>
+          <div className="card" style={{ minHeight: 360 }}>
+            <h3 style={{ margin: '0 0 12px' }}>Rooms cleaned by staff</h3>
+            <p style={{ margin: '0 0 12px', fontSize: 13, color: '#6b7280' }}>
+              Checkouts completed in this month (who cleaned / verified the room).
+            </p>
+            <div style={{ height: 280 }}>
+              {employeeActivityLoading ? (
+                <p style={{ color: '#6b7280', padding: 24 }}>Loading…</p>
+              ) : employeeActivity && employeeActivity.cleanups.labels.length > 0 ? (
+                <BarChart
+                  labels={employeeActivity.cleanups.labels}
+                  data={employeeActivity.cleanups.counts}
+                  label="Rooms cleaned"
+                  color="rgba(37, 99, 235, 1)"
+                  horizontal
+                />
+              ) : (
+                <p style={{ color: '#6b7280', padding: 24 }}>
+                  No cleanups recorded for this month. If this stays empty, confirm Firestore has{' '}
+                  <code style={{ fontSize: 12 }}>checkedOutAt</code> and{' '}
+                  <code style={{ fontSize: 12 }}>cleanedBy</code> on checked-out room stays.
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </section>

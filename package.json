@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "seed:users": "node scripts/seed-employee-users.mjs"
   },
   "dependencies": {
     "@vercel/analytics": "^1.6.1",

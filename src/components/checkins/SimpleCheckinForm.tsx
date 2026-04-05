@@ -21,7 +21,15 @@ const initialRow = (): LineItem => ({
   amountCollected: 0,
 });
 
-function SimpleCheckinFormContent({ type, isAdmin = false }: { type: 'food' | 'beer'; isAdmin?: boolean }) {
+function SimpleCheckinFormContent({
+  type,
+  isAdmin = false,
+  employeeDisplayName,
+}: {
+  type: 'food' | 'beer';
+  isAdmin?: boolean;
+  employeeDisplayName?: string;
+}) {
   const router = useRouter();
   const { t, language } = useLanguage();
   const itemOptions: ItemOption[] = type === 'food' ? FOOD_ITEMS : BEER_ITEMS;
@@ -79,7 +87,9 @@ function SimpleCheckinFormContent({ type, isAdmin = false }: { type: 'food' | 'b
     if (draft) {
       setDate(draft.date);
       setTime(draft.time);
-      setStaffName(draft.staff_name);
+      setStaffName(
+        !isAdmin && employeeDisplayName ? employeeDisplayName : draft.staff_name
+      );
       setNotes(draft.notes ?? '');
       setLineRows(
         draft.lineItems.length > 0
@@ -92,7 +102,13 @@ function SimpleCheckinFormContent({ type, isAdmin = false }: { type: 'food' | 'b
           : [initialRow()]
       );
     }
-  }, [type]);
+  }, [type, isAdmin, employeeDisplayName]);
+
+  useEffect(() => {
+    if (!isAdmin && employeeDisplayName) {
+      setStaffName(employeeDisplayName);
+    }
+  }, [isAdmin, employeeDisplayName]);
 
   const getItemLabel = useCallback(
     (item: ItemOption) => (language === 'es' ? item.label.es : item.label.en),
@@ -232,7 +248,24 @@ function SimpleCheckinFormContent({ type, isAdmin = false }: { type: 'food' | 'b
             )}
           </label>
 
-          <StaffDropdown value={staffName} onChange={setStaffName} isAdmin={isAdmin} />
+          {!isAdmin && employeeDisplayName ? (
+            <label>
+              <div>{t('staff_name')}</div>
+              <div
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  border: '1px solid #d1d5db',
+                  backgroundColor: '#f9fafb',
+                }}
+              >
+                {employeeDisplayName}
+              </div>
+            </label>
+          ) : (
+            <StaffDropdown value={staffName} onChange={setStaffName} isAdmin={isAdmin} />
+          )}
           {hasAttemptedReview && displayErrors.staff_name && (
             <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 4 }}>{msg(displayErrors.staff_name)}</div>
           )}
@@ -417,12 +450,20 @@ function SimpleCheckinFormContent({ type, isAdmin = false }: { type: 'food' | 'b
 export default function SimpleCheckinForm({
   type,
   isAdmin = false,
+  employeeDisplayName,
 }: {
   type: 'food' | 'beer';
   isAdmin?: boolean;
+  employeeDisplayName?: string;
 }) {
   if (!SIMPLE_TYPES.includes(type)) {
     return null;
   }
-  return <SimpleCheckinFormContent type={type} isAdmin={isAdmin} />;
+  return (
+    <SimpleCheckinFormContent
+      type={type}
+      isAdmin={isAdmin}
+      employeeDisplayName={employeeDisplayName}
+    />
+  );
 }

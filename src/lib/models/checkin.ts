@@ -1,6 +1,6 @@
 import { DateTime } from 'luxon';
 import type { Timestamp } from 'firebase-admin/firestore';
-import type { CheckIn, CheckInType, LineItem, RoomPaymentSplit, SummarizedItem } from '@/types';
+import type { CheckIn, CheckInType, LineItem, RoomPaymentSplit, SummarizedItem, UserRole } from '@/types';
 import { normalizePaymentMethod } from '@/lib/checkins/paymentMethods';
 import {
   calculatePaymentSplitTotal,
@@ -33,6 +33,9 @@ export interface CheckinDoc {
   cleanedAt?: Timestamp;
   checkedOutBy?: string;
   cleanedBy?: string;
+  employeeId?: string;
+  employeeNameSnapshot?: string;
+  createdByRole?: UserRole;
 }
 
 /** Compute total amount collected for food/beer from summarizedItems or lineItems. */
@@ -126,6 +129,17 @@ export function normalizeCheckin(id: string, data: Record<string, unknown>): Che
     }
   }
 
+  const employeeId =
+    typeof data.employeeId === 'string' && data.employeeId.trim() ? data.employeeId.trim() : undefined;
+  const employeeNameSnapshot =
+    typeof data.employeeNameSnapshot === 'string' && data.employeeNameSnapshot.trim()
+      ? data.employeeNameSnapshot.trim()
+      : undefined;
+  const createdByRole =
+    data.createdByRole === 'admin' || data.createdByRole === 'employee'
+      ? (data.createdByRole as UserRole)
+      : undefined;
+
   return {
     id,
     checkin_id: undefined,
@@ -171,5 +185,8 @@ export function normalizeCheckin(id: string, data: Record<string, unknown>): Che
             : {}),
         }
       : {}),
+    ...(employeeId ? { employee_id: employeeId } : {}),
+    ...(employeeNameSnapshot ? { employee_name_snapshot: employeeNameSnapshot } : {}),
+    ...(createdByRole ? { created_by_role: createdByRole } : {}),
   };
 }

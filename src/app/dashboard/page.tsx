@@ -33,11 +33,11 @@ export default async function DashboardPage() {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
           <div className="card">
-            <div>Today's Check-Ins</div>
+            <div>Today&apos;s room check-ins</div>
             <strong style={{ fontSize: 24 }}>{metrics.carsToday}</strong>
           </div>
           <div className="card">
-            <div>Weekly Check-Ins</div>
+            <div>This week&apos;s room check-ins</div>
             <strong style={{ fontSize: 24 }}>{metrics.carsThisWeek}</strong>
           </div>
           <div className="card">

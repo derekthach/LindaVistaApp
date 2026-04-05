@@ -1,13 +1,18 @@
 import { redirect } from 'next/navigation';
-import { getSession } from '@/server/auth/session';
+import { flushStaleSessionOnLoginPage, getSession } from '@/server/auth/session';
 import LoginPageLogger from '@/components/LoginPageLogger';
+import LoginForgotPassword from '@/components/LoginForgotPassword';
 export const dynamic = 'force-dynamic';
 
 type SearchParams = Promise<{ error?: string }>;
 
 export default async function LoginPage({ searchParams }: { searchParams: SearchParams }) {
+  await flushStaleSessionOnLoginPage();
   const session = await getSession();
-  if (session.isLoggedIn) {
+  if (session.isLoggedIn && session.username) {
+    if (session.mustChangePassword) {
+      redirect('/employee/change-password');
+    }
     redirect(session.role === 'admin' ? '/dashboard' : '/checkins/new');
   }
 
@@ -100,6 +105,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
             Sign In
           </button>
         </form>
+
+        <LoginForgotPassword />
       </div>
     </div>
     </>

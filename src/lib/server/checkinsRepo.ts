@@ -13,6 +13,8 @@ import type {
   SummaryMetrics,
   DashboardData,
   RoomUsageData,
+  EmployeeRoomActivityData,
+  EmployeeRoomCountSeries,
   MonthlyComparisonData,
 } from '@/types';
 import {
@@ -76,6 +78,10 @@ export async function createCheckin(data: CreateCheckinInput): Promise<string> {
       note: data.note ?? '',
     };
 
+    if (data.employee_id) doc.employeeId = data.employee_id;
+    if (data.employee_name_snapshot) doc.employeeNameSnapshot = data.employee_name_snapshot;
+    if (data.created_by_role) doc.createdByRole = data.created_by_role;
+
     if (hasSplits) {
       doc.paymentSplits = splits as RoomPaymentSplit[];
       doc.totalCollected = totalCollected;
@@ -105,6 +111,9 @@ export interface CreateSimpleCheckinInput {
   lineItems: LineItem[];
   summarizedItems: SummarizedItem[];
   notes?: string;
+  employee_id?: string;
+  employee_name_snapshot?: string;
+  created_by_role?: 'admin' | 'employee';
 }
 
 /** Create a food or beer check-in (same collection, checkInType set, lineItems + summarizedItems + notes). Uses settings/receipts for next number. */
@@ -138,7 +147,7 @@ export async function createSimpleCheckin(
     );
     const checkInAt = dt.isValid ? Timestamp.fromDate(dt.toJSDate()) : Timestamp.now();
 
-    const doc = {
+    const doc: Record<string, unknown> = {
       receiptNumber,
       checkInAt,
       createdAt: Timestamp.now(),
@@ -148,6 +157,10 @@ export async function createSimpleCheckin(
       summarizedItems: data.summarizedItems,
       note: data.notes ?? '',
     };
+
+    if (data.employee_id) doc.employeeId = data.employee_id;
+    if (data.employee_name_snapshot) doc.employeeNameSnapshot = data.employee_name_snapshot;
+    if (data.created_by_role) doc.createdByRole = data.created_by_role;
 
     tx.set(settingsRef, { nextReceiptNumber }, { merge: true });
     const newRef = checkinsRef.doc();
@@ -597,6 +610,22 @@ export async function getCheckinEdits(checkinId: string): Promise<CheckinEditRec
 
 const ZONE = 'America/Puerto_Rico';
 
+/**
+ * Guest room stays only for dashboard counts (excludes food/beer).
+ * - Explicit food/beer → excluded.
+ * - Explicit room → included.
+ * - Legacy without checkInType: excluded if line/summary item rows exist (typical F&B shape); else treated as room.
+ */
+function isRoomCheckinRecord(c: CheckIn): boolean {
+  if (c.checkInType === 'food' || c.checkInType === 'beer') return false;
+  if (c.checkInType === 'room') return true;
+  const hasItemData =
+    (Array.isArray(c.lineItems) && c.lineItems.length > 0) ||
+    (Array.isArray(c.summarizedItems) && c.summarizedItems.length > 0);
+  if (hasItemData) return false;
+  return true;
+}
+
 export async function getSummaryMetrics(): Promise<SummaryMetrics> {
   const now = DateTime.now().setZone(ZONE);
   const todayISO = now.toISODate() ?? '';
@@ -610,9 +639,12 @@ export async function getSummaryMetrics(): Promise<SummaryMetrics> {
   const profitToday = todayCheckins.reduce((sum, c) => sum + c.cost, 0);
   const profitThisWeek = weekCheckins.reduce((sum, c) => sum + c.cost, 0);
 
+  const roomToday = todayCheckins.filter(isRoomCheckinRecord);
+  const roomWeek = weekCheckins.filter(isRoomCheckinRecord);
+
   return {
-    carsToday: todayCheckins.length,
-    carsThisWeek: weekCheckins.length,
+    carsToday: roomToday.length,
+    carsThisWeek: roomWeek.length,
     profitToday,
     profitThisWeek,
   };
@@ -638,7 +670,9 @@ export async function get7DayTrends(): Promise<DashboardData> {
     const key = c.date;
     const cell = byDay.get(key);
     if (cell) {
-      cell.count += 1;
+      if (isRoomCheckinRecord(c)) {
+        cell.count += 1;
+      }
       cell.revenue += c.cost;
     }
   }
@@ -750,6 +784,9 @@ export async function getMonthlyComparison(
   const currentRevenue = currentCheckins.reduce((sum, c) => sum + c.cost, 0);
   const prevRevenue = prevCheckins.reduce((sum, c) => sum + c.cost, 0);
 
+  const currentRoomCount = currentCheckins.filter(isRoomCheckinRecord).length;
+  const prevRoomCount = prevCheckins.filter(isRoomCheckinRecord).length;
+
   const years = [year, year - 1].map((y) => y.toString());
 
   return {
@@ -757,14 +794,91 @@ export async function getMonthlyComparison(
       name: MONTH_NAMES[month - 1],
       year,
       total: currentRevenue,
-      car_count: currentCheckins.length,
+      car_count: currentRoomCount,
     },
     prev_month: {
       name: MONTH_NAMES[prevMonth - 1],
       year: prevYear,
       total: prevRevenue,
-      car_count: prevCheckins.length,
+      car_count: prevRoomCount,
     },
     years_available: years,
   };
+}
+
+function sortAndLimitStaffCounts(counts: Map<string, number>, limit = 20): EmployeeRoomCountSeries {
+  const entries = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const top = entries.slice(0, limit);
+  return { labels: top.map(([k]) => k), counts: top.map(([, v]) => v) };
+}
+
+/** Raw Firestore doc: room stay vs food/beer (aligns with isRoomCheckinRecord / dashboard metrics). */
+function isRoomCheckinDocData(data: Record<string, unknown>): boolean {
+  const t = data.checkInType as string | undefined;
+  if (t === 'food' || t === 'beer') return false;
+  if (t === 'room') return true;
+  const lineItems = data.lineItems as unknown[] | undefined;
+  const summarized = data.summarizedItems as unknown[] | undefined;
+  if (
+    (Array.isArray(lineItems) && lineItems.length > 0) ||
+    (Array.isArray(summarized) && summarized.length > 0)
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Per-staff room check-ins (check-in date in month) and room cleanups (checkout/cleaned timestamp in month).
+ * Cleanups use Firestore `checkedOutAt` range query; if that query fails (e.g. index), cleanups return empty.
+ */
+export async function getEmployeeRoomActivityForMonth(params: {
+  year: number;
+  month: number;
+}): Promise<EmployeeRoomActivityData> {
+  const { year, month } = params;
+
+  const startOfMonth = DateTime.fromObject({ year, month, day: 1 }, { zone: ZONE }).startOf('day');
+  const lastDayOfMonth = startOfMonth.plus({ months: 1 }).minus({ days: 1 });
+  const startISO = startOfMonth.toISODate() ?? '';
+  const endISO = lastDayOfMonth.toISODate() ?? '';
+
+  const checkInList = await listCheckinsByDateRange(startISO, endISO);
+  const byStaff = new Map<string, number>();
+  for (const c of checkInList) {
+    if (!isRoomCheckinRecord(c)) continue;
+    const name = (c.staff_name ?? '').trim() || 'Unknown';
+    byStaff.set(name, (byStaff.get(name) ?? 0) + 1);
+  }
+  const check_ins = sortAndLimitStaffCounts(byStaff);
+
+  let cleanups: EmployeeRoomCountSeries = { labels: [], counts: [] };
+  try {
+    const db = getAdminDb();
+    const endExclusive = startOfMonth.plus({ months: 1 });
+    const startTs = Timestamp.fromDate(startOfMonth.toJSDate());
+    const endTs = Timestamp.fromDate(endExclusive.toJSDate());
+    const snap = await db
+      .collection(CHECKINS_COLLECTION)
+      .where('checkedOutAt', '>=', startTs)
+      .where('checkedOutAt', '<', endTs)
+      .orderBy('checkedOutAt', 'asc')
+      .get();
+    const byCleaner = new Map<string, number>();
+    for (const doc of snap.docs) {
+      const data = doc.data() as Record<string, unknown>;
+      if (!isRoomCheckinDocData(data)) continue;
+      const cleanedBy = typeof data.cleanedBy === 'string' ? data.cleanedBy.trim() : '';
+      if (!cleanedBy) continue;
+      byCleaner.set(cleanedBy, (byCleaner.get(cleanedBy) ?? 0) + 1);
+    }
+    cleanups = sortAndLimitStaffCounts(byCleaner);
+  } catch (err) {
+    console.warn(
+      'getEmployeeRoomActivityForMonth: cleanups query failed',
+      err instanceof Error ? err.message : String(err)
+    );
+  }
+
+  return { check_ins, cleanups };
 }

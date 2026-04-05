@@ -45,6 +45,11 @@ export default function Sidebar({ role }: { role: UserRole }) {
           Check-In/Checkout
         </Link>
         {role === 'admin' && (
+          <Link href="/admin/employees" style={linkStyle('/admin/employees')}>
+            Employees
+          </Link>
+        )}
+        {role === 'admin' && (
           <Link href="/checkins" style={linkStyle('/checkins', true)}>
             View Check-Ins
           </Link>

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getIronSession } from 'iron-session';
-import { sessionOptions } from '@/server/auth/session';
+import { loginSessionOptions } from '@/server/auth/session';
 import type { SessionData } from '@/types';
 import { authenticateUser } from '@/server/auth/users';
+import { sessionHardMsForRole } from '@/server/auth/sessionPolicy';
 
 export const runtime = 'nodejs';
 
@@ -35,16 +36,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.redirect(new URL('/login', origin));
     }
 
-    // Single redirect + single Set-Cookie so the session sticks in production/preview
-    // (some runtimes drop a second cookie; an extra GET can also lose cookies).
-    // Admin goes straight to /dashboard; DashboardEnsureAdminCookie sets lv_admin in a follow-up request.
-    const redirectPath = user.role === 'admin' ? '/dashboard' : '/checkins/new';
+    const redirectPath = user.mustChangePassword
+      ? '/employee/change-password'
+      : user.role === 'admin'
+        ? '/dashboard'
+        : '/checkins/new';
     const res = NextResponse.redirect(new URL(redirectPath, origin), 303);
     res.headers.set('Cache-Control', 'private, no-store, max-age=0');
-    const session = await getIronSession<SessionData>(request, res, sessionOptions);
+    const opts = loginSessionOptions(user.role);
+    const session = await getIronSession<SessionData>(request, res, opts);
     session.username = user.username;
     session.role = user.role;
     session.isLoggedIn = true;
+    if (user.userId) session.userId = user.userId;
+    session.displayName = user.displayName;
+    session.mustChangePassword = user.mustChangePassword;
+    const now = Date.now();
+    session.hardExpiresAt = now + sessionHardMsForRole(user.role);
+    session.lastActivityAt = now;
     await session.save();
     return res;
   } catch (err) {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type { CheckIn } from '@/types';
 import { formatReceiptNumber } from '@/lib/checkins/receipt';
 import { formatRoomDisplay } from '@/lib/checkins/rooms';
@@ -22,12 +22,18 @@ export default function RoomCheckoutModal({
   checkin,
   onClose,
   onSuccess,
+  variant = 'admin',
+  employeeCleanerName,
 }: {
   open: boolean;
   checkin: CheckIn | null;
   onClose: () => void;
   onSuccess: () => void;
+  variant?: 'admin' | 'employee';
+  /** Logged-in employee display name (must match STAFF_MEMBERS). */
+  employeeCleanerName?: string;
 }) {
+  const isEmployee = variant === 'employee';
   const [cleanedBy, setCleanedBy] = useState('');
   const [verified, setVerified] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -42,6 +48,12 @@ export default function RoomCheckoutModal({
     setError(null);
   }, []);
 
+  useEffect(() => {
+    if (open && isEmployee && employeeCleanerName) {
+      setCleanedBy(employeeCleanerName);
+    }
+  }, [open, isEmployee, employeeCleanerName]);
+
   const handleClose = useCallback(() => {
     if (submitting) return;
     reset();
@@ -49,7 +61,8 @@ export default function RoomCheckoutModal({
   }, [submitting, reset, onClose]);
 
   const handleConfirm = useCallback(async () => {
-    if (!checkin?.id || !cleanedBy || !verified || submitting) return;
+    if (!checkin?.id || (!isEmployee && !cleanedBy) || (isEmployee && !employeeCleanerName) || !verified || submitting)
+      return;
     setSubmitting(true);
     setError(null);
     try {
@@ -57,7 +70,9 @@ export default function RoomCheckoutModal({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ cleanedBy }),
+        body: JSON.stringify({
+          cleanedBy: isEmployee ? employeeCleanerName : cleanedBy,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -71,7 +86,17 @@ export default function RoomCheckoutModal({
     } finally {
       setSubmitting(false);
     }
-  }, [checkin?.id, cleanedBy, verified, submitting, reset, onSuccess, onClose]);
+  }, [
+    checkin?.id,
+    cleanedBy,
+    verified,
+    submitting,
+    reset,
+    onSuccess,
+    onClose,
+    isEmployee,
+    employeeCleanerName,
+  ]);
 
   if (!open || !checkin) return null;
 
@@ -96,11 +121,12 @@ export default function RoomCheckoutModal({
     >
       <div className="card" style={{ maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
         <h2 id="checkout-modal-title" style={{ margin: '0 0 12px', fontSize: 20 }}>
-          Checkout {formatRoomDisplay(checkin.room_id)}
+          {isEmployee ? 'Salida' : 'Checkout'} {formatRoomDisplay(checkin.room_id)}
         </h2>
         <p style={{ margin: '0 0 16px', color: '#374151', fontSize: 14, lineHeight: 1.5 }}>
-          Confirming checkout means the guest has left, the room has been cleaned, and the room is ready for the
-          next guest. Checkout and cleaning are recorded together for now.
+          {isEmployee
+            ? 'Confirmar limpieza: el huésped se ha ido, la habitación está limpia y lista para el próximo huésped.'
+            : 'Confirming checkout means the guest has left, the room has been cleaned, and the room is ready for the next guest. Checkout and cleaning are recorded together for now.'}
         </p>
 
         <div
@@ -152,22 +178,29 @@ export default function RoomCheckoutModal({
           </div>
         </div>
 
-        <label style={{ display: 'block', marginBottom: 12 }}>
-          <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Who cleaned this room?</div>
-          <select
-            value={cleanedBy}
-            onChange={(e) => setCleanedBy(e.target.value)}
-            style={inputStyle}
-            disabled={submitting}
-          >
-            <option value="">Select staff</option>
-            {staffOptions.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </label>
+        {isEmployee ? (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Empleado responsable</div>
+            <div style={{ ...inputStyle, background: '#f9fafb' }}>{employeeCleanerName ?? '—'}</div>
+          </div>
+        ) : (
+          <label style={{ display: 'block', marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Who cleaned this room?</div>
+            <select
+              value={cleanedBy}
+              onChange={(e) => setCleanedBy(e.target.value)}
+              style={inputStyle}
+              disabled={submitting}
+            >
+              <option value="">Select staff</option>
+              {staffOptions.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 16, cursor: 'pointer' }}>
           <input
@@ -178,7 +211,9 @@ export default function RoomCheckoutModal({
             style={{ marginTop: 4 }}
           />
           <span style={{ fontSize: 14 }}>
-            I verify this room has been cleaned and is ready for use again.
+            {isEmployee
+              ? 'Verificar: confirmo que la habitación ha sido limpiada y está lista para usar.'
+              : 'I verify this room has been cleaned and is ready for use again.'}
           </span>
         </label>
 
@@ -188,15 +223,20 @@ export default function RoomCheckoutModal({
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           <Button type="button" variant="secondary" onClick={handleClose} disabled={submitting}>
-            Cancel
+            {isEmployee ? 'Cancelar' : 'Cancel'}
           </Button>
           <Button
             type="button"
             variant="primary"
             onClick={() => void handleConfirm()}
-            disabled={!cleanedBy || !verified || submitting}
+            disabled={
+              (!isEmployee && !cleanedBy) ||
+              (isEmployee && !employeeCleanerName) ||
+              !verified ||
+              submitting
+            }
           >
-            {submitting ? 'Saving…' : 'Confirm checkout'}
+            {submitting ? 'Guardando…' : isEmployee ? 'Confirmar limpieza' : 'Confirm checkout'}
           </Button>
         </div>
       </div>

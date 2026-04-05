@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/server/auth/session';
+import { requireSessionApi } from '@/server/auth/session';
 import { getCheckinEdits } from '@/lib/server/checkinsRepo';
 import { logError, logInfo } from '@/lib/server/log';
 import { HttpError, toErrorResponse } from '@/lib/server/httpError';
@@ -17,7 +17,10 @@ export async function GET(
   logInfo('api.checkins.edits.get.start', { requestId });
 
   try {
-    await requireAuth();
+    const session = await requireSessionApi();
+    if (session.role !== 'admin') {
+      throw new HttpError(403, 'FORBIDDEN', { message: 'Admin only' });
+    }
     const { id } = await params;
     if (!id || typeof id !== 'string') {
       return NextResponse.json({ error: 'Missing or invalid id' }, { status: 400 });

@@ -29,7 +29,10 @@ export default async function NewCheckinPage({
         <h1 className="page-title">Check-In / Checkout</h1>
         <p className="page-subtitle">Choose what you are registering</p>
         <CheckInTypeSelector />
-        <CheckoutRoomsSection />
+        <CheckoutRoomsSection
+          checkoutVariant={session.role === 'employee' ? 'employee' : 'admin'}
+          employeeCleanerName={session.displayName ?? session.username}
+        />
       </div>
     </AppLayout>
   );

@@ -59,11 +59,14 @@ function CheckinFormContent({
   allowAddCarMake = true,
   allowEditDateTime = true,
   occupiedRoomIds = [],
+  lockedStaffName,
 }: {
   allowAddCarMake?: boolean;
   allowEditDateTime?: boolean;
   /** Room ids (string form) currently occupied — not shown in room dropdown. */
   occupiedRoomIds?: string[];
+  /** When set, staff is fixed (employee auto-attribution); no dropdown. */
+  lockedStaffName?: string;
 }) {
   const router = useRouter();
   const { t } = useLanguage();
@@ -92,6 +95,12 @@ function CheckinFormContent({
       .then((res) => res.json())
       .then((data) => setCarMakes(data.carMakes ?? []));
   }, []);
+
+  useEffect(() => {
+    if (lockedStaffName) {
+      setForm((f) => ({ ...f, staff_name: lockedStaffName }));
+    }
+  }, [lockedStaffName]);
 
   const rawForValidation = useCallback((): Record<string, unknown> => {
     const splitsPayload: { method: string; amount: number | string }[] = paymentRows.map((r) => ({
@@ -483,12 +492,28 @@ function CheckinFormContent({
             {showError('car_color') && <div style={errorStyle}>{validation.errors.car_color}</div>}
           </label>
 
-          <StaffDropdown
-            value={form.staff_name}
-            onChange={(v) => update({ staff_name: v })}
-            onBlur={() => setTouchedField('staff_name')}
-            isAdmin={allowEditDateTime}
-          />
+          {lockedStaffName ? (
+            <label>
+              <div>{t('staff_name')}</div>
+              <input type="hidden" name="staff_name" value={lockedStaffName} />
+              <div
+                style={{
+                  ...inputStyle,
+                  backgroundColor: '#f9fafb',
+                  padding: '10px 12px',
+                }}
+              >
+                {lockedStaffName}
+              </div>
+            </label>
+          ) : (
+            <StaffDropdown
+              value={form.staff_name}
+              onChange={(v) => update({ staff_name: v })}
+              onBlur={() => setTouchedField('staff_name')}
+              isAdmin={allowEditDateTime}
+            />
+          )}
           {showError('staff_name') && <div style={errorStyle}>{validation.errors.staff_name}</div>}
         </div>
 
@@ -529,12 +554,19 @@ export default function CheckinForm({
   allowAddCarMake = true,
   allowEditDateTime = true,
   occupiedRoomIds = [],
-}: { allowAddCarMake?: boolean; allowEditDateTime?: boolean; occupiedRoomIds?: string[] } = {}) {
+  lockedStaffName,
+}: {
+  allowAddCarMake?: boolean;
+  allowEditDateTime?: boolean;
+  occupiedRoomIds?: string[];
+  lockedStaffName?: string;
+} = {}) {
   return (
     <CheckinFormContent
       allowAddCarMake={allowAddCarMake}
       allowEditDateTime={allowEditDateTime}
       occupiedRoomIds={occupiedRoomIds}
+      lockedStaffName={lockedStaffName}
     />
   );
 }

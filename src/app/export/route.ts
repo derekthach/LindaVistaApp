@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/server/auth/session';
+import { requireSessionApi } from '@/server/auth/session';
 import { requireAdmin } from '@/lib/server/requireAdmin';
 import { listCheckinsByDateRange } from '@/lib/server/checkinsRepo';
 import { logError, logInfo } from '@/lib/server/log';
@@ -17,7 +17,10 @@ export async function GET(request: NextRequest) {
     if (process.env.NODE_ENV === 'production') {
       requireEnvs(['SESSION_SECRET']);
     }
-    await requireAuth('admin');
+    const session = await requireSessionApi();
+    if (session.role !== 'admin') {
+      throw new HttpError(403, 'FORBIDDEN', { message: 'Admin only' });
+    }
     await requireAdmin(request);
     const searchParams = request.nextUrl.searchParams;
     const date = searchParams.get('date') ?? undefined;

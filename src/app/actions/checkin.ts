@@ -11,13 +11,23 @@ import { summarizeLineItems } from '@/lib/checkins/summarize';
 import { calculatePaymentSplitTotal, validatePaymentSplits } from '@/lib/checkins/roomPaymentSplits';
 import type { CheckIn, LineItem, SummarizedItem } from '@/types';
 import type { FoodBeerDraft } from '@/lib/checkins/draft';
+import { logError, logInfo } from '@/lib/server/log';
 
 export type RoomCheckinActionResult =
   | { success: true }
   | { success: false; error: string; fieldErrors?: Partial<Record<string, string>> };
 
 export async function submitCheckinAction(formData: FormData): Promise<RoomCheckinActionResult> {
-  await requireAuth();
+  const session = await requireAuth();
+
+  logInfo('checkin.room.submit.start', {
+    role: session.role,
+    username: session.username,
+    userId: session.userId ?? null,
+    room_id: formData.get('room_id'),
+    receipt_number: formData.get('receipt_number'),
+    has_payment_splits: Boolean(String(formData.get('payment_splits') ?? '').trim()),
+  });
 
   const raw = {
     room_id: formData.get('room_id'),
@@ -30,12 +40,19 @@ export async function submitCheckinAction(formData: FormData): Promise<RoomCheck
     car_plate: formData.get('car_plate'),
     car_make: formData.get('car_make'),
     car_color: formData.get('car_color'),
-    staff_name: formData.get('staff_name'),
+    staff_name:
+      session.role === 'employee'
+        ? (session.displayName ?? session.username)
+        : formData.get('staff_name'),
     note: formData.get('note'),
   };
 
   const validation = validateRoomCheckin(raw as Record<string, unknown>);
   if (!validation.valid) {
+    logInfo('checkin.room.submit.validation_failed', {
+      role: session.role,
+      errors: validation.errors,
+    });
     return {
       success: false,
       error: Object.values(validation.errors).find(Boolean) ?? 'Please fix the errors below.',
@@ -62,6 +79,7 @@ export async function submitCheckinAction(formData: FormData): Promise<RoomCheck
     ? calculatePaymentSplitTotal(resolvedSplits)
     : Number(raw.cost);
 
+  const staffName = String(raw.staff_name).trim();
   const data: Omit<CheckIn, 'checkin_id'> = {
     room_id: parseRoomOptionValue(String(raw.room_id ?? '1')),
     receipt_number: receiptPadded,
@@ -72,14 +90,34 @@ export async function submitCheckinAction(formData: FormData): Promise<RoomCheck
       ? resolvedSplits[0].method
       : normalizePaymentMethod(raw.payment_method != null ? String(raw.payment_method) : undefined),
     ...(resolvedSplits ? { payment_splits: resolvedSplits } : {}),
-    staff_name: String(raw.staff_name).trim(),
+    staff_name: staffName,
     car_plate: carPlate,
     car_make: carMake,
     car_color: String(raw.car_color).trim(),
     note: note || undefined,
+    ...(session.role === 'employee'
+      ? {
+          employee_id: session.userId,
+          employee_name_snapshot: staffName,
+          created_by_role: 'employee',
+        }
+      : { created_by_role: 'admin' }),
   };
 
-  await createCheckin(data);
+  try {
+    const receiptNumber = await createCheckin(data);
+    logInfo('checkin.room.submit.success', {
+      receiptNumber,
+      role: session.role,
+      userId: session.userId ?? null,
+      room_id: data.room_id,
+      created_by_role: data.created_by_role ?? null,
+    });
+  } catch (err) {
+    logError('checkin.room.submit.failure', { message: String(err) });
+    throw err;
+  }
+
   redirect('/checkins/new');
 }
 
@@ -87,11 +125,14 @@ export async function submitSimpleCheckinAction(
   checkInType: 'food' | 'beer',
   formData: FormData
 ): Promise<{ error?: string; lineItemErrors?: Record<number, { quantitySold?: string; amountCollected?: string; itemId?: string }> } | void> {
-  await requireAuth();
+  const session = await requireAuth();
 
   const date = (formData.get('date') as string)?.trim();
   const time = (formData.get('time') as string)?.trim();
-  const staff_name = (formData.get('staff_name') as string)?.trim();
+  const staff_name =
+    session.role === 'employee'
+      ? (session.displayName ?? session.username).trim()
+      : ((formData.get('staff_name') as string) ?? '').trim();
   const notes = (formData.get('notes') as string)?.trim() || undefined;
   let lineItems: LineItem[] = [];
   let summarizedItems: SummarizedItem[] = [];
@@ -132,6 +173,13 @@ export async function submitSimpleCheckinAction(
     lineItems,
     summarizedItems,
     notes,
+    ...(session.role === 'employee'
+      ? {
+          employee_id: session.userId,
+          employee_name_snapshot: staff_name!,
+          created_by_role: 'employee' as const,
+        }
+      : { created_by_role: 'admin' as const }),
   });
   redirect('/checkins/new');
 }
@@ -140,12 +188,17 @@ export async function submitSimpleCheckinAction(
 export async function confirmFoodBeerCheckinAction(
   draft: FoodBeerDraft
 ): Promise<{ error?: string }> {
-  await requireAuth();
+  const session = await requireAuth();
+
+  const staff_name =
+    session.role === 'employee'
+      ? (session.displayName ?? session.username).trim()
+      : draft.staff_name.trim();
 
   const validation = validateSimpleCheckin({
     date: draft.date,
     time: draft.time,
-    staff_name: draft.staff_name,
+    staff_name,
     checkInType: draft.checkInType,
     lineItems: draft.lineItems,
     notes: draft.notes,
@@ -162,10 +215,17 @@ export async function confirmFoodBeerCheckinAction(
   await createSimpleCheckin(draft.checkInType, {
     date: draft.date,
     time: draft.time,
-    staff_name: draft.staff_name,
+    staff_name,
     lineItems: draft.lineItems,
     summarizedItems,
     notes: draft.notes,
+    ...(session.role === 'employee'
+      ? {
+          employee_id: session.userId,
+          employee_name_snapshot: staff_name,
+          created_by_role: 'employee' as const,
+        }
+      : { created_by_role: 'admin' as const }),
   });
   return {};
 }

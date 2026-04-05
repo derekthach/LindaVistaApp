@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/server/auth/session';
+import { requireSessionApi } from '@/server/auth/session';
 import { getCarMakes, addCarMake } from '@/lib/server/carMakesRepo';
 import { logError, logInfo } from '@/lib/server/log';
 import { HttpError, toErrorResponse } from '@/lib/server/httpError';
@@ -15,7 +15,7 @@ export async function GET() {
     if (process.env.NODE_ENV === 'production') {
       requireEnvs(['SESSION_SECRET']);
     }
-    await requireAuth();
+    await requireSessionApi();
     const makes = await getCarMakes();
     return NextResponse.json({ carMakes: makes.map((m) => m.nameUpper) });
   } catch (err) {
@@ -34,7 +34,10 @@ export async function POST(request: Request) {
     if (process.env.NODE_ENV === 'production') {
       requireEnvs(['SESSION_SECRET']);
     }
-    await requireAuth();
+    const session = await requireSessionApi();
+    if (session.role !== 'admin') {
+      throw new HttpError(403, 'FORBIDDEN', { message: 'Only admins can add car makes' });
+    }
     const body = await request.json();
     const name = typeof body?.name === 'string' ? body.name.trim() : '';
     if (!name) {

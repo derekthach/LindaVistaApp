@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/server/auth/session';
+import { requireSessionApi } from '@/server/auth/session';
 import { checkoutRoomCheckin } from '@/lib/server/checkinsRepo';
 import { STAFF_MEMBERS } from '@/lib/checkins/constants';
 import { logError, logInfo } from '@/lib/server/log';
@@ -17,15 +17,18 @@ export async function POST(
   logInfo('api.checkins.checkout.start', { requestId });
 
   try {
-    const session = await requireAuth();
+    const session = await requireSessionApi();
     const { id } = await params;
     if (!id || typeof id !== 'string') {
       return NextResponse.json({ error: 'Missing check-in id' }, { status: 400 });
     }
 
     const body = await request.json().catch(() => ({}));
-    const cleanedBy =
+    let cleanedBy =
       typeof body.cleanedBy === 'string' ? body.cleanedBy.trim() : '';
+    if (session.role === 'employee') {
+      cleanedBy = (session.displayName ?? session.username).trim();
+    }
     if (!cleanedBy) {
       return NextResponse.json({ error: 'Cleaner staff is required' }, { status: 400 });
     }

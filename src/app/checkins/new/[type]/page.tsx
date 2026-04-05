@@ -41,10 +41,18 @@ export default async function NewCheckinByTypePage({ params }: PageProps) {
             : 'Register date, time, and staff'}
         </p>
         {type === 'room' && (
-          <RoomCheckinForm isAdmin={session.role === 'admin'} occupiedRoomIds={occupiedRoomIds} />
+          <RoomCheckinForm
+            isAdmin={session.role === 'admin'}
+            occupiedRoomIds={occupiedRoomIds}
+            employeeDisplayName={session.displayName ?? session.username}
+          />
         )}
         {(type === 'food' || type === 'beer') && (
-          <SimpleCheckinForm type={type} isAdmin={session.role === 'admin'} />
+          <SimpleCheckinForm
+            type={type}
+            isAdmin={session.role === 'admin'}
+            employeeDisplayName={session.displayName ?? session.username}
+          />
         )}
       </div>
     </AppLayout>

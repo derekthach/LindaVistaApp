@@ -6,7 +6,13 @@ import type { CheckIn } from '@/types';
 import { formatRoomDisplay } from '@/lib/checkins/rooms';
 import RoomCheckoutModal from '@/components/checkins/RoomCheckoutModal';
 
-export default function CheckoutRoomsSection() {
+export default function CheckoutRoomsSection({
+  checkoutVariant = 'admin',
+  employeeCleanerName,
+}: {
+  checkoutVariant?: 'admin' | 'employee';
+  employeeCleanerName?: string;
+} = {}) {
   const router = useRouter();
   const [checkins, setCheckins] = useState<CheckIn[]>([]);
   const [loading, setLoading] = useState(true);
@@ -121,6 +127,8 @@ export default function CheckoutRoomsSection() {
           setSelected(null);
         }}
         onSuccess={handleSuccess}
+        variant={checkoutVariant}
+        employeeCleanerName={employeeCleanerName}
       />
     </>
   );

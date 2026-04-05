@@ -1,5 +1,7 @@
 import Sidebar from './Sidebar';
 import AppContentWithLanguage from './AppContentWithLanguage';
+import InactivityGuard from './InactivityGuard';
+import SessionTouchOnNavigate from './SessionTouchOnNavigate';
 import type { UserRole } from '@/types';
 
 export default function AppLayout({
@@ -13,6 +15,8 @@ export default function AppLayout({
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       <Sidebar role={role} />
       <main style={{ flex: 1, padding: 24 }}>
+        <SessionTouchOnNavigate />
+        {role === 'employee' && <InactivityGuard />}
         <AppContentWithLanguage role={role}>{children}</AppContentWithLanguage>
       </main>
     </div>

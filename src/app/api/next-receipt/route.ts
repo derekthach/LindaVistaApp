@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/server/auth/session';
+import { requireSessionApi } from '@/server/auth/session';
 import { getNextReceiptNumber } from '@/lib/server/checkinsRepo';
 import { logError, logInfo } from '@/lib/server/log';
 import { HttpError, toErrorResponse } from '@/lib/server/httpError';
@@ -15,7 +15,7 @@ export async function GET() {
     if (process.env.NODE_ENV === 'production') {
       requireEnvs(['SESSION_SECRET']);
     }
-    await requireAuth();
+    await requireSessionApi();
     const nextReceipt = await getNextReceiptNumber();
     return NextResponse.json({ next_receipt_number: nextReceipt });
   } catch (err) {

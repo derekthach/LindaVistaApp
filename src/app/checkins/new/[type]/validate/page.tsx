@@ -22,7 +22,12 @@ export default async function ValidateCheckinPage({ params }: PageProps) {
           {type === 'food' ? 'Food & Beverage' : 'Beer'} — Review
         </h1>
         <p className="page-subtitle">Review the information before submitting</p>
-        <FoodBeerValidateClient type={type as 'food' | 'beer'} />
+        <FoodBeerValidateClient
+          type={type as 'food' | 'beer'}
+          staffDisplayOverride={
+            session.role === 'employee' ? session.displayName ?? session.username : undefined
+          }
+        />
       </div>
     </AppLayout>
   );

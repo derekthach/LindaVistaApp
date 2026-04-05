@@ -16,7 +16,13 @@ function centsToCurrency(cents: number): string {
   }).format(cents / 100);
 }
 
-function ValidateContent({ type }: { type: 'food' | 'beer' }) {
+function ValidateContent({
+  type,
+  staffDisplayOverride,
+}: {
+  type: 'food' | 'beer';
+  staffDisplayOverride?: string;
+}) {
   const router = useRouter();
   const { t } = useLanguage();
   const [draft, setDraft] = useState<FoodBeerDraft | null>(null);
@@ -82,7 +88,7 @@ function ValidateContent({ type }: { type: 'food' | 'beer' }) {
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <strong>{t('staff_name')}:</strong>
-          <span>{draft.staff_name}</span>
+          <span>{staffDisplayOverride ?? draft.staff_name}</span>
         </div>
 
         <div style={{ marginTop: 8 }}>
@@ -165,6 +171,12 @@ function ValidateContent({ type }: { type: 'food' | 'beer' }) {
   );
 }
 
-export default function FoodBeerValidateClient({ type }: { type: 'food' | 'beer' }) {
-  return <ValidateContent type={type} />;
+export default function FoodBeerValidateClient({
+  type,
+  staffDisplayOverride,
+}: {
+  type: 'food' | 'beer';
+  staffDisplayOverride?: string;
+}) {
+  return <ValidateContent type={type} staffDisplayOverride={staffDisplayOverride} />;
 }
