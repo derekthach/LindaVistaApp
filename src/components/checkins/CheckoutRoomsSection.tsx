@@ -76,7 +76,7 @@ export default function CheckoutRoomsSection({
           >
             {checkins.map((c) => (
               <button
-                key={c.id ?? c.receipt_number}
+                key={c.id ?? `${c.receipt_number}-${c.room_id}`}
                 type="button"
                 onClick={() => openModal(c)}
                 style={{

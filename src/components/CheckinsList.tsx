@@ -83,6 +83,12 @@ function orDash(value: string | undefined): string {
   return value?.trim() ? value.trim() : '—';
 }
 
+/** Firestore-backed rows always have `id`; avoid receipt-only keys so duplicate receipts stay distinct in the UI. */
+function stableCheckinRowId(c: CheckIn): string {
+  if (c.id) return c.id;
+  return `legacy:${c.receipt_number}:${c.date}:${c.time}:${String(c.room_id)}:${c.cost}`;
+}
+
 function DetailsPanel({ checkin, t }: { checkin: CheckIn; t: (key: TranslationKey) => string }) {
   const isRoom = checkin.checkInType !== 'food' && checkin.checkInType !== 'beer';
   const gridStyle = {
@@ -231,7 +237,7 @@ export default function CheckinsList({
   const colCount = 8;
   const colCountForTotal = colCount - 1;
   const toggleExpanded = (checkin: CheckIn) => {
-    const id = checkin.id ?? checkin.receipt_number;
+    const id = stableCheckinRowId(checkin);
     setExpandedId((prev) => (prev === id ? null : id));
   };
 
@@ -430,7 +436,7 @@ export default function CheckinsList({
   }, [dateFilterActive, initialCheckins]);
 
   const renderActionsCell = (checkin: CheckIn) => {
-    const rowId = checkin.id ?? checkin.receipt_number;
+    const rowId = stableCheckinRowId(checkin);
     const isExpanded = expandedId === rowId;
     return (
       <td style={{ padding: 8, width: 112, textAlign: 'right', verticalAlign: 'middle' }}>
@@ -486,7 +492,7 @@ export default function CheckinsList({
                 </td>
               </tr>
               {sectioned.buckets[idx].map((checkin) => (
-                <Fragment key={checkin.id ?? checkin.receipt_number}>
+                <Fragment key={stableCheckinRowId(checkin)}>
                   <tr>
                     <td style={{ padding: 8 }}>{formatReceiptNumber(checkin.receipt_number ?? '')}</td>
                     <td style={{ padding: 8 }}>{checkin.date}</td>
@@ -497,7 +503,7 @@ export default function CheckinsList({
                     <td style={{ padding: 8 }}>${Number(checkin.cost).toFixed(2)}</td>
                     {renderActionsCell(checkin)}
                   </tr>
-                  {expandedId === (checkin.id ?? checkin.receipt_number) && (
+                  {expandedId === stableCheckinRowId(checkin) && (
                     <tr>
                       <td colSpan={colCount} style={{ padding: 0, borderBottom: '1px solid #e5e7eb', verticalAlign: 'top' }}>
                         <div className="checkin-expanded-grid">
@@ -531,7 +537,7 @@ export default function CheckinsList({
       );
     }
     return initialCheckins.map((checkin) => (
-      <Fragment key={checkin.id ?? checkin.receipt_number}>
+      <Fragment key={stableCheckinRowId(checkin)}>
         <tr>
           <td style={{ padding: 8 }}>{formatReceiptNumber(checkin.receipt_number ?? '')}</td>
           <td style={{ padding: 8 }}>{checkin.date}</td>
@@ -542,7 +548,7 @@ export default function CheckinsList({
           <td style={{ padding: 8 }}>${Number(checkin.cost).toFixed(2)}</td>
           {renderActionsCell(checkin)}
         </tr>
-        {expandedId === (checkin.id ?? checkin.receipt_number) && (
+        {expandedId === stableCheckinRowId(checkin) && (
           <tr>
             <td colSpan={colCount} style={{ padding: 0, borderBottom: '1px solid #e5e7eb', verticalAlign: 'top' }}>
               <div className="checkin-expanded-grid">

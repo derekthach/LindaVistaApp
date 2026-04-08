@@ -29,6 +29,8 @@ export interface CheckinDoc {
   paymentSplits?: RoomPaymentSplit[];
   totalCollected?: number;
   isCheckedOut?: boolean;
+  /** Set on room check-ins created with verify-step idempotency (Firestore: roomSubmissionKey). */
+  roomSubmissionKey?: string;
   checkedOutAt?: Timestamp;
   cleanedAt?: Timestamp;
   checkedOutBy?: string;

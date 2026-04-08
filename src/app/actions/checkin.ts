@@ -12,6 +12,7 @@ import { calculatePaymentSplitTotal, validatePaymentSplits } from '@/lib/checkin
 import type { CheckIn, LineItem, SummarizedItem } from '@/types';
 import type { FoodBeerDraft } from '@/lib/checkins/draft';
 import { logError, logInfo } from '@/lib/server/log';
+import { isValidRoomSubmissionKey } from '@/lib/checkins/roomSubmissionKey';
 
 export type RoomCheckinActionResult =
   | { success: true }
@@ -28,6 +29,19 @@ export async function submitCheckinAction(formData: FormData): Promise<RoomCheck
     receipt_number: formData.get('receipt_number'),
     has_payment_splits: Boolean(String(formData.get('payment_splits') ?? '').trim()),
   });
+
+  const submissionKeyRaw = formData.get('submission_key');
+  const submissionKey =
+    typeof submissionKeyRaw === 'string' && isValidRoomSubmissionKey(submissionKeyRaw)
+      ? submissionKeyRaw.trim()
+      : null;
+  if (!submissionKey) {
+    logInfo('checkin.room.submit.missing_submission_key', { role: session.role });
+    return {
+      success: false,
+      error: 'This confirmation is out of date. Go back to the room form and submit again.',
+    };
+  }
 
   const raw = {
     room_id: formData.get('room_id'),
@@ -105,7 +119,7 @@ export async function submitCheckinAction(formData: FormData): Promise<RoomCheck
   };
 
   try {
-    const receiptNumber = await createCheckin(data);
+    const receiptNumber = await createCheckin(data, { submissionKey });
     logInfo('checkin.room.submit.success', {
       receiptNumber,
       role: session.role,

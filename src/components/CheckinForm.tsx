@@ -17,6 +17,7 @@ import {
 } from '@/lib/checkins/roomPaymentSplits';
 import type { RoomPaymentSplit } from '@/types';
 import { ROOM_OPTIONS, parseRoomOptionValue, type RoomId } from '@/lib/checkins/rooms';
+import { createRoomSubmissionKey } from '@/lib/checkins/roomSubmissionKey';
 import { getAvailableRoomOptions } from '@/lib/checkins/roomOccupancy';
 import StaffDropdown from '@/components/checkins/StaffDropdown';
 import CarMakeCombobox from '@/components/checkins/CarMakeCombobox';
@@ -249,6 +250,7 @@ function CheckinFormContent({
         method: r.method,
         amount: r.amount.trim() === '' ? '' : Number(r.amount),
       }));
+      const submissionKey = createRoomSubmissionKey();
       const data: Record<string, string> = {
         room_id: String(form.room_id),
         receipt_number: normalizeReceipt(form.receipt_number) ?? form.receipt_number,
@@ -260,6 +262,7 @@ function CheckinFormContent({
         car_color: form.car_color,
         staff_name: form.staff_name.trim(),
         note: form.note.trim().slice(0, NOTE_MAX),
+        submission_key: submissionKey,
       };
       sessionStorage.setItem('checkinData', JSON.stringify(data));
       router.push('/checkin/verify');

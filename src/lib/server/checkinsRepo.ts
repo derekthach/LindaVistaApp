@@ -1,4 +1,4 @@
-import { Timestamp } from 'firebase-admin/firestore';
+import { Timestamp, FieldValue } from 'firebase-admin/firestore';
 import { DateTime } from 'luxon';
 import { getAdminDb } from './firebaseAdmin';
 import { isFirestoreUnavailableError, isProduction } from './firestoreError';
@@ -25,8 +25,12 @@ import {
   roundMoney,
 } from '@/lib/checkins/roomPaymentSplits';
 import { sortRoomsForDisplay } from '@/lib/checkins/roomOccupancy';
+import { dedupeActiveRoomStaySnapshots } from '@/lib/server/activeRoomStayDedupe';
+import { logInfo } from '@/lib/server/log';
 
 const CHECKINS_COLLECTION = 'checkins';
+/** Idempotency ledger: one doc per room check-in confirmation (client submission_key). */
+const ROOM_CHECKIN_IDEMPOTENCY_COLLECTION = 'room_checkin_idempotency';
 const COUNTERS_COLLECTION = 'counters';
 const RECEIPT_COUNTER_ID = 'receipt';
 const SETTINGS_COLLECTION = 'settings';
@@ -37,9 +41,15 @@ export type CreateCheckinInput = Omit<CheckIn, 'checkin_id'>;
 /**
  * Room check-in: uses the provided receipt number and updates the single source of truth
  * (settings/receipts.nextReceiptNumber) to (providedReceiptNumber + 1) so the next
- * form load shows the next receipt. Duplicates allowed; no duplicate check.
+ * form load shows the next receipt.
+ *
+ * When `submissionKey` is set (required from the verify step), the same key only ever creates
+ * one stay: retries / double-clicks return the original receipt without a second write.
  */
-export async function createCheckin(data: CreateCheckinInput): Promise<string> {
+export async function createCheckin(
+  data: CreateCheckinInput,
+  options?: { submissionKey?: string }
+): Promise<string> {
   const db = getAdminDb();
   const settingsRef = db.collection(SETTINGS_COLLECTION).doc(RECEIPTS_DOC_ID);
   const checkinsRef = db.collection(CHECKINS_COLLECTION);
@@ -50,7 +60,27 @@ export async function createCheckin(data: CreateCheckinInput): Promise<string> {
     throw new Error('Invalid receipt number');
   }
 
+  const submissionKey = options?.submissionKey?.trim();
+  const idempotencyRef =
+    submissionKey != null && submissionKey !== ''
+      ? db.collection(ROOM_CHECKIN_IDEMPOTENCY_COLLECTION).doc(submissionKey)
+      : null;
+
   const result = await db.runTransaction(async (tx) => {
+    if (idempotencyRef) {
+      const idemSnap = await tx.get(idempotencyRef);
+      if (idemSnap.exists) {
+        const stored = idemSnap.data()?.receiptNumber;
+        if (stored != null && String(stored).trim() !== '') {
+          logInfo('checkin.room.create.idempotent_hit', { submissionKey });
+          return {
+            receiptNumber: formatReceiptNumber(String(stored)),
+            duplicate: true as const,
+          };
+        }
+      }
+    }
+
     const dt = DateTime.fromFormat(
       `${data.date} ${data.time}`,
       'yyyy-MM-dd HH:mm',
@@ -78,6 +108,10 @@ export async function createCheckin(data: CreateCheckinInput): Promise<string> {
       note: data.note ?? '',
     };
 
+    if (submissionKey) {
+      doc.roomSubmissionKey = submissionKey;
+    }
+
     if (data.employee_id) doc.employeeId = data.employee_id;
     if (data.employee_name_snapshot) doc.employeeNameSnapshot = data.employee_name_snapshot;
     if (data.created_by_role) doc.createdByRole = data.created_by_role;
@@ -98,7 +132,15 @@ export async function createCheckin(data: CreateCheckinInput): Promise<string> {
     const nextReceiptNumber = receiptNum + 1;
     tx.set(settingsRef, { nextReceiptNumber }, { merge: true });
 
-    return { id: newRef.id, receiptNumber };
+    if (idempotencyRef) {
+      tx.set(idempotencyRef, {
+        checkinId: newRef.id,
+        receiptNumber,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    }
+
+    return { id: newRef.id, receiptNumber, duplicate: false as const };
   });
 
   return result.receiptNumber;
@@ -279,6 +321,9 @@ export async function deleteCheckinById(id: string): Promise<void> {
 /**
  * Room stays awaiting checkout: checkInType room and isCheckedOut === false. Sorted by room number.
  * Legacy room docs without isCheckedOut are excluded (not considered active stays).
+ *
+ * Defensive: if multiple active docs exist for the same room (historical double-writes), only the
+ * canonical stay (newest by max(createdAt, checkInAt)) is returned so checkout tiles stay unique.
  */
 export async function listActiveOccupiedRoomCheckins(): Promise<CheckIn[]> {
   try {
@@ -288,7 +333,8 @@ export async function listActiveOccupiedRoomCheckins(): Promise<CheckIn[]> {
       .where('checkInType', '==', 'room')
       .where('isCheckedOut', '==', false)
       .get();
-    const list = snapshot.docs.map((doc) => normalizeCheckin(doc.id, doc.data()));
+    const canonicalDocs = dedupeActiveRoomStaySnapshots(snapshot.docs);
+    const list = canonicalDocs.map((doc) => normalizeCheckin(doc.id, doc.data()));
     return sortRoomsForDisplay(list);
   } catch (err) {
     if (isFirestoreUnavailableError(err)) {

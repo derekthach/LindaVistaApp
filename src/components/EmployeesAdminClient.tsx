@@ -4,6 +4,7 @@ import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { adminResetEmployeePasswordAction } from '@/app/actions/employeesAdmin';
+import { LV_PENDING_RESETS_INVALIDATE } from '@/lib/adminNavEvents';
 
 export type EmployeeTableRow = {
   id: string;
@@ -51,6 +52,7 @@ function ResetPasswordModal({
 
   const handleClose = () => {
     if (state?.ok) {
+      window.dispatchEvent(new CustomEvent(LV_PENDING_RESETS_INVALIDATE));
       router.refresh();
     }
     onClose();
