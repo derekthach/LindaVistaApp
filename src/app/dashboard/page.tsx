@@ -26,7 +26,12 @@ export default async function DashboardPage() {
   }
 
   return (
-    <AppLayout role={session.role}>
+    <AppLayout
+      role={session.role}
+      employeeGreetingName={
+        session.role === 'employee' ? (session.displayName ?? session.username) : undefined
+      }
+    >
       <DashboardEnsureAdminCookie />
       <DashboardLogger />
       <div className="container">

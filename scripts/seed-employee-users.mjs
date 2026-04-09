@@ -1,5 +1,5 @@
 /**
- * Seeds the Firestore `users` collection with six employee accounts.
+ * Seeds the Firestore `users` collection with employee accounts (see `employees` array below).
  *
  * Prerequisites: same env as the app (GOOGLE_APPLICATION_CREDENTIALS or FIREBASE_SERVICE_ACCOUNT_JSON, etc.)
  * and GOOGLE_CLOUD_PROJECT / FIREBASE_PROJECT_ID.
@@ -106,6 +106,8 @@ const employees = [
   { id: 'tono', fullName: 'Tono', nickname: null, username: 'tono' },
   { id: 'jose', fullName: 'Jose', nickname: 'Ivan', username: 'jose' },
   { id: 'makito', fullName: 'Makito', nickname: null, username: 'makito' },
+  /** Login username `keith`; session/display name matches STAFF_MEMBERS for check-ins. */
+  { id: 'keith', fullName: 'Keith Thach', nickname: null, username: 'keith' },
 ];
 
 async function main() {

@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "seed:users": "node scripts/seed-employee-users.mjs"
+    "seed:users": "node scripts/seed-employee-users.mjs",
+    "add:employee:keith": "node --env-file=.env.local scripts/add-keith-thach-employee.mjs"
   },
   "dependencies": {
     "@vercel/analytics": "^1.6.1",

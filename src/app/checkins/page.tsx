@@ -23,7 +23,12 @@ export default async function CheckinsPage({
   const checkins = await listCheckinsByDateRange(startISO, endISO);
 
   return (
-    <AppLayout role={session.role}>
+    <AppLayout
+      role={session.role}
+      employeeGreetingName={
+        session.role === 'employee' ? (session.displayName ?? session.username) : undefined
+      }
+    >
       <div className="container">
         <LocalizedPageHeading titleKey="view_checkins_title" subtitleKey="view_checkins_subtitle" />
         <CheckinsList initialCheckins={checkins} initialDate={params.date} role={session.role} />

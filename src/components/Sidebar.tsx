@@ -8,7 +8,14 @@ import { LV_PENDING_RESETS_INVALIDATE } from '@/lib/adminNavEvents';
 import { useTranslation } from '@/lib/i18n/useTranslation';
 import type { UserRole } from '@/types';
 
-export default function Sidebar({ role }: { role: UserRole }) {
+export default function Sidebar({
+  role,
+  employeeGreetingName,
+}: {
+  role: UserRole;
+  /** First-party name for “Hi {name}” (employees only). */
+  employeeGreetingName?: string;
+}) {
   const { t } = useTranslation();
   const pathname = usePathname();
   const [pendingResetCount, setPendingResetCount] = useState(0);
@@ -58,7 +65,18 @@ export default function Sidebar({ role }: { role: UserRole }) {
     >
       <div style={{ padding: 20, borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
         <div style={{ fontWeight: 700, fontSize: 18 }}>{t('login_title')}</div>
-        <div style={{ fontSize: 12, opacity: 0.8, marginTop: 4 }}>
+        {role === 'employee' && employeeGreetingName?.trim() ? (
+          <div style={{ fontSize: 13, fontWeight: 600, marginTop: 8, opacity: 0.95 }}>
+            {t('sidebar_employee_greeting', { name: employeeGreetingName.trim() })}
+          </div>
+        ) : null}
+        <div
+          style={{
+            fontSize: 12,
+            opacity: 0.8,
+            marginTop: role === 'employee' && employeeGreetingName?.trim() ? 6 : 4,
+          }}
+        >
           {role === 'admin' ? t('admin_mode') : t('employee_mode')}
         </div>
       </div>

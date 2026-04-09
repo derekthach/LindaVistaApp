@@ -28,7 +28,12 @@ export default async function NewCheckinByTypePage({ params }: PageProps) {
   }
 
   return (
-    <AppLayout role={session.role}>
+    <AppLayout
+      role={session.role}
+      employeeGreetingName={
+        session.role === 'employee' ? (session.displayName ?? session.username) : undefined
+      }
+    >
       <div className="container">
         <CheckinFormBackButton />
         <CheckinFormPageHeading type={type} />

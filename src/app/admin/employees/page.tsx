@@ -33,7 +33,12 @@ export default async function AdminEmployeesPage() {
   const [users, pendingResetCount] = await Promise.all([listUsersPublic(), countPendingPasswordResets()]);
 
   return (
-    <AppLayout role={session.role}>
+    <AppLayout
+      role={session.role}
+      employeeGreetingName={
+        session.role === 'employee' ? (session.displayName ?? session.username) : undefined
+      }
+    >
       <div className="container">
         <LocalizedPageHeading titleKey="employees_title" subtitleKey="employees_subtitle" />
         <EmployeesAdminClient users={users.map(toTableRow)} pendingResetCount={pendingResetCount} />

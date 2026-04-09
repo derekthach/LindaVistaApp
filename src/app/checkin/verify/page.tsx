@@ -14,7 +14,12 @@ export default async function VerifyCheckinPage() {
   });
 
   return (
-    <AppLayout role={session.role}>
+    <AppLayout
+      role={session.role}
+      employeeGreetingName={
+        session.role === 'employee' ? (session.displayName ?? session.username) : undefined
+      }
+    >
       <div className="container">
         <LocalizedPageHeading titleKey="verify" subtitleKey="review_before_submitting" />
         <VerifyCheckinForm />
