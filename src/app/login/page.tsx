@@ -6,6 +6,12 @@ export const dynamic = 'force-dynamic';
 
 type SearchParams = Promise<{ error?: string }>;
 
+const LOGIN_ERROR_COPY: Record<string, string> = {
+  missing: 'Enter your username and password.',
+  invalid: 'Incorrect username or password. Please try again.',
+  server: 'Something went wrong while signing in. Please try again.',
+};
+
 export default async function LoginPage({ searchParams }: { searchParams: SearchParams }) {
   await flushStaleSessionOnLoginPage();
   const session = await getSession();
@@ -18,6 +24,9 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
 
   const params = await searchParams;
   const configError = params.error === 'config';
+  const authErrorKey = params.error;
+  const authErrorMessage =
+    authErrorKey && authErrorKey !== 'config' ? LOGIN_ERROR_COPY[authErrorKey] ?? null : null;
 
   return (
     <>
@@ -69,6 +78,23 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
         <h1 className="page-title">Linda Vista Motel</h1>
         <p className="page-subtitle">Management System Login</p>
 
+        {authErrorMessage && (
+          <div
+            role="alert"
+            style={{
+              marginBottom: 12,
+              padding: 12,
+              background: '#fef2f2',
+              border: '1px solid #fecaca',
+              borderRadius: 8,
+              color: '#991b1b',
+              fontSize: 14,
+            }}
+          >
+            {authErrorMessage}
+          </div>
+        )}
+
         <form action="/api/auth/login" method="POST" style={{ display: 'grid', gap: 16 }}>
           <label>
             <div style={{ fontWeight: 600, marginBottom: 6 }}>Username</div>
@@ -76,6 +102,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
               name="username"
               type="text"
               required
+              autoComplete="username"
               style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #d1d5db' }}
             />
           </label>
@@ -86,6 +113,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
               name="password"
               type="password"
               required
+              autoComplete="current-password"
               style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #d1d5db' }}
             />
           </label>

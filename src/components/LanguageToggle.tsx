@@ -168,25 +168,28 @@ export function LanguageProvider({
   defaultLanguage,
 }: {
   children: React.ReactNode;
-  /** When 'es', initial language is Spanish and we do not restore from localStorage (e.g. employee default). */
+  /**
+   * `es` = employee UI: default to Spanish when there is no saved preference yet.
+   * Saved `preferredLanguage` always wins so toggling to English persists per device.
+   */
   defaultLanguage?: Language;
 }) {
   const [language, setLanguageState] = useState<Language>(() => {
-    if (defaultLanguage) return defaultLanguage;
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('preferredLanguage') as Language | null;
-      if (saved) return saved;
+      const raw = localStorage.getItem('preferredLanguage');
+      if (raw === 'en' || raw === 'es') return raw;
     }
+    if (defaultLanguage === 'es') return 'es';
     return 'en';
   });
 
   useEffect(() => {
-    if (defaultLanguage === 'es') {
-      setLanguageState('es');
+    const raw = localStorage.getItem('preferredLanguage');
+    if (raw === 'en' || raw === 'es') {
+      setLanguageState(raw);
       return;
     }
-    const saved = localStorage.getItem('preferredLanguage') as Language | null;
-    if (saved) setLanguageState(saved);
+    if (defaultLanguage === 'es') setLanguageState('es');
   }, [defaultLanguage]);
 
   const setLanguage = (lang: Language) => {

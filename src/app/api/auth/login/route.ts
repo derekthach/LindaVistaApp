@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { getIronSession } from 'iron-session';
 import { loginSessionOptions } from '@/server/auth/session';
 import type { SessionData } from '@/types';
@@ -14,11 +15,20 @@ function getOrigin(request: NextRequest): string {
   return `${proto}://${host}`;
 }
 
+function loginRedirect(origin: string, error?: string) {
+  const path = error ? `/login?error=${encodeURIComponent(error)}` : '/login';
+  return NextResponse.redirect(new URL(path, origin), 303);
+}
+
+/**
+ * Login uses `getIronSession(await cookies(), opts)` then `session.save()` before returning
+ * `NextResponse.redirect`, matching iron-session’s App Router pattern. Writing the session
+ * onto a redirect response created first (`getIronSession(req, res, opts)`) can fail to attach
+ * Set-Cookie reliably in some Next.js / hosting combinations — a common cause of “login twice”.
+ */
 export async function POST(request: NextRequest) {
   const origin = getOrigin(request);
   try {
-    // In production (including Preview), SESSION_SECRET is required or the session cookie
-    // won’t be valid. Without it, redirect so the user sees the config error on the login page.
     if (process.env.NODE_ENV === 'production' && !process.env.SESSION_SECRET) {
       return NextResponse.redirect(new URL('/login?error=config', origin), 303);
     }
@@ -28,12 +38,12 @@ export async function POST(request: NextRequest) {
     const password = formData.get('password') as string;
 
     if (!username || !password) {
-      return NextResponse.redirect(new URL('/login', origin));
+      return loginRedirect(origin, 'missing');
     }
 
     const user = await authenticateUser(username, password);
     if (!user) {
-      return NextResponse.redirect(new URL('/login', origin));
+      return loginRedirect(origin, 'invalid');
     }
 
     const redirectPath = user.mustChangePassword
@@ -41,10 +51,9 @@ export async function POST(request: NextRequest) {
       : user.role === 'admin'
         ? '/dashboard'
         : '/checkins/new';
-    const res = NextResponse.redirect(new URL(redirectPath, origin), 303);
-    res.headers.set('Cache-Control', 'private, no-store, max-age=0');
-    const opts = loginSessionOptions(user.role);
-    const session = await getIronSession<SessionData>(request, res, opts);
+
+    const cookieStore = await cookies();
+    const session = await getIronSession<SessionData>(cookieStore, loginSessionOptions(user.role));
     session.username = user.username;
     session.role = user.role;
     session.isLoggedIn = true;
@@ -55,9 +64,12 @@ export async function POST(request: NextRequest) {
     session.hardExpiresAt = now + sessionHardMsForRole(user.role);
     session.lastActivityAt = now;
     await session.save();
+
+    const res = NextResponse.redirect(new URL(redirectPath, origin), 303);
+    res.headers.set('Cache-Control', 'private, no-store, max-age=0');
     return res;
   } catch (err) {
     console.error('[auth/login] POST error', err);
-    return NextResponse.redirect(new URL('/login', origin));
+    return loginRedirect(origin, 'server');
   }
 }
