@@ -8,8 +8,8 @@ import { getDraft, clearDraft } from '@/lib/checkins/draft';
 import type { FoodBeerDraft } from '@/lib/checkins/draft';
 import { confirmFoodBeerCheckinAction } from '@/app/actions/checkin';
 
-function centsToCurrency(cents: number): string {
-  return new Intl.NumberFormat('en-US', {
+function centsToCurrency(cents: number, locale: string): string {
+  return new Intl.NumberFormat(locale === 'es' ? 'es-PR' : 'en-US', {
     style: 'currency',
     currency: 'USD',
     minimumFractionDigits: 2,
@@ -24,7 +24,7 @@ function ValidateContent({
   staffDisplayOverride?: string;
 }) {
   const router = useRouter();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [draft, setDraft] = useState<FoodBeerDraft | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +52,7 @@ function ValidateContent({
       clearDraft(type);
       router.push('/checkins/new');
     } catch (err) {
-      setError('Something went wrong. Please try again.');
+      setError(t('verify_generic_error'));
       setConfirming(false);
     }
   };
@@ -62,7 +62,7 @@ function ValidateContent({
   };
 
   if (!draft) {
-    return <div className="card">Loading...</div>;
+    return <div className="card">{t('loading')}</div>;
   }
 
   const totalCents = draft.lineItems.reduce(
@@ -75,7 +75,7 @@ function ValidateContent({
     <div className="card">
       <div style={{ display: 'grid', gap: 12, marginBottom: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <strong>Type:</strong>
+          <strong>{t('label_type')}:</strong>
           <span>{typeLabel}</span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -117,7 +117,7 @@ function ValidateContent({
 
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
           <strong>{t('total_amount_collected')}:</strong>
-          <span>{centsToCurrency(totalCents)}</span>
+          <span>{centsToCurrency(totalCents, language)}</span>
         </div>
 
         {draft.notes && (
@@ -164,7 +164,7 @@ function ValidateContent({
             opacity: confirming ? 0.7 : 1,
           }}
         >
-          {confirming ? '...' : t('confirm')}
+          {confirming ? t('saving') : t('confirm')}
         </button>
       </div>
     </div>

@@ -2,6 +2,7 @@ import { requireAuth } from '@/server/auth/session';
 import { listCheckinsByDateRange } from '@/lib/server/checkinsRepo';
 import AppLayout from '@/components/AppLayout';
 import CheckinsList from '@/components/CheckinsList';
+import LocalizedPageHeading from '@/components/LocalizedPageHeading';
 
 interface SearchParams {
   date?: string;
@@ -24,8 +25,7 @@ export default async function CheckinsPage({
   return (
     <AppLayout role={session.role}>
       <div className="container">
-        <h1 className="page-title">View Check-Ins</h1>
-        <p className="page-subtitle">Browse and export check-in history</p>
+        <LocalizedPageHeading titleKey="view_checkins_title" subtitleKey="view_checkins_subtitle" />
         <CheckinsList initialCheckins={checkins} initialDate={params.date} role={session.role} />
       </div>
     </AppLayout>

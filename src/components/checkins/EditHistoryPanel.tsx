@@ -4,6 +4,8 @@ import { Fragment, useEffect, useState } from 'react';
 import { DateTime } from 'luxon';
 import type { CheckIn } from '@/types';
 import { formatReceiptNumber } from '@/lib/checkins/receipt';
+import { useTranslation } from '@/lib/i18n/useTranslation';
+import type { TranslationKey } from '@/lib/i18n/translations';
 
 export interface CheckinEditRecord {
   id: string;
@@ -16,21 +18,21 @@ export interface CheckinEditRecord {
 
 const ZONE = 'America/Puerto_Rico';
 
-const FIELD_LABELS: Record<string, string> = {
-  receiptNumber: 'Receipt #',
-  staffName: 'Staff',
-  cost: 'Cost',
-  roomId: 'Room',
-  paymentBreakdown: 'Payment Breakdown',
-  totalCollected: 'Total Collected',
-  item: 'Item',
-  quantity: 'Quantity',
-  amountCollected: 'Amount Collected',
-  roomCheckout: 'Room checkout / cleaning',
+const FIELD_LABEL_KEYS: Record<string, TranslationKey> = {
+  receiptNumber: 'label_receipt',
+  staffName: 'table_staff',
+  cost: 'cost',
+  roomId: 'diff_label_room',
+  paymentBreakdown: 'diff_label_payment_breakdown',
+  totalCollected: 'diff_label_total_collected',
+  item: 'diff_label_item',
+  quantity: 'diff_label_quantity',
+  amountCollected: 'diff_label_amount_collected',
+  roomCheckout: 'edit_history_field_room_checkout',
 };
 
-function formatDiffValue(field: string, value: unknown): string {
-  if (value === undefined || value === null) return 'Unknown';
+function formatDiffValue(field: string, value: unknown, unknownLabel: string): string {
+  if (value === undefined || value === null) return unknownLabel;
   switch (field) {
     case 'receiptNumber':
       return formatReceiptNumber(value == null ? '' : String(value));
@@ -50,12 +52,6 @@ function formatDiffValue(field: string, value: unknown): string {
   }
 }
 
-function formatEditedAt(iso: string): string {
-  if (!iso) return 'Unknown';
-  const dt = DateTime.fromISO(iso, { zone: ZONE });
-  return dt.isValid ? dt.toFormat('yyyy-MM-dd HH:mm') : iso;
-}
-
 export default function EditHistoryPanel({
   checkinId,
   checkin,
@@ -63,6 +59,7 @@ export default function EditHistoryPanel({
   checkinId: string;
   checkin: CheckIn;
 }) {
+  const { t, language } = useTranslation();
   const [edits, setEdits] = useState<CheckinEditRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -77,14 +74,14 @@ export default function EditHistoryPanel({
     setError(null);
     fetch(`/api/checkins/${encodeURIComponent(checkinId)}/edits`, { credentials: 'include' })
       .then((res) => {
-        if (!res.ok) throw new Error('Failed to load edit history');
+        if (!res.ok) throw new Error('load_failed');
         return res.json();
       })
       .then((data: CheckinEditRecord[]) => {
         if (!cancelled) setEdits(Array.isArray(data) ? data : []);
       })
-      .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load');
+      .catch(() => {
+        if (!cancelled) setError(t('edit_history_load_failed'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -92,10 +89,18 @@ export default function EditHistoryPanel({
     return () => {
       cancelled = true;
     };
-  }, [checkinId]);
+  }, [checkinId, t]);
 
-  const createdBy = checkin.staff_name?.trim() || 'Unknown';
-  const createdAt = checkin.date && checkin.time ? `${checkin.date} ${checkin.time}` : 'Unknown';
+  const createdBy = checkin.staff_name?.trim() || t('unknown');
+  const createdAt =
+    checkin.date && checkin.time ? `${checkin.date} ${checkin.time}` : t('unknown');
+
+  const formatEditedAt = (iso: string): string => {
+    if (!iso) return t('unknown');
+    const dt = DateTime.fromISO(iso, { zone: ZONE });
+    if (!dt.isValid) return iso;
+    return language === 'es' ? dt.setLocale('es').toFormat('dd/MM/yyyy HH:mm') : dt.toFormat('yyyy-MM-dd HH:mm');
+  };
 
   const panelStyle: React.CSSProperties = {
     padding: '12px 16px',
@@ -115,23 +120,24 @@ export default function EditHistoryPanel({
 
   const labelStyle: React.CSSProperties = { color: '#6b7280', fontWeight: 500 };
   const valueStyle: React.CSSProperties = { fontWeight: 500 };
+  const unknownLabel = t('unknown');
 
   return (
     <div style={panelStyle}>
-      <div style={headerStyle}>Edit history</div>
+      <div style={headerStyle}>{t('edit_history_title')}</div>
       <div style={{ fontSize: 13 }}>
         <div style={{ marginBottom: 8 }}>
-          <span style={labelStyle}>Created by: </span>
+          <span style={labelStyle}>{t('edit_history_created_by')} </span>
           <span style={valueStyle}>{createdBy}</span>
         </div>
         <div style={{ marginBottom: 12 }}>
-          <span style={labelStyle}>Created at: </span>
+          <span style={labelStyle}>{t('edit_history_created_at')} </span>
           <span style={valueStyle}>{createdAt}</span>
         </div>
-        {loading && <div style={{ color: '#6b7280' }}>Loading...</div>}
+        {loading && <div style={{ color: '#6b7280' }}>{t('loading')}</div>}
         {error && <div style={{ color: '#dc2626' }}>{error}</div>}
         {!loading && !error && edits.length === 0 && (
-          <div style={{ color: '#6b7280' }}>No edits to this record</div>
+          <div style={{ color: '#6b7280' }}>{t('edit_history_no_edits')}</div>
         )}
         {!loading && !error && edits.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -146,18 +152,28 @@ export default function EditHistoryPanel({
                 }}
               >
                 <div style={{ marginBottom: 6 }}>
-                  <span style={labelStyle}>Edited at: </span>
+                  <span style={labelStyle}>{t('edit_history_edited_at')} </span>
                   <span style={valueStyle}>{formatEditedAt(edit.editedAt)}</span>
                 </div>
                 <div style={{ marginBottom: 6 }}>
-                  <span style={labelStyle}>Edited by: </span>
-                  <span style={valueStyle}>{edit.editedBy || 'Unknown'}</span>
+                  <span style={labelStyle}>{t('edit_history_edited_by')} </span>
+                  <span style={valueStyle}>{edit.editedBy || unknownLabel}</span>
                 </div>
-                <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 12px', alignItems: 'baseline', fontSize: 12 }}>
+                <dl
+                  style={{
+                    margin: 0,
+                    display: 'grid',
+                    gridTemplateColumns: 'auto 1fr',
+                    gap: '4px 12px',
+                    alignItems: 'baseline',
+                    fontSize: 12,
+                  }}
+                >
                   {edit.changedFields.map((field) => {
-                    const label = FIELD_LABELS[field] ?? field;
-                    const oldVal = formatDiffValue(field, edit.before[field]);
-                    const newVal = formatDiffValue(field, edit.after[field]);
+                    const labelKey = FIELD_LABEL_KEYS[field];
+                    const label = labelKey ? t(labelKey) : field;
+                    const oldVal = formatDiffValue(field, edit.before[field], unknownLabel);
+                    const newVal = formatDiffValue(field, edit.after[field], unknownLabel);
                     return (
                       <Fragment key={field}>
                         <dt style={labelStyle}>{label}</dt>

@@ -4,6 +4,8 @@ import AppLayout from '@/components/AppLayout';
 import { isCheckInType } from '@/lib/checkins/types';
 import RoomCheckinForm from '@/components/checkins/RoomCheckinForm';
 import SimpleCheckinForm from '@/components/checkins/SimpleCheckinForm';
+import CheckinFormPageHeading from '@/components/checkins/CheckinFormPageHeading';
+import CheckinFormBackButton from '@/components/checkins/CheckinFormBackButton';
 import { listActiveOccupiedRoomCheckins } from '@/lib/server/checkinsRepo';
 import { getOccupiedRoomIdsFromCheckins } from '@/lib/checkins/roomOccupancy';
 
@@ -28,18 +30,8 @@ export default async function NewCheckinByTypePage({ params }: PageProps) {
   return (
     <AppLayout role={session.role}>
       <div className="container">
-        <h1 className="page-title">
-          {type === 'room'
-            ? 'Room Check-In'
-            : type === 'food'
-              ? 'Food & Beverage Check-In'
-              : 'Beer Check-In'}
-        </h1>
-        <p className="page-subtitle">
-          {type === 'room'
-            ? 'Register a new guest check-in'
-            : 'Register date, time, and staff'}
-        </p>
+        <CheckinFormBackButton />
+        <CheckinFormPageHeading type={type} />
         {type === 'room' && (
           <RoomCheckinForm
             isAdmin={session.role === 'admin'}

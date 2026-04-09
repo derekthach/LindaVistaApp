@@ -4,6 +4,8 @@ import AppLayout from '@/components/AppLayout';
 import DashboardCharts from '@/components/DashboardCharts';
 import DashboardLogger from '@/components/DashboardLogger';
 import DashboardEnsureAdminCookie from '@/components/DashboardEnsureAdminCookie';
+import LocalizedPageHeading from '@/components/LocalizedPageHeading';
+import DashboardSummaryCards from '@/components/DashboardSummaryCards';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,27 +30,8 @@ export default async function DashboardPage() {
       <DashboardEnsureAdminCookie />
       <DashboardLogger />
       <div className="container">
-        <h1 className="page-title">Dashboard</h1>
-        <p className="page-subtitle">Overview of motel activity</p>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-          <div className="card">
-            <div>Today&apos;s room check-ins</div>
-            <strong style={{ fontSize: 24 }}>{metrics.carsToday}</strong>
-          </div>
-          <div className="card">
-            <div>This week&apos;s room check-ins</div>
-            <strong style={{ fontSize: 24 }}>{metrics.carsThisWeek}</strong>
-          </div>
-          <div className="card">
-            <div>Today's Revenue</div>
-            <strong style={{ fontSize: 24 }}>${metrics.profitToday.toFixed(2)}</strong>
-          </div>
-          <div className="card">
-            <div>Weekly Revenue</div>
-            <strong style={{ fontSize: 24 }}>${metrics.profitThisWeek.toFixed(2)}</strong>
-          </div>
-        </div>
+        <LocalizedPageHeading titleKey="dashboard_title" subtitleKey="dashboard_subtitle" />
+        <DashboardSummaryCards metrics={metrics} />
 
         <div style={{ marginTop: 24 }}>
           <DashboardCharts />

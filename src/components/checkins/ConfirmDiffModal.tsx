@@ -1,6 +1,7 @@
 'use client';
 
 import Button from '@/components/Button';
+import { useTranslation } from '@/lib/i18n/useTranslation';
 
 export interface DiffLine {
   label: string;
@@ -23,6 +24,7 @@ export default function ConfirmDiffModal({
   onConfirm,
   isSubmitting = false,
 }: ConfirmDiffModalProps) {
+  const { t } = useTranslation();
   if (!open) return null;
 
   return (
@@ -47,10 +49,10 @@ export default function ConfirmDiffModal({
         onClick={(e) => e.stopPropagation()}
       >
         <h2 id="confirm-diff-title" style={{ margin: '0 0 12px', fontSize: 18 }}>
-          Confirm changes
+          {t('confirm_changes_title')}
         </h2>
         <p style={{ margin: '0 0 12px', fontSize: 14, color: '#6b7280' }}>
-          The following fields will be updated:
+          {t('confirm_changes_intro')}
         </p>
         <ul style={{ margin: '0 0 20px', paddingLeft: 20 }}>
           {diffLines.map((line, i) => (
@@ -66,10 +68,10 @@ export default function ConfirmDiffModal({
             onClick={() => onOpenChange(false)}
             disabled={isSubmitting}
           >
-            Cancel
+            {t('cancel')}
           </Button>
           <Button type="button" variant="primary" onClick={onConfirm} disabled={isSubmitting}>
-            {isSubmitting ? 'Saving…' : 'Confirm Save'}
+            {isSubmitting ? t('saving') : t('confirm_save')}
           </Button>
         </div>
       </div>

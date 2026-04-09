@@ -4,8 +4,10 @@ import { useState, useCallback, useEffect } from 'react';
 import type { CheckIn } from '@/types';
 import { formatReceiptNumber } from '@/lib/checkins/receipt';
 import { formatRoomDisplay } from '@/lib/checkins/rooms';
-import { getRoomPaymentBreakdownDisplay } from '@/lib/checkins/roomPaymentSplits';
-import { getCarColorLabel } from '@/lib/checkins/colors';
+import { getRoomPaymentBreakdownDisplayLocalized } from '@/lib/checkins/roomPaymentSplits';
+import { carColorLabel } from '@/lib/checkins/colors';
+import { useTranslation } from '@/lib/i18n/useTranslation';
+import type { TranslationKey } from '@/lib/i18n/translations';
 import { getStaffOptionsForCheckout } from '@/lib/checkins/constants';
 import Button from '@/components/Button';
 
@@ -33,6 +35,7 @@ export default function RoomCheckoutModal({
   /** Logged-in employee display name (must match STAFF_MEMBERS). */
   employeeCleanerName?: string;
 }) {
+  const { t } = useTranslation();
   const isEmployee = variant === 'employee';
   const [cleanedBy, setCleanedBy] = useState('');
   const [verified, setVerified] = useState(false);
@@ -76,13 +79,13 @@ export default function RoomCheckoutModal({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(typeof data.error === 'string' ? data.error : 'Checkout failed');
+        throw new Error(typeof data.error === 'string' ? data.error : t('checkout_failed'));
       }
       reset();
       onSuccess();
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Checkout failed');
+      setError(e instanceof Error ? e.message : t('checkout_failed'));
     } finally {
       setSubmitting(false);
     }
@@ -96,11 +99,12 @@ export default function RoomCheckoutModal({
     onClose,
     isEmployee,
     employeeCleanerName,
+    t,
   ]);
 
   if (!open || !checkin) return null;
 
-  const pay = getRoomPaymentBreakdownDisplay(checkin);
+  const pay = getRoomPaymentBreakdownDisplayLocalized(checkin, (k) => t(k as TranslationKey));
 
   return (
     <div
@@ -121,12 +125,11 @@ export default function RoomCheckoutModal({
     >
       <div className="card" style={{ maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
         <h2 id="checkout-modal-title" style={{ margin: '0 0 12px', fontSize: 20 }}>
-          {isEmployee ? 'Salida' : 'Checkout'} {formatRoomDisplay(checkin.room_id)}
+          {t(isEmployee ? 'checkout_modal_title_salida' : 'checkout_modal_title_checkout')}{' '}
+          {formatRoomDisplay(checkin.room_id, t('room'))}
         </h2>
         <p style={{ margin: '0 0 16px', color: '#374151', fontSize: 14, lineHeight: 1.5 }}>
-          {isEmployee
-            ? 'Confirmar limpieza: el huésped se ha ido, la habitación está limpia y lista para el próximo huésped.'
-            : 'Confirming checkout means the guest has left, the room has been cleaned, and the room is ready for the next guest. Checkout and cleaning are recorded together for now.'}
+          {isEmployee ? t('checkout_modal_intro_employee') : t('checkout_modal_intro_admin')}
         </p>
 
         <div
@@ -141,25 +144,25 @@ export default function RoomCheckoutModal({
           }}
         >
           <div>
-            <strong>Receipt #</strong> {formatReceiptNumber(checkin.receipt_number ?? '')}
+            <strong>{t('label_receipt')}</strong> {formatReceiptNumber(checkin.receipt_number ?? '')}
           </div>
           <div>
-            <strong>Room</strong> {formatRoomDisplay(checkin.room_id)}
+            <strong>{t('label_room')}</strong> {formatRoomDisplay(checkin.room_id, t('room'))}
           </div>
           <div>
-            <strong>Date / Time</strong> {checkin.date} {checkin.time}
+            <strong>{t('label_date_time')}</strong> {checkin.date} {checkin.time}
           </div>
           <div>
-            <strong>Checked in by</strong> {checkin.staff_name || '—'}
+            <strong>{t('label_checked_in_by')}</strong> {checkin.staff_name || '—'}
           </div>
           <div>
-            <strong>License plate</strong> {checkin.car_plate?.trim() || '—'}
+            <strong>{t('label_license_plate')}</strong> {checkin.car_plate?.trim() || '—'}
           </div>
           <div>
-            <strong>Total collected</strong> ${pay.total.toFixed(2)}
+            <strong>{t('label_total_collected')}</strong> ${pay.total.toFixed(2)}
           </div>
           <div>
-            <strong>Payment</strong>
+            <strong>{t('label_payment')}</strong>
             <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
               {pay.lines.map((line, i) => (
                 <li key={i}>{line}</li>
@@ -167,32 +170,34 @@ export default function RoomCheckoutModal({
             </ul>
           </div>
           <div>
-            <strong>Car make</strong> {checkin.car_make?.trim() || '—'}
+            <strong>{t('label_car_make')}</strong> {checkin.car_make?.trim() || '—'}
           </div>
           <div>
-            <strong>Car color</strong>{' '}
-            {checkin.car_color ? getCarColorLabel(checkin.car_color) : '—'}
+            <strong>{t('label_car_color')}</strong>{' '}
+            {checkin.car_color ? carColorLabel(checkin.car_color, t) : '—'}
           </div>
           <div>
-            <strong>Notes</strong> {checkin.note?.trim() || '—'}
+            <strong>{t('label_notes')}</strong> {checkin.note?.trim() || '—'}
           </div>
         </div>
 
         {isEmployee ? (
           <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Empleado responsable</div>
+            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>
+              {t('employee_responsible')}
+            </div>
             <div style={{ ...inputStyle, background: '#f9fafb' }}>{employeeCleanerName ?? '—'}</div>
           </div>
         ) : (
           <label style={{ display: 'block', marginBottom: 12 }}>
-            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Who cleaned this room?</div>
+            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('who_cleaned_room')}</div>
             <select
               value={cleanedBy}
               onChange={(e) => setCleanedBy(e.target.value)}
               style={inputStyle}
               disabled={submitting}
             >
-              <option value="">Select staff</option>
+              <option value="">{t('select_staff')}</option>
               {staffOptions.map((s) => (
                 <option key={s} value={s}>
                   {s}
@@ -211,9 +216,7 @@ export default function RoomCheckoutModal({
             style={{ marginTop: 4 }}
           />
           <span style={{ fontSize: 14 }}>
-            {isEmployee
-              ? 'Verificar: confirmo que la habitación ha sido limpiada y está lista para usar.'
-              : 'I verify this room has been cleaned and is ready for use again.'}
+            {isEmployee ? t('verify_room_cleaned_employee') : t('verify_room_cleaned_admin')}
           </span>
         </label>
 
@@ -223,7 +226,7 @@ export default function RoomCheckoutModal({
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           <Button type="button" variant="secondary" onClick={handleClose} disabled={submitting}>
-            {isEmployee ? 'Cancelar' : 'Cancel'}
+            {t('cancel')}
           </Button>
           <Button
             type="button"
@@ -236,7 +239,7 @@ export default function RoomCheckoutModal({
               submitting
             }
           >
-            {submitting ? 'Guardando…' : isEmployee ? 'Confirmar limpieza' : 'Confirm checkout'}
+            {submitting ? t('saving') : isEmployee ? t('confirm_cleaning') : t('confirm_checkout')}
           </Button>
         </div>
       </div>

@@ -4,9 +4,11 @@ import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { logoutAction } from '@/app/actions/auth';
 import { changeEmployeePasswordAction } from '@/app/actions/employeePassword';
+import { useTranslation } from '@/lib/i18n/useTranslation';
 
 function SubmitButton() {
   const { pending } = useFormStatus();
+  const { t } = useTranslation();
   return (
     <button
       type="submit"
@@ -21,19 +23,20 @@ function SubmitButton() {
         cursor: pending ? 'not-allowed' : 'pointer',
       }}
     >
-      {pending ? 'Guardando…' : 'Guardar contraseña'}
+      {pending ? t('saving_password') : t('save_password')}
     </button>
   );
 }
 
 export default function ChangePasswordForm() {
+  const { t } = useTranslation();
   const [state, formAction] = useActionState(changeEmployeePasswordAction, undefined);
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       <form action={formAction} style={{ display: 'grid', gap: 14 }}>
         <label>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>Nueva contraseña</div>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>{t('new_password')}</div>
           <input
             name="newPassword"
             type="password"
@@ -44,7 +47,7 @@ export default function ChangePasswordForm() {
           />
         </label>
         <label>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>Confirmar contraseña</div>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>{t('confirm_password')}</div>
           <input
             name="confirmPassword"
             type="password"
@@ -74,7 +77,7 @@ export default function ChangePasswordForm() {
             cursor: 'pointer',
           }}
         >
-          Cerrar sesión
+          {t('logout')}
         </button>
       </form>
     </div>

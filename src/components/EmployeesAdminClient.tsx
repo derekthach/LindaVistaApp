@@ -1,10 +1,12 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useCallback, useEffect, useRef, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { adminResetEmployeePasswordAction } from '@/app/actions/employeesAdmin';
 import { LV_PENDING_RESETS_INVALIDATE } from '@/lib/adminNavEvents';
+import { useTranslation } from '@/lib/i18n/useTranslation';
+import type { TranslationKey } from '@/lib/i18n/translations';
 
 export type EmployeeTableRow = {
   id: string;
@@ -19,6 +21,7 @@ export type EmployeeTableRow = {
 
 function ResetSubmit() {
   const { pending } = useFormStatus();
+  const { t } = useTranslation();
   return (
     <button
       type="submit"
@@ -33,7 +36,7 @@ function ResetSubmit() {
         cursor: pending ? 'not-allowed' : 'pointer',
       }}
     >
-      {pending ? 'Saving…' : 'Set password'}
+      {pending ? t('saving_password') : t('set_password')}
     </button>
   );
 }
@@ -46,9 +49,22 @@ function ResetPasswordModal({
   onClose: () => void;
 }) {
   const router = useRouter();
+  const { t } = useTranslation();
   const [state, formAction] = useActionState(adminResetEmployeePasswordAction, undefined as
     | { error?: string; ok?: boolean }
     | undefined);
+  const successHandledRef = useRef(false);
+
+  useEffect(() => {
+    if (!state?.ok || successHandledRef.current) return;
+    successHandledRef.current = true;
+    window.dispatchEvent(new CustomEvent(LV_PENDING_RESETS_INVALIDATE));
+    router.refresh();
+    const timer = window.setTimeout(() => {
+      onClose();
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [state?.ok, onClose, router]);
 
   const handleClose = () => {
     if (state?.ok) {
@@ -75,15 +91,14 @@ function ResetPasswordModal({
       onClick={(e) => e.target === e.currentTarget && handleClose()}
     >
       <div className="card" style={{ width: '100%', maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
-        <h2 style={{ margin: '0 0 8px', fontSize: 18 }}>Reset password</h2>
+        <h2 style={{ margin: '0 0 8px', fontSize: 18 }}>{t('reset_password_modal_title')}</h2>
         <p style={{ margin: '0 0 16px', color: '#6b7280', fontSize: 14 }}>
-          Temporary password for <strong>{user.fullName}</strong> ({user.username}). They will be required to
-          change it on next login.
+          {t('reset_password_modal_intro', { name: user.fullName, username: user.username })}
         </p>
         <form action={formAction} style={{ display: 'grid', gap: 12 }}>
           <input type="hidden" name="userId" value={user.id} />
           <label>
-            <div style={{ fontWeight: 600, marginBottom: 4 }}>New temporary password</div>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>{t('new_temporary_password')}</div>
             <input
               name="newPassword"
               type="password"
@@ -98,7 +113,7 @@ function ResetPasswordModal({
               {state.error}
             </div>
           )}
-          {state?.ok && <div style={{ color: '#166534', fontSize: 14 }}>Password updated.</div>}
+          {state?.ok && <div style={{ color: '#166534', fontSize: 14 }}>{t('password_updated')}</div>}
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button
               type="button"
@@ -111,7 +126,7 @@ function ResetPasswordModal({
                 cursor: 'pointer',
               }}
             >
-              Close
+              {t('close')}
             </button>
             {!state?.ok && <ResetSubmit />}
           </div>
@@ -121,6 +136,20 @@ function ResetPasswordModal({
   );
 }
 
+function translateRole(role: string, t: (k: TranslationKey) => string) {
+  const r = role.toLowerCase();
+  if (r === 'admin') return t('employees_role_admin');
+  if (r === 'employee') return t('employees_role_employee');
+  return role;
+}
+
+function translateUserStatus(status: string, t: (k: TranslationKey) => string) {
+  const s = status.toLowerCase();
+  if (s === 'active') return t('employees_status_active');
+  if (s === 'inactive') return t('employees_status_inactive');
+  return status;
+}
+
 export default function EmployeesAdminClient({
   users,
   pendingResetCount,
@@ -128,7 +157,9 @@ export default function EmployeesAdminClient({
   users: EmployeeTableRow[];
   pendingResetCount: number;
 }) {
+  const { t, language } = useTranslation();
   const [resetUser, setResetUser] = useState<EmployeeTableRow | null>(null);
+  const dismissResetModal = useCallback(() => setResetUser(null), []);
 
   return (
     <>
@@ -141,21 +172,21 @@ export default function EmployeesAdminClient({
           fontWeight: 600,
         }}
       >
-        Reset requests pending: {pendingResetCount}
+        {t('employees_pending_resets')}: {pendingResetCount}
       </div>
 
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
           <thead>
             <tr style={{ borderBottom: '2px solid #e5e7eb', textAlign: 'left' }}>
-              <th style={{ padding: '10px 8px' }}>Full name</th>
-              <th style={{ padding: '10px 8px' }}>Username</th>
-              <th style={{ padding: '10px 8px' }}>Role</th>
-              <th style={{ padding: '10px 8px' }}>Status</th>
-              <th style={{ padding: '10px 8px' }}>Password status</th>
-              <th style={{ padding: '10px 8px' }}>Reset</th>
-              <th style={{ padding: '10px 8px' }}>Last login</th>
-              <th style={{ padding: '10px 8px' }}>Actions</th>
+              <th style={{ padding: '10px 8px' }}>{t('employees_col_name')}</th>
+              <th style={{ padding: '10px 8px' }}>{t('employees_col_username')}</th>
+              <th style={{ padding: '10px 8px' }}>{t('employees_col_role')}</th>
+              <th style={{ padding: '10px 8px' }}>{t('employees_col_status')}</th>
+              <th style={{ padding: '10px 8px' }}>{t('employees_col_password_status')}</th>
+              <th style={{ padding: '10px 8px' }}>{t('employees_col_reset')}</th>
+              <th style={{ padding: '10px 8px' }}>{t('employees_col_last_login')}</th>
+              <th style={{ padding: '10px 8px' }}>{t('employees_col_actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -163,10 +194,10 @@ export default function EmployeesAdminClient({
               <tr key={u.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
                 <td style={{ padding: '10px 8px' }}>{u.fullName}</td>
                 <td style={{ padding: '10px 8px' }}>{u.username}</td>
-                <td style={{ padding: '10px 8px' }}>{u.role}</td>
-                <td style={{ padding: '10px 8px' }}>{u.status}</td>
+                <td style={{ padding: '10px 8px' }}>{translateRole(u.role, t)}</td>
+                <td style={{ padding: '10px 8px' }}>{translateUserStatus(u.status, t)}</td>
                 <td style={{ padding: '10px 8px' }}>
-                  {u.mustChangePassword ? 'Must change password' : 'Active'}
+                  {u.mustChangePassword ? t('password_status_must_change') : t('password_status_active')}
                 </td>
                 <td style={{ padding: '10px 8px' }}>
                   {u.passwordResetRequested ? (
@@ -181,14 +212,16 @@ export default function EmployeesAdminClient({
                         fontWeight: 600,
                       }}
                     >
-                      Reset requested
+                      {t('reset_requested')}
                     </span>
                   ) : (
                     '—'
                   )}
                 </td>
                 <td style={{ padding: '10px 8px', whiteSpace: 'nowrap' }}>
-                  {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : '—'}
+                  {u.lastLoginAt
+                    ? new Date(u.lastLoginAt).toLocaleString(language === 'es' ? 'es-PR' : 'en-US')
+                    : '—'}
                 </td>
                 <td style={{ padding: '10px 8px' }}>
                   <button
@@ -205,7 +238,7 @@ export default function EmployeesAdminClient({
                       fontSize: 13,
                     }}
                   >
-                    Reset password
+                    {t('reset_password')}
                   </button>
                 </td>
               </tr>
@@ -215,7 +248,7 @@ export default function EmployeesAdminClient({
       </div>
 
       {resetUser && (
-        <ResetPasswordModal key={resetUser.id} user={resetUser} onClose={() => setResetUser(null)} />
+        <ResetPasswordModal key={resetUser.id} user={resetUser} onClose={dismissResetModal} />
       )}
     </>
   );

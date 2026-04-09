@@ -5,9 +5,11 @@ import { useEffect, useState, useCallback } from 'react';
 import { usePathname } from 'next/navigation';
 import { logoutAction } from '@/app/actions/auth';
 import { LV_PENDING_RESETS_INVALIDATE } from '@/lib/adminNavEvents';
+import { useTranslation } from '@/lib/i18n/useTranslation';
 import type { UserRole } from '@/types';
 
 export default function Sidebar({ role }: { role: UserRole }) {
+  const { t } = useTranslation();
   const pathname = usePathname();
   const [pendingResetCount, setPendingResetCount] = useState(0);
 
@@ -55,20 +57,20 @@ export default function Sidebar({ role }: { role: UserRole }) {
       }}
     >
       <div style={{ padding: 20, borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
-        <div style={{ fontWeight: 700, fontSize: 18 }}>Linda Vista Motel</div>
+        <div style={{ fontWeight: 700, fontSize: 18 }}>{t('login_title')}</div>
         <div style={{ fontSize: 12, opacity: 0.8, marginTop: 4 }}>
-          {role === 'admin' ? 'Admin Mode' : 'Employee Mode'}
+          {role === 'admin' ? t('admin_mode') : t('employee_mode')}
         </div>
       </div>
 
       <nav style={{ display: 'grid', gap: 8, padding: 16 }}>
         {role === 'admin' && (
           <Link href="/dashboard" style={linkStyle('/dashboard')}>
-            Dashboard
+            {t('nav_dashboard')}
           </Link>
         )}
         <Link href="/checkins/new" style={linkStyle('/checkins/new')}>
-          Check-In/Checkout
+          {t('nav_checkin_checkout')}
         </Link>
         {role === 'admin' && (
           <Link
@@ -82,15 +84,21 @@ export default function Sidebar({ role }: { role: UserRole }) {
             }}
             aria-label={
               pendingResetCount > 0
-                ? `Employees, ${pendingResetCount} password reset request${pendingResetCount === 1 ? '' : 's'} pending`
-                : 'Employees'
+                ? pendingResetCount === 1
+                  ? t('employees_nav_pending_aria', { count: pendingResetCount })
+                  : t('employees_nav_pending_aria_plural', { count: pendingResetCount })
+                : t('nav_employees')
             }
           >
-            <span>Employees</span>
+            <span>{t('nav_employees')}</span>
             {pendingResetCount > 0 ? (
               <span
                 aria-hidden
-                title={`${pendingResetCount} password reset request${pendingResetCount === 1 ? '' : 's'} pending`}
+                title={
+                  pendingResetCount === 1
+                    ? t('employees_nav_pending_aria', { count: pendingResetCount })
+                    : t('employees_nav_pending_aria_plural', { count: pendingResetCount })
+                }
                 style={{
                   width: 10,
                   height: 10,
@@ -105,7 +113,7 @@ export default function Sidebar({ role }: { role: UserRole }) {
         )}
         {role === 'admin' && (
           <Link href="/checkins" style={linkStyle('/checkins', true)}>
-            View Check-Ins
+            {t('nav_view_checkins')}
           </Link>
         )}
       </nav>
@@ -125,7 +133,7 @@ export default function Sidebar({ role }: { role: UserRole }) {
               cursor: 'pointer',
             }}
           >
-            Logout
+            {t('logout')}
           </button>
         </form>
       </div>

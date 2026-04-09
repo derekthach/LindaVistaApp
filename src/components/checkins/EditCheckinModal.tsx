@@ -12,9 +12,12 @@ import { ROOM_OPTIONS, parseRoomOptionValue, isValidRoomId } from '@/lib/checkin
 import { PAYMENT_METHODS } from '@/lib/checkins/paymentMethods';
 import {
   calculatePaymentSplitTotal,
-  getRoomPaymentMethodEnglishLabel,
   validatePaymentSplits,
 } from '@/lib/checkins/roomPaymentSplits';
+import { getPaymentMethodTranslationKey } from '@/lib/checkins/paymentMethods';
+import { useTranslation } from '@/lib/i18n/useTranslation';
+import type { TranslationKey } from '@/lib/i18n/translations';
+import { formatRoomDisplay } from '@/lib/checkins/rooms';
 
 const COST_MAX = 1000;
 const AMOUNT_COLLECTED_MAX = 1000;
@@ -88,6 +91,12 @@ export default function EditCheckinModal({
   onSave,
   saveDisabled = false,
 }: EditCheckinModalProps) {
+  const { t, language } = useTranslation();
+  const checkInTypeLabel = (type: string | undefined) => {
+    if (type === 'food') return t('table_type_food');
+    if (type === 'beer') return t('table_type_beer');
+    return t('table_type_room');
+  };
   const [receipt_number, setReceiptNumber] = useState('');
   const [staff_name, setStaffName] = useState('');
   const [room_id, setRoomId] = useState<number | string>(1);
@@ -212,11 +221,13 @@ export default function EditCheckinModal({
       });
     } else {
       const selected = itemOptions.find((o) => o.id === itemId);
+      const itemLabel =
+        selected != null ? (language === 'es' ? selected.label.es : selected.label.en) : itemId;
       onSave({
         receipt_number: receiptNormalized,
         staff_name,
         itemId,
-        itemLabel: selected ? selected.label.en : itemId,
+        itemLabel,
         quantity: qtyNum,
         amountCollected: amountNum,
       });
@@ -267,30 +278,35 @@ export default function EditCheckinModal({
         onClick={(e) => e.stopPropagation()}
       >
         <h2 id="edit-checkin-title" style={{ margin: '0 0 16px', fontSize: 18 }}>
-          Edit check-in
+          {t('aria_edit_checkin')}
         </h2>
         <form onSubmit={handleSubmit} style={{ display: 'grid', gap: 12 }}>
           <label>
-            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Date (read-only)</div>
+            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('edit_field_date_readonly')}</div>
             <input type="text" readOnly value={checkin?.date ?? ''} style={inputStyle} />
           </label>
           <label>
-            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Time (read-only)</div>
+            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('edit_field_time_readonly')}</div>
             <input type="text" readOnly value={checkin?.time ?? ''} style={inputStyle} />
           </label>
           <label>
-            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Type (read-only)</div>
-            <input type="text" readOnly value={checkin?.checkInType ?? 'room'} style={inputStyle} />
+            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('edit_field_type_readonly')}</div>
+            <input
+              type="text"
+              readOnly
+              value={checkInTypeLabel(checkin?.checkInType)}
+              style={inputStyle}
+            />
           </label>
           {checkin?.note != null && checkin.note !== '' && (
             <label>
-              <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Notes (read-only)</div>
+              <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('edit_field_notes_readonly')}</div>
               <textarea readOnly value={checkin.note} rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
             </label>
           )}
 
           <label>
-            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Receipt #</div>
+            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('label_receipt')}</div>
             <input
               value={receipt_number}
               onChange={(e) => setReceiptNumber(e.target.value)}
@@ -301,14 +317,14 @@ export default function EditCheckinModal({
             />
           </label>
           <label>
-            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Staff</div>
+            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('table_staff')}</div>
             <select
               value={staff_name}
               onChange={(e) => setStaffName(e.target.value)}
               style={inputStyle}
               required
             >
-              <option value="">Select staff</option>
+              <option value="">{t('select_staff')}</option>
               {ALLOWED_STAFF.map((name) => (
                 <option key={name} value={name}>
                   {name}
@@ -321,7 +337,7 @@ export default function EditCheckinModal({
             <>
               <div>
                 <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8, fontWeight: 600 }}>
-                  Payment breakdown
+                  {t('payment_breakdown')}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {paymentRows.map((row, idx) => {
@@ -339,7 +355,7 @@ export default function EditCheckinModal({
                         }}
                       >
                         <label style={{ margin: 0 }}>
-                          <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Method</div>
+                          <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('payment_method')}</div>
                           <select
                             value={row.method}
                             onChange={(e) => updatePaymentRow(idx, { method: e.target.value })}
@@ -347,13 +363,13 @@ export default function EditCheckinModal({
                           >
                             {PAYMENT_METHODS.map((method) => (
                               <option key={method} value={method} disabled={usedElsewhere.has(method)}>
-                                {getRoomPaymentMethodEnglishLabel(method)}
+                                {t(getPaymentMethodTranslationKey(method) as TranslationKey)}
                               </option>
                             ))}
                           </select>
                         </label>
                         <label style={{ margin: 0 }}>
-                          <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Amount</div>
+                          <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('amount')}</div>
                           <input
                             type="number"
                             step="0.01"
@@ -376,7 +392,7 @@ export default function EditCheckinModal({
                             background: paymentRows.length <= 1 ? '#f3f4f6' : '#fff',
                           }}
                         >
-                          Remove
+                          {t('remove')}
                         </button>
                       </div>
                     );
@@ -396,18 +412,20 @@ export default function EditCheckinModal({
                     fontSize: 13,
                   }}
                 >
-                  Add payment method
+                  {t('add_payment_method')}
                 </button>
                 <div style={{ marginTop: 10, fontWeight: 600 }}>
-                  Total collected:{' '}
+                  {t('label_total_collected')}:{' '}
                   {liveRoomTotal != null ? `$${liveRoomTotal.toFixed(2)}` : '—'}
                 </div>
                 {!splitsValid && splitValidation.error && (
-                  <div style={{ color: '#dc2626', fontSize: 12, marginTop: 6 }}>{splitValidation.error}</div>
+                  <div style={{ color: '#dc2626', fontSize: 12, marginTop: 6 }}>
+                    {t(splitValidation.error as TranslationKey)}
+                  </div>
                 )}
               </div>
               <label>
-                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Room number</div>
+                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('room_number')}</div>
                 <select
                   value={String(room_id)}
                   onChange={(e) => setRoomId(parseRoomOptionValue(e.target.value))}
@@ -415,7 +433,7 @@ export default function EditCheckinModal({
                 >
                   {ROOM_OPTIONS.map((r) => (
                     <option key={String(r)} value={String(r)}>
-                      Room {r}
+                      {formatRoomDisplay(r, t('room'))}
                     </option>
                   ))}
                 </select>
@@ -424,7 +442,7 @@ export default function EditCheckinModal({
           ) : (
             <>
               <label>
-                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Item</div>
+                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('diff_label_item')}</div>
                 <select
                   value={itemId}
                   onChange={(e) => setItemId(e.target.value)}
@@ -432,13 +450,13 @@ export default function EditCheckinModal({
                 >
                   {itemOptions.map((opt) => (
                     <option key={opt.id} value={opt.id}>
-                      {opt.label.en}
+                      {language === 'es' ? opt.label.es : opt.label.en}
                     </option>
                   ))}
                 </select>
               </label>
               <label>
-                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Quantity</div>
+                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('diff_label_quantity')}</div>
                 <input
                   type="number"
                   min={QUANTITY_MIN}
@@ -450,7 +468,7 @@ export default function EditCheckinModal({
                 />
               </label>
               <label>
-                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Amount Collected</div>
+                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('amount_collected')}</div>
                 <input
                   type="number"
                   step="0.01"
@@ -466,10 +484,10 @@ export default function EditCheckinModal({
 
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
             <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
-              Cancel
+              {t('cancel')}
             </Button>
             <Button type="submit" variant="primary" disabled={!canSave}>
-              {!hasChanges ? 'No changes to save' : 'Save'}
+              {!hasChanges ? t('no_changes_to_save') : t('save')}
             </Button>
           </div>
         </form>

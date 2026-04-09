@@ -3,11 +3,13 @@
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { submitCheckinAction } from '@/app/actions/checkin';
-import { getCarColorLabel } from '@/lib/checkins/colors';
+import { carColorLabel } from '@/lib/checkins/colors';
+import { formatRoomDisplay } from '@/lib/checkins/rooms';
 import { useLanguage } from '@/components/LanguageToggle';
+import type { TranslationKey } from '@/lib/i18n/translations';
 import {
   calculatePaymentSplitTotal,
-  formatPaymentBreakdownLines,
+  formatPaymentBreakdownLinesLocalized,
   validatePaymentSplits,
 } from '@/lib/checkins/roomPaymentSplits';
 import { isValidRoomSubmissionKey } from '@/lib/checkins/roomSubmissionKey';
@@ -50,7 +52,7 @@ export default function VerifyCheckinForm() {
       });
       const result = await submitCheckinAction(fd);
       if (result && !result.success) {
-        setSubmitError(result.error ?? 'Something went wrong. Please try again.');
+        setSubmitError(result.error ?? t('verify_generic_error'));
         return;
       }
       sessionStorage.removeItem('checkinData');
@@ -65,7 +67,7 @@ export default function VerifyCheckinForm() {
         sessionStorage.removeItem('checkinData');
         return;
       }
-      setSubmitError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+      setSubmitError(err instanceof Error ? err.message : t('verify_generic_error'));
     } finally {
       submitLockRef.current = false;
       setIsSubmitting(false);
@@ -73,13 +75,13 @@ export default function VerifyCheckinForm() {
   };
 
   if (!formData) {
-    return <div>Loading...</div>;
+    return <div>{t('loading')}</div>;
   }
 
   const splitResult = validatePaymentSplits(formData.payment_splits);
   const paymentLines =
     splitResult.valid && splitResult.splits
-      ? formatPaymentBreakdownLines(splitResult.splits)
+      ? formatPaymentBreakdownLinesLocalized(splitResult.splits, (k) => t(k as TranslationKey))
       : [];
   const totalCollected =
     splitResult.valid && splitResult.splits
@@ -87,15 +89,18 @@ export default function VerifyCheckinForm() {
       : null;
 
   const fields = [
-    { label: 'Room Number', value: `Room ${formData.room_id}` },
-    { label: 'Receipt Number', value: formData.receipt_number },
-    { label: 'Date', value: formData.date },
-    { label: 'Time', value: formData.time },
-    { label: 'License Plate', value: formData.car_plate },
-    { label: 'Car Make', value: formData.car_make },
-    { label: 'Car Color', value: getCarColorLabel(formData.car_color) || formData.car_color },
-    { label: 'Staff Name', value: formData.staff_name },
-    { label: 'Note', value: formData.note || 'N/A' },
+    { labelKey: 'room_number' as const, value: formatRoomDisplay(formData.room_id, t('room')) },
+    { labelKey: 'receipt_number' as const, value: formData.receipt_number },
+    { labelKey: 'date' as const, value: formData.date },
+    { labelKey: 'time' as const, value: formData.time },
+    { labelKey: 'car_plate' as const, value: formData.car_plate },
+    { labelKey: 'car_make' as const, value: formData.car_make },
+    {
+      labelKey: 'car_color' as const,
+      value: carColorLabel(formData.car_color, t) || formData.car_color,
+    },
+    { labelKey: 'staff_name' as const, value: formData.staff_name },
+    { labelKey: 'note' as const, value: formData.note || t('dash_not_applicable') },
   ];
 
   const disableActions = isSubmitting;
@@ -116,8 +121,8 @@ export default function VerifyCheckinForm() {
       >
         <div style={{ display: 'grid', gap: 10, marginBottom: 20 }}>
           {fields.map((field) => (
-            <div key={field.label} style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <strong>{field.label}:</strong>
+            <div key={field.labelKey} style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <strong>{t(field.labelKey)}:</strong>
               <span>{field.value}</span>
             </div>
           ))}
@@ -158,7 +163,7 @@ export default function VerifyCheckinForm() {
               cursor: disableActions ? 'not-allowed' : 'pointer',
             }}
           >
-            Back
+            {t('back')}
           </button>
           <button
             type="submit"
@@ -175,7 +180,7 @@ export default function VerifyCheckinForm() {
               cursor: disableActions ? 'not-allowed' : 'pointer',
             }}
           >
-            {isSubmitting ? 'Saving…' : 'Confirm'}
+            {isSubmitting ? t('saving_confirm') : t('confirm')}
           </button>
         </div>
       </form>

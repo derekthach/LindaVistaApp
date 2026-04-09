@@ -1,5 +1,5 @@
 import { isValidCarColorKey } from '../colors';
-import { normalizeReceiptNumber, RECEIPT_MAX } from '../receipt';
+import { normalizeReceiptNumber } from '../receipt';
 import { PAYMENT_METHODS } from '../paymentMethods';
 import { isValidRoomId } from '../rooms';
 import { validatePaymentSplits } from '../roomPaymentSplits';
@@ -46,33 +46,33 @@ export function validateRoomCheckin(raw: Record<string, unknown>): RoomCheckinVa
 
   const roomId = raw.room_id;
   if (roomId === undefined || roomId === null) {
-    errors.room_id = 'Room number is required';
+    errors.room_id = 'error_room_required';
   } else if (!isValidRoomId(roomId)) {
-    errors.room_id = 'Please select a valid room';
+    errors.room_id = 'error_room_invalid';
   }
 
   const receiptRaw = raw.receipt_number != null ? String(raw.receipt_number).trim() : '';
   if (!receiptRaw) {
-    errors.receipt_number = 'Receipt number is required';
+    errors.receipt_number = 'error_receipt_required';
   } else {
     const normalized = normalizeReceiptNumber(receiptRaw);
     if (normalized === null) {
-      errors.receipt_number = `Receipt must be 5 digits (00000–${RECEIPT_MAX})`;
+      errors.receipt_number = 'error_receipt_format';
     }
   }
 
   const date = raw.date != null ? String(raw.date).trim() : '';
   if (!date) {
-    errors.date = 'Date is required';
+    errors.date = 'requiredDate';
   } else if (!ISO_DATE.test(date)) {
-    errors.date = 'Invalid date format (YYYY-MM-DD)';
+    errors.date = 'error_date_invalid_format';
   }
 
   const time = raw.time != null ? String(raw.time).trim() : '';
   if (!time) {
-    errors.time = 'Time is required';
+    errors.time = 'requiredTime';
   } else if (!TIME_24.test(time)) {
-    errors.time = 'Invalid time format (HH:mm, 24-hour)';
+    errors.time = 'error_time_invalid_format';
   }
 
   const hasSplitPayload =
@@ -83,64 +83,64 @@ export function validateRoomCheckin(raw: Record<string, unknown>): RoomCheckinVa
   if (hasSplitPayload) {
     const splitResult = validatePaymentSplits(raw.payment_splits);
     if (!splitResult.valid) {
-      errors.payment_splits = splitResult.error ?? 'Invalid payment breakdown';
+      errors.payment_splits = splitResult.error ?? 'error_payment_splits_generic';
     }
   } else {
     const costVal = raw.cost;
     if (costVal === undefined || costVal === null || costVal === '') {
-      errors.cost = 'Cost is required';
+      errors.cost = 'error_cost_required';
     } else {
       const cost = Number(costVal);
       if (Number.isNaN(cost)) {
-        errors.cost = 'Cost must be a number';
+        errors.cost = 'error_cost_number';
       } else if (cost < 0) {
-        errors.cost = 'Cost cannot be negative';
+        errors.cost = 'error_cost_negative';
       } else if (cost > COST_MAX) {
-        errors.cost = `Cost cannot exceed $${COST_MAX}`;
+        errors.cost = 'error_cost_max';
       }
     }
 
     const payment = raw.payment_method != null ? String(raw.payment_method).trim() : '';
     if (!payment) {
-      errors.payment_method = 'Payment method is required';
+      errors.payment_method = 'error_payment_method_required';
     } else if (!PAYMENT_METHODS.includes(payment as (typeof PAYMENT_METHODS)[number])) {
-      errors.payment_method = 'Invalid payment method';
+      errors.payment_method = 'error_payment_method_invalid';
     }
   }
 
   const carPlate = raw.car_plate != null ? String(raw.car_plate).trim() : '';
   if (!carPlate) {
-    errors.car_plate = 'License plate is required';
+    errors.car_plate = 'error_plate_required';
   } else {
     if (carPlate.length > PLATE_MAX) {
-      errors.car_plate = `License plate must be ${PLATE_MAX} characters or fewer`;
+      errors.car_plate = 'error_plate_length';
     } else if (!LICENSE_PLATE.test(carPlate)) {
-      errors.car_plate = 'Only letters, numbers, spaces, and hyphen allowed';
+      errors.car_plate = 'error_plate_chars';
     }
   }
 
   const carMake = raw.car_make != null ? String(raw.car_make).trim() : '';
   if (!carMake) {
-    errors.car_make = 'Car make is required';
+    errors.car_make = 'error_car_make_required';
   } else if (carMake.length > CAR_MAKE_MAX) {
-    errors.car_make = `Car make must be ${CAR_MAKE_MAX} characters or fewer`;
+    errors.car_make = 'error_car_make_length';
   }
 
   const carColor = raw.car_color != null ? String(raw.car_color).trim() : '';
   if (!carColor) {
-    errors.car_color = 'Car color is required';
+    errors.car_color = 'error_car_color_required';
   } else if (!isValidCarColorKey(carColor)) {
-    errors.car_color = 'Please select a valid car color';
+    errors.car_color = 'error_car_color_invalid';
   }
 
   const staffName = raw.staff_name != null ? String(raw.staff_name).trim() : '';
   if (!staffName) {
-    errors.staff_name = 'Staff name is required';
+    errors.staff_name = 'requiredStaff';
   }
 
   const note = raw.note != null ? String(raw.note).trim() : undefined;
   if (note !== undefined && note.length > NOTE_MAX) {
-    errors.note = `Notes must be ${NOTE_MAX} characters or fewer`;
+    errors.note = 'error_note_length';
   }
 
   return {

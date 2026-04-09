@@ -1,7 +1,4 @@
-import Sidebar from './Sidebar';
-import AppContentWithLanguage from './AppContentWithLanguage';
-import InactivityGuard from './InactivityGuard';
-import SessionTouchOnNavigate from './SessionTouchOnNavigate';
+import I18nAppShell from './I18nAppShell';
 import type { UserRole } from '@/types';
 
 export default function AppLayout({
@@ -11,14 +8,5 @@ export default function AppLayout({
   children: React.ReactNode;
   role: UserRole;
 }) {
-  return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
-      <Sidebar role={role} />
-      <main style={{ flex: 1, padding: 24 }}>
-        <SessionTouchOnNavigate />
-        {role === 'employee' && <InactivityGuard />}
-        <AppContentWithLanguage role={role}>{children}</AppContentWithLanguage>
-      </main>
-    </div>
-  );
+  return <I18nAppShell role={role}>{children}</I18nAppShell>;
 }

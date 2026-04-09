@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { DateTime } from 'luxon';
 import LineChart from './charts/LineChart';
 import BarChart from './charts/BarChart';
+import { useTranslation } from '@/lib/i18n/useTranslation';
 import type {
   DashboardData,
   RoomUsageData,
@@ -12,7 +13,20 @@ import type {
 } from '@/types';
 
 const ZONE = 'America/Puerto_Rico';
-const MONTH_OPTIONS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTH_KEY_SUFFIXES = [
+  'jan',
+  'feb',
+  'mar',
+  'apr',
+  'may',
+  'jun',
+  'jul',
+  'aug',
+  'sep',
+  'oct',
+  'nov',
+  'dec',
+] as const;
 function roomUsageYearOptions(): number[] {
   const y = DateTime.now().setZone(ZONE).year;
   return [y - 2, y - 1, y, y + 1, y + 2];
@@ -29,18 +43,19 @@ const EMPTY_EMPLOYEE_ACTIVITY: EmployeeRoomActivityData = {
   cleanups: { labels: [], counts: [] },
 };
 
-function emptyMonthly(month: number, year: number): MonthlyComparisonData {
-  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+function emptyMonthly(month: number, year: number, monthName: string, prevMonthName: string): MonthlyComparisonData {
   const prevMonth = month === 1 ? 12 : month - 1;
   const prevYear = month === 1 ? year - 1 : year;
   return {
-    current_month: { name: months[month - 1], year, total: 0, car_count: 0 },
-    prev_month: { name: months[prevMonth - 1], year: prevYear, total: 0, car_count: 0 },
+    current_month: { name: monthName, year, total: 0, car_count: 0 },
+    prev_month: { name: prevMonthName, year: prevYear, total: 0, car_count: 0 },
     years_available: [String(year)],
   };
 }
 
 export default function DashboardCharts() {
+  const { t } = useTranslation();
+  const monthLabel = (m: number) => t(`month_short_${MONTH_KEY_SUFFIXES[m - 1]}` as 'month_short_jan');
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [roomUsage, setRoomUsage] = useState<RoomUsageData | null>(null);
   const [roomUsageLoading, setRoomUsageLoading] = useState(true);
@@ -94,34 +109,53 @@ export default function DashboardCharts() {
   }, [roomUsageMonth, roomUsageYear]);
 
   useEffect(() => {
+    const prevCalMonth = month === 1 ? 12 : month - 1;
+    const fallback = emptyMonthly(month, year, monthLabel(month), monthLabel(prevCalMonth));
     fetch(`/api/monthly-revenue?month=${month}&year=${year}`)
-      .then((res) => (res.ok ? res.json() : emptyMonthly(month, year)))
-      .then(setMonthly)
-      .catch(() => setMonthly(emptyMonthly(month, year)));
-  }, [month, year]);
+      .then((res) => (res.ok ? res.json() : fallback))
+      .then((data: MonthlyComparisonData) => {
+        setMonthly({
+          ...data,
+          current_month: { ...data.current_month, name: monthLabel(month) },
+          prev_month: { ...data.prev_month, name: monthLabel(prevCalMonth) },
+        });
+      })
+      .catch(() => setMonthly(fallback));
+  }, [month, year, t]);
+
+  const localizeRoomChartLabel = (label: string) =>
+    label.replace(/^Room\s+/i, `${t('room')} `);
 
   return (
     <div style={{ display: 'grid', gap: 24 }}>
       <section>
-        <h2 style={{ marginBottom: 12 }}>Trend Analytics</h2>
+        <h2 style={{ marginBottom: 12 }}>{t('trend_analytics')}</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
           <div className="card" style={{ height: 320 }}>
-            <h3>Room check-ins (7 days)</h3>
+            <h3>{t('chart_room_checkins_7d')}</h3>
             <div style={{ height: 240 }}>
               {dashboard && dashboard.dates.length > 0 ? (
-                <LineChart labels={dashboard.dates} data={dashboard.checkins} label="Room check-ins" />
+                <LineChart
+                  labels={dashboard.dates}
+                  data={dashboard.checkins}
+                  label={t('chart_label_room_checkins')}
+                />
               ) : (
-                <p style={{ color: '#6b7280', padding: 24 }}>No check-ins in the last 7 days.</p>
+                <p style={{ color: '#6b7280', padding: 24 }}>{t('chart_no_checkins_7d')}</p>
               )}
             </div>
           </div>
           <div className="card" style={{ height: 320 }}>
-            <h3>Revenue Over Time (7 days)</h3>
+            <h3>{t('chart_revenue_7d')}</h3>
             <div style={{ height: 240 }}>
               {dashboard && dashboard.dates.length > 0 ? (
-                <BarChart labels={dashboard.dates} data={dashboard.revenue} label="Revenue ($)" />
+                <BarChart
+                  labels={dashboard.dates}
+                  data={dashboard.revenue}
+                  label={t('chart_revenue_axis')}
+                />
               ) : (
-                <p style={{ color: '#6b7280', padding: 24 }}>No revenue data in the last 7 days.</p>
+                <p style={{ color: '#6b7280', padding: 24 }}>{t('chart_no_revenue_7d')}</p>
               )}
             </div>
           </div>
@@ -129,11 +163,11 @@ export default function DashboardCharts() {
       </section>
 
       <section>
-        <h2 style={{ marginBottom: 12 }}>Detailed Analytics</h2>
+        <h2 style={{ marginBottom: 12 }}>{t('detailed_analytics')}</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
           <div className="card" style={{ height: 360 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-              <h3 style={{ margin: 0 }}>Room Usage Frequency (Top 15)</h3>
+              <h3 style={{ margin: 0 }}>{t('chart_room_usage_top')}</h3>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <select
                   value={roomUsageMonth}
@@ -147,9 +181,9 @@ export default function DashboardCharts() {
                     minWidth: 72,
                   }}
                 >
-                  {MONTH_OPTIONS.map((m, i) => (
-                    <option key={m} value={i + 1}>
-                      {m}
+                  {MONTH_KEY_SUFFIXES.map((suffix, i) => (
+                    <option key={suffix} value={i + 1}>
+                      {t(`month_short_${suffix}` as 'month_short_jan')}
                     </option>
                   ))}
                 </select>
@@ -175,32 +209,30 @@ export default function DashboardCharts() {
             </div>
             <div style={{ height: 280 }}>
               {roomUsageLoading ? (
-                <p style={{ color: '#6b7280', padding: 24 }}>Loading…</p>
+                <p style={{ color: '#6b7280', padding: 24 }}>{t('loading')}</p>
               ) : roomUsage && roomUsage.room_numbers.length > 0 ? (
                 <BarChart
-                  labels={roomUsage.room_numbers}
+                  labels={roomUsage.room_numbers.map(localizeRoomChartLabel)}
                   data={roomUsage.usage_counts}
-                  label="Usage Count"
+                  label={t('chart_usage_count')}
                   color="rgba(22, 163, 74, 1)"
                   horizontal
                 />
               ) : (
-                <p style={{ color: '#6b7280', padding: 24 }}>No room check-ins for this month.</p>
+                <p style={{ color: '#6b7280', padding: 24 }}>{t('chart_no_room_usage_month')}</p>
               )}
             </div>
           </div>
           <div className="card">
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-              <h3>Monthly Revenue</h3>
+              <h3>{t('chart_monthly_revenue')}</h3>
               <div style={{ display: 'flex', gap: 8 }}>
                 <select value={month} onChange={(e) => setMonth(parseInt(e.target.value, 10))}>
-                  {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map(
-                    (m, i) => (
-                      <option key={m} value={i + 1}>
-                        {m}
-                      </option>
-                    )
-                  )}
+                  {MONTH_KEY_SUFFIXES.map((suffix, i) => (
+                    <option key={suffix} value={i + 1}>
+                      {t(`month_short_${suffix}` as 'month_short_jan')}
+                    </option>
+                  ))}
                 </select>
                 <select value={year} onChange={(e) => setYear(parseInt(e.target.value, 10))}>
                   {(monthly?.years_available || [String(new Date().getFullYear())]).map((y) => (
@@ -219,15 +251,19 @@ export default function DashboardCharts() {
                     {monthly.current_month.name} {monthly.current_month.year}
                   </strong>
                   <div>${monthly.current_month.total.toFixed(2)}</div>
-                  <div>{monthly.current_month.car_count} room check-ins</div>
+                  <div>
+                    {monthly.current_month.car_count} {t('room_checkins_count_suffix')}
+                  </div>
                 </div>
-                <div style={{ textAlign: 'center', color: '#6b7280' }}>vs</div>
+                <div style={{ textAlign: 'center', color: '#6b7280' }}>{t('vs')}</div>
                 <div className="card" style={{ background: '#f8fafc' }}>
                   <strong>
                     {monthly.prev_month.name} {monthly.prev_month.year}
                   </strong>
                   <div>${monthly.prev_month.total.toFixed(2)}</div>
-                  <div>{monthly.prev_month.car_count} room check-ins</div>
+                  <div>
+                    {monthly.prev_month.car_count} {t('room_checkins_count_suffix')}
+                  </div>
                 </div>
               </div>
             )}
@@ -235,7 +271,7 @@ export default function DashboardCharts() {
         </div>
 
         <p style={{ margin: '16px 0 0', fontSize: 13, color: '#6b7280' }}>
-          Staff charts below use the same month and year as &quot;Room Usage Frequency&quot;.
+          {t('chart_staff_same_month_note')}
         </p>
         <div
           style={{
@@ -246,48 +282,44 @@ export default function DashboardCharts() {
           }}
         >
           <div className="card" style={{ minHeight: 360 }}>
-            <h3 style={{ margin: '0 0 12px' }}>Room check-ins by staff</h3>
+            <h3 style={{ margin: '0 0 12px' }}>{t('chart_checkins_by_staff')}</h3>
             <p style={{ margin: '0 0 12px', fontSize: 13, color: '#6b7280' }}>
-              Guest room stays recorded in this month (who checked the guest in).
+              {t('chart_checkins_by_staff_help')}
             </p>
             <div style={{ height: 280 }}>
               {employeeActivityLoading ? (
-                <p style={{ color: '#6b7280', padding: 24 }}>Loading…</p>
+                <p style={{ color: '#6b7280', padding: 24 }}>{t('loading')}</p>
               ) : employeeActivity && employeeActivity.check_ins.labels.length > 0 ? (
                 <BarChart
                   labels={employeeActivity.check_ins.labels}
                   data={employeeActivity.check_ins.counts}
-                  label="Room check-ins"
+                  label={t('chart_label_room_checkins')}
                   color="rgba(22, 163, 74, 1)"
                   horizontal
                 />
               ) : (
-                <p style={{ color: '#6b7280', padding: 24 }}>No room check-ins for this month.</p>
+                <p style={{ color: '#6b7280', padding: 24 }}>{t('chart_no_room_usage_month')}</p>
               )}
             </div>
           </div>
           <div className="card" style={{ minHeight: 360 }}>
-            <h3 style={{ margin: '0 0 12px' }}>Rooms cleaned by staff</h3>
+            <h3 style={{ margin: '0 0 12px' }}>{t('chart_cleanups_by_staff')}</h3>
             <p style={{ margin: '0 0 12px', fontSize: 13, color: '#6b7280' }}>
-              Checkouts completed in this month (who cleaned / verified the room).
+              {t('chart_cleanups_by_staff_help')}
             </p>
             <div style={{ height: 280 }}>
               {employeeActivityLoading ? (
-                <p style={{ color: '#6b7280', padding: 24 }}>Loading…</p>
+                <p style={{ color: '#6b7280', padding: 24 }}>{t('loading')}</p>
               ) : employeeActivity && employeeActivity.cleanups.labels.length > 0 ? (
                 <BarChart
                   labels={employeeActivity.cleanups.labels}
                   data={employeeActivity.cleanups.counts}
-                  label="Rooms cleaned"
+                  label={t('chart_rooms_cleaned')}
                   color="rgba(37, 99, 235, 1)"
                   horizontal
                 />
               ) : (
-                <p style={{ color: '#6b7280', padding: 24 }}>
-                  No cleanups recorded for this month. If this stays empty, confirm Firestore has{' '}
-                  <code style={{ fontSize: 12 }}>checkedOutAt</code> and{' '}
-                  <code style={{ fontSize: 12 }}>cleanedBy</code> on checked-out room stays.
-                </p>
+                <p style={{ color: '#6b7280', padding: 24 }}>{t('chart_no_cleanups_month')}</p>
               )}
             </div>
           </div>
