@@ -3,6 +3,7 @@ import AppLayout from '@/components/AppLayout';
 import CheckInTypeSelector from '@/components/checkins/CheckInTypeSelector';
 import CheckoutRoomsSection from '@/components/checkins/CheckoutRoomsSection';
 import AdminRedirectToDashboard from '@/components/AdminRedirectToDashboard';
+import LocalizedPageHeading from '@/components/LocalizedPageHeading';
 
 export default async function NewCheckinPage({
   searchParams,
@@ -26,8 +27,7 @@ export default async function NewCheckinPage({
   return (
     <AppLayout role={session.role}>
       <div className="container">
-        <h1 className="page-title">Check-In / Checkout</h1>
-        <p className="page-subtitle">Choose what you are registering</p>
+        <LocalizedPageHeading titleKey="check_in_checkout_title" subtitleKey="choose_type" />
         <CheckInTypeSelector />
         <CheckoutRoomsSection
           checkoutVariant={session.role === 'employee' ? 'employee' : 'admin'}

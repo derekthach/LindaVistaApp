@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useLanguage } from '@/components/LanguageToggle';
+import type { TranslationKey } from '@/lib/i18n/translations';
 import { filterCarMakes, shouldOfferAddNewCarMake } from '@/lib/checkins/filterCarMakes';
 
 export type PersistNewCarMakeResult =
@@ -383,7 +384,9 @@ export default function CarMakeCombobox({
               {t('car_make_add_modal_detail').replace(/\{make\}/g, pendingTrimmed)}
             </p>
             {confirmError && (
-              <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 12 }}>{confirmError}</div>
+              <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 12 }}>
+                {t(confirmError as TranslationKey)}
+              </div>
             )}
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
               <button

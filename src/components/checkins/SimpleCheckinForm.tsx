@@ -407,7 +407,9 @@ function SimpleCheckinFormContent({
         </section>
 
         <label>
-          <div>{t('notes')} (Optional)</div>
+          <div>
+            {t('notes')} ({t('optional')})
+          </div>
           <textarea
             name="notes"
             rows={3}

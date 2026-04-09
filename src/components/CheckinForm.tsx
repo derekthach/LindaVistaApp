@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { DateTime } from 'luxon';
 import { useRouter } from 'next/navigation';
 import { useLanguage } from './LanguageToggle';
-import { CAR_COLORS } from '@/lib/checkins/colors';
+import { CAR_COLORS, carColorLabel } from '@/lib/checkins/colors';
+import type { TranslationKey } from '@/lib/i18n/translations';
 import {
   validateRoomCheckin,
   normalizeReceipt,
@@ -16,7 +17,7 @@ import {
   validatePaymentSplits,
 } from '@/lib/checkins/roomPaymentSplits';
 import type { RoomPaymentSplit } from '@/types';
-import { ROOM_OPTIONS, parseRoomOptionValue, type RoomId } from '@/lib/checkins/rooms';
+import { ROOM_OPTIONS, formatRoomDisplay, parseRoomOptionValue, type RoomId } from '@/lib/checkins/rooms';
 import { createRoomSubmissionKey } from '@/lib/checkins/roomSubmissionKey';
 import { getAvailableRoomOptions } from '@/lib/checkins/roomOccupancy';
 import StaffDropdown from '@/components/checkins/StaffDropdown';
@@ -71,6 +72,7 @@ function CheckinFormContent({
 }) {
   const router = useRouter();
   const { t } = useLanguage();
+  const te = useCallback((key: string | undefined) => (key ? t(key as TranslationKey) : ''), [t]);
   const [form, setForm] = useState<FormState>(defaultState);
   const [paymentRows, setPaymentRows] = useState<PaymentRow[]>([defaultPaymentRow()]);
   const [touched, setTouched] = useState<Partial<Record<keyof FormState | 'payment_splits', boolean>>>({});
@@ -227,16 +229,13 @@ function CheckinFormContent({
       });
       const data = await res.json();
       if (!res.ok) {
-        return {
-          ok: false as const,
-          error: typeof data.error === 'string' ? data.error : 'Failed to add',
-        };
+        return { ok: false as const, error: 'error_car_make_add_failed' };
       }
       const nameUpper = data.nameUpper as string;
       setCarMakes((prev) => (prev.includes(nameUpper) ? prev : [...prev, nameUpper]).sort());
       return { ok: true as const, nameUpper };
     } catch {
-      return { ok: false as const, error: 'Failed to add car make' };
+      return { ok: false as const, error: 'error_car_make_network' };
     }
   }, []);
 
@@ -297,16 +296,16 @@ function CheckinFormContent({
               disabled={availableRooms.length === 0}
             >
               {availableRooms.length === 0 ? (
-                <option value="">All rooms occupied — complete a checkout first</option>
+                <option value="">{t('all_rooms_occupied')}</option>
               ) : (
                 availableRooms.map((room) => (
                   <option key={String(room)} value={String(room)}>
-                    Room {room}
+                    {formatRoomDisplay(room, t('room'))}
                   </option>
                 ))
               )}
             </select>
-            {showError('room_id') && <div style={errorStyle}>{validation.errors.room_id}</div>}
+            {showError('room_id') && <div style={errorStyle}>{te(validation.errors.room_id)}</div>}
           </label>
 
           <label>
@@ -321,7 +320,7 @@ function CheckinFormContent({
               maxLength={5}
               inputMode="numeric"
             />
-            {showError('receipt_number') && <div style={errorStyle}>{validation.errors.receipt_number}</div>}
+            {showError('receipt_number') && <div style={errorStyle}>{te(validation.errors.receipt_number)}</div>}
           </label>
 
           <label>
@@ -337,7 +336,7 @@ function CheckinFormContent({
               style={inputStyle}
               aria-readonly={!allowEditDateTime}
             />
-            {showError('date') && <div style={errorStyle}>{validation.errors.date}</div>}
+            {showError('date') && <div style={errorStyle}>{te(validation.errors.date)}</div>}
           </label>
 
           <label>
@@ -353,7 +352,7 @@ function CheckinFormContent({
               style={inputStyle}
               aria-readonly={!allowEditDateTime}
             />
-            {showError('time') && <div style={errorStyle}>{validation.errors.time}</div>}
+            {showError('time') && <div style={errorStyle}>{te(validation.errors.time)}</div>}
           </label>
 
           <div style={{ gridColumn: '1 / -1' }}>
@@ -445,7 +444,7 @@ function CheckinFormContent({
                 : '—'}
             </div>
             {showError('payment_splits') && (
-              <div style={errorStyle}>{validation.errors.payment_splits}</div>
+              <div style={errorStyle}>{te(validation.errors.payment_splits)}</div>
             )}
           </div>
 
@@ -458,9 +457,9 @@ function CheckinFormContent({
               onBlur={handleCarPlateBlur}
               style={inputStyle}
               maxLength={PLATE_MAX}
-              placeholder="ABC-123"
+              placeholder={t('license_plate_placeholder')}
             />
-            {showError('car_plate') && <div style={errorStyle}>{validation.errors.car_plate}</div>}
+            {showError('car_plate') && <div style={errorStyle}>{te(validation.errors.car_plate)}</div>}
           </label>
 
           <label>
@@ -474,7 +473,7 @@ function CheckinFormContent({
               inputStyle={inputStyle}
               persistNewCarMake={allowAddCarMake ? persistNewCarMake : undefined}
             />
-            {showError('car_make') && <div style={errorStyle}>{validation.errors.car_make}</div>}
+            {showError('car_make') && <div style={errorStyle}>{te(validation.errors.car_make)}</div>}
           </label>
 
           <label>
@@ -488,11 +487,11 @@ function CheckinFormContent({
             >
               {CAR_COLORS.map((c) => (
                 <option key={c.key} value={c.key}>
-                  {c.label}
+                  {carColorLabel(c.key, t)}
                 </option>
               ))}
             </select>
-            {showError('car_color') && <div style={errorStyle}>{validation.errors.car_color}</div>}
+            {showError('car_color') && <div style={errorStyle}>{te(validation.errors.car_color)}</div>}
           </label>
 
           {lockedStaffName ? (
@@ -517,11 +516,13 @@ function CheckinFormContent({
               isAdmin={allowEditDateTime}
             />
           )}
-          {showError('staff_name') && <div style={errorStyle}>{validation.errors.staff_name}</div>}
+          {showError('staff_name') && <div style={errorStyle}>{te(validation.errors.staff_name)}</div>}
         </div>
 
         <label>
-          <div>{t('note')} (Optional)</div>
+          <div>
+            {t('note')} ({t('optional')})
+          </div>
           <textarea
             name="note"
             rows={3}
@@ -530,7 +531,7 @@ function CheckinFormContent({
             style={{ ...inputStyle, resize: 'vertical' }}
             maxLength={NOTE_MAX}
           />
-          {validation.errors.note && <div style={errorStyle}>{validation.errors.note}</div>}
+          {validation.errors.note && <div style={errorStyle}>{te(validation.errors.note)}</div>}
         </label>
 
         <button

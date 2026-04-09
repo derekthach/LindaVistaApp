@@ -4,22 +4,20 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { CheckIn, UserRole, LineItem, SummarizedItem } from '@/types';
 import Button from '@/components/Button';
-import {
-  SECTION_LABELS,
-  buildSectionedData,
-  type SectionTotals,
-} from '@/lib/checkins/sectioning';
-import { getCarColorLabel } from '@/lib/checkins/colors';
+import { buildSectionedData, type SectionTotals } from '@/lib/checkins/sectioning';
+import { carColorLabel } from '@/lib/checkins/colors';
+import { formatRoomDisplay } from '@/lib/checkins/rooms';
+import type { TranslationKey } from '@/lib/i18n/translations';
 import EditCheckinModal, { type EditCheckinDraft } from '@/components/checkins/EditCheckinModal';
 import ConfirmDiffModal, { type DiffLine } from '@/components/checkins/ConfirmDiffModal';
 import EditHistoryPanel from '@/components/checkins/EditHistoryPanel';
 import { formatReceiptNumber } from '@/lib/checkins/receipt';
-import { useLanguage, type TranslationKey } from '@/components/LanguageToggle';
+import { useLanguage } from '@/components/LanguageToggle';
 import {
   calculatePaymentSplitTotal,
-  formatPaymentBreakdownComma,
-  getRoomPaymentBreakdownDisplay,
+  getRoomPaymentBreakdownDisplayLocalized,
 } from '@/lib/checkins/roomPaymentSplits';
+import { getPaymentMethodTranslationKey } from '@/lib/checkins/paymentMethods';
 
 function TrashIcon() {
   return (
@@ -62,21 +60,33 @@ function centsToCurrency(cents: number): string {
   );
 }
 
-function renderTotalsBreakdown(totals: SectionTotals) {
+function renderTotalsBreakdown(totals: SectionTotals, t: (key: TranslationKey) => string) {
   const carCount = totals.carCount ?? 0;
   return (
     <span style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
-      Cars: {carCount} | Room: {centsToCurrency(totals.roomCents)} | Food: {centsToCurrency(totals.foodCents)} | Beer: {centsToCurrency(totals.beerCents)} | <strong>Total: {centsToCurrency(totals.totalCents)}</strong>
+      {t('list_totals_cars')}: {carCount} | {t('list_totals_room')}: {centsToCurrency(totals.roomCents)} |{' '}
+      {t('list_totals_food')}: {centsToCurrency(totals.foodCents)} | {t('list_totals_beer')}:{' '}
+      {centsToCurrency(totals.beerCents)} |{' '}
+      <strong>
+        {t('list_totals_label')}: {centsToCurrency(totals.totalCents)}
+      </strong>
     </span>
   );
 }
 
 export type { SectionTotals } from '@/lib/checkins/sectioning';
 
-/** For food/beer, show placeholder instead of 0 or empty. */
-function roomDisplay(checkin: CheckIn): string | number {
+const SECTION_BUCKET_KEYS: TranslationKey[] = ['section_bucket_1', 'section_bucket_2', 'section_bucket_3'];
+
+function roomCell(checkin: CheckIn, t: (key: TranslationKey) => string): string | number {
   if (checkin.checkInType === 'food' || checkin.checkInType === 'beer') return '—';
-  return checkin.room_id;
+  return formatRoomDisplay(checkin.room_id, t('room'));
+}
+
+function typeCell(checkin: CheckIn, t: (key: TranslationKey) => string): string {
+  if (checkin.checkInType === 'food') return t('table_type_food');
+  if (checkin.checkInType === 'beer') return t('table_type_beer');
+  return t('table_type_room');
 }
 
 function orDash(value: string | undefined): string {
@@ -102,7 +112,7 @@ function DetailsPanel({ checkin, t }: { checkin: CheckIn; t: (key: TranslationKe
   const valueStyle = { fontWeight: 500 };
 
   if (isRoom) {
-    const pay = getRoomPaymentBreakdownDisplay(checkin);
+    const pay = getRoomPaymentBreakdownDisplayLocalized(checkin, (k) => t(k as TranslationKey));
     const hasCheckoutData = checkin.is_checked_out === true;
     const sectionHeaderStyle: React.CSSProperties = {
       fontSize: 12,
@@ -126,21 +136,21 @@ function DetailsPanel({ checkin, t }: { checkin: CheckIn; t: (key: TranslationKe
           }}
         >
           <div style={columnStyle}>
-            <div style={sectionHeaderStyle}>Check-In Info</div>
+            <div style={sectionHeaderStyle}>{t('details_checkin_info')}</div>
             <dl style={{ margin: 0, ...gridStyle } as React.CSSProperties}>
-              <dt style={labelStyle}>Receipt #</dt>
+              <dt style={labelStyle}>{t('label_receipt')}</dt>
               <dd style={{ margin: 0, ...valueStyle }}>{formatReceiptNumber(checkin.receipt_number ?? '')}</dd>
-              <dt style={labelStyle}>Room</dt>
-              <dd style={{ margin: 0, ...valueStyle }}>{checkin.room_id}</dd>
-              <dt style={labelStyle}>Date</dt>
+              <dt style={labelStyle}>{t('label_room')}</dt>
+              <dd style={{ margin: 0, ...valueStyle }}>{formatRoomDisplay(checkin.room_id, t('room'))}</dd>
+              <dt style={labelStyle}>{t('date')}</dt>
               <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.date)}</dd>
-              <dt style={labelStyle}>Time</dt>
+              <dt style={labelStyle}>{t('time')}</dt>
               <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.time)}</dd>
-              <dt style={labelStyle}>Staff (check-in)</dt>
+              <dt style={labelStyle}>{t('label_staff_checkin')}</dt>
               <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.staff_name)}</dd>
-              <dt style={labelStyle}>License Plate</dt>
+              <dt style={labelStyle}>{t('car_plate')}</dt>
               <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.car_plate)}</dd>
-              <dt style={labelStyle}>Payment Breakdown</dt>
+              <dt style={labelStyle}>{t('payment_breakdown')}</dt>
               <dd style={{ margin: 0, ...valueStyle }}>
                 <ul style={{ margin: 0, paddingLeft: 18 }}>
                   {pay.lines.map((line, i) => (
@@ -148,31 +158,35 @@ function DetailsPanel({ checkin, t }: { checkin: CheckIn; t: (key: TranslationKe
                   ))}
                 </ul>
               </dd>
-              <dt style={labelStyle}>Total Collected</dt>
+              <dt style={labelStyle}>{t('total_collected')}</dt>
               <dd style={{ margin: 0, ...valueStyle }}>${pay.total.toFixed(2)}</dd>
-              <dt style={labelStyle}>Car Make</dt>
+              <dt style={labelStyle}>{t('car_make')}</dt>
               <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.car_make)}</dd>
-              <dt style={labelStyle}>Car Color</dt>
-              <dd style={{ margin: 0, ...valueStyle }}>{checkin.car_color ? getCarColorLabel(checkin.car_color) : '—'}</dd>
-              <dt style={labelStyle}>Notes</dt>
+              <dt style={labelStyle}>{t('car_color')}</dt>
+              <dd style={{ margin: 0, ...valueStyle }}>
+                {checkin.car_color ? carColorLabel(checkin.car_color, t) : '—'}
+              </dd>
+              <dt style={labelStyle}>{t('notes')}</dt>
               <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.note)}</dd>
             </dl>
           </div>
           <div style={columnStyle}>
-            <div style={sectionHeaderStyle}>Checkout Info</div>
+            <div style={sectionHeaderStyle}>{t('details_checkout_info')}</div>
             {hasCheckoutData ? (
               <dl style={{ margin: 0, ...gridStyle } as React.CSSProperties}>
-                <dt style={labelStyle}>Checkout Time</dt>
+                <dt style={labelStyle}>{t('label_checkout_time')}</dt>
                 <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.checked_out_at)}</dd>
-                <dt style={labelStyle}>Cleaning Time</dt>
+                <dt style={labelStyle}>{t('label_cleaning_time')}</dt>
                 <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.cleaned_at)}</dd>
-                <dt style={labelStyle}>Checked out by</dt>
+                <dt style={labelStyle}>{t('label_checked_out_by')}</dt>
                 <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.checked_out_by)}</dd>
-                <dt style={labelStyle}>Cleaned by</dt>
+                <dt style={labelStyle}>{t('label_cleaned_by')}</dt>
                 <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.cleaned_by)}</dd>
               </dl>
             ) : (
-              <p style={{ margin: 0, fontSize: 13, color: '#6b7280', fontWeight: 500 }}>Not checked out yet</p>
+              <p style={{ margin: 0, fontSize: 13, color: '#6b7280', fontWeight: 500 }}>
+                {t('not_checked_out_yet')}
+              </p>
             )}
           </div>
         </div>
@@ -196,16 +210,16 @@ function DetailsPanel({ checkin, t }: { checkin: CheckIn; t: (key: TranslationKe
   return (
     <div style={{ padding: '12px 16px', backgroundColor: '#f9fafb', borderRadius: 8, margin: 4 }}>
       <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8, fontWeight: 600 }}>
-        {checkin.checkInType === 'food' ? 'Food & Beverage' : 'Beer'} details
+        {checkin.checkInType === 'food' ? t('food_beverage_details') : t('beer_details')}
       </div>
       <dl style={{ margin: 0, ...gridStyle } as React.CSSProperties}>
-        <dt style={labelStyle}>Staff</dt>
+        <dt style={labelStyle}>{t('table_staff')}</dt>
         <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.staff_name)}</dd>
-        <dt style={labelStyle}>Items</dt>
+        <dt style={labelStyle}>{t('items')}</dt>
         <dd style={{ margin: 0, ...valueStyle }}>{itemsSummary}</dd>
-        <dt style={labelStyle}>Total</dt>
+        <dt style={labelStyle}>{t('total')}</dt>
         <dd style={{ margin: 0, ...valueStyle }}>${Number(checkin.cost).toFixed(2)}</dd>
-        <dt style={labelStyle}>Notes</dt>
+        <dt style={labelStyle}>{t('notes')}</dt>
         <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.note)}</dd>
       </dl>
     </div>
@@ -277,13 +291,13 @@ export default function CheckinsList({
       const res = await fetch(`/api/checkins/${pendingDelete.id}`, { method: 'DELETE', credentials: 'include' });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(typeof data?.message === 'string' ? data.message : 'Delete failed');
+        throw new Error(typeof data?.message === 'string' ? data.message : t('error_delete_failed'));
       }
       setPendingDelete(null);
-      setSuccessMessage('Check-in deleted.');
+      setSuccessMessage(t('success_checkin_deleted'));
       router.refresh();
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Delete failed');
+      setErrorMessage(err instanceof Error ? err.message : t('error_delete_failed'));
     } finally {
       setIsDeleting(false);
     }
@@ -322,47 +336,64 @@ export default function CheckinsList({
     const lines: DiffLine[] = [];
     const receiptFrom = formatReceiptNumber(checkin.receipt_number ?? '');
     if (draft.receipt_number !== receiptFrom) {
-      lines.push({ label: 'Receipt #', from: receiptFrom, to: draft.receipt_number });
+      lines.push({ label: t('diff_label_receipt'), from: receiptFrom, to: draft.receipt_number });
     }
     if (draft.staff_name !== (checkin.staff_name ?? '')) {
-      lines.push({ label: 'Staff', from: checkin.staff_name ?? '', to: draft.staff_name });
+      lines.push({ label: t('diff_label_staff'), from: checkin.staff_name ?? '', to: draft.staff_name });
     }
     const isRoom = checkin.checkInType !== 'food' && checkin.checkInType !== 'beer';
     if (isRoom) {
-      const fromPay = getRoomPaymentBreakdownDisplay(checkin);
+      const fromPay = getRoomPaymentBreakdownDisplayLocalized(checkin, (k) => t(k as TranslationKey));
       const toSplits = draft.payment_splits;
       if (toSplits && toSplits.length > 0) {
-        const toBreakdown = formatPaymentBreakdownComma(toSplits);
+        const toBreakdown = toSplits
+          .map(
+            (s) =>
+              `${t(getPaymentMethodTranslationKey(s.method) as TranslationKey)} $${Number(s.amount).toFixed(2)}`
+          )
+          .join(', ');
         const toTotal = calculatePaymentSplitTotal(toSplits);
         if (fromPay.compactComma !== toBreakdown) {
           lines.push({
-            label: 'Payment Breakdown',
+            label: t('diff_label_payment_breakdown'),
             from: fromPay.compactComma,
             to: toBreakdown,
           });
         }
         if (fromPay.total !== toTotal) {
           lines.push({
-            label: 'Total Collected',
+            label: t('diff_label_total_collected'),
             from: `$${fromPay.total.toFixed(2)}`,
             to: `$${toTotal.toFixed(2)}`,
           });
         }
       }
       if (draft.room_id != null && String(draft.room_id) !== String(checkin.room_id ?? '')) {
-        lines.push({ label: 'Room', from: String(checkin.room_id ?? ''), to: String(draft.room_id) });
+        lines.push({
+          label: t('diff_label_room'),
+          from: String(checkin.room_id ?? ''),
+          to: String(draft.room_id),
+        });
       }
     } else {
       const fromLabel = getFirstItemLabel(checkin);
       if (draft.itemLabel != null && draft.itemLabel !== fromLabel) {
-        lines.push({ label: 'Item', from: fromLabel || '(empty)', to: draft.itemLabel });
+        lines.push({
+          label: t('diff_label_item'),
+          from: fromLabel || t('diff_empty'),
+          to: draft.itemLabel,
+        });
       }
       if (draft.quantity != null && draft.quantity !== getFirstQuantity(checkin)) {
-        lines.push({ label: 'Quantity', from: String(getFirstQuantity(checkin)), to: String(draft.quantity) });
+        lines.push({
+          label: t('diff_label_quantity'),
+          from: String(getFirstQuantity(checkin)),
+          to: String(draft.quantity),
+        });
       }
       if (draft.amountCollected != null && Number(draft.amountCollected) !== getFirstAmountCollected(checkin)) {
         lines.push({
-          label: 'Amount Collected',
+          label: t('diff_label_amount_collected'),
           from: `$${getFirstAmountCollected(checkin).toFixed(2)}`,
           to: `$${Number(draft.amountCollected).toFixed(2)}`,
         });
@@ -408,15 +439,20 @@ export default function CheckinsList({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        const msg = typeof data?.error === 'string' ? data.error : typeof data?.message === 'string' ? data.message : 'Update failed';
+        const msg =
+          typeof data?.error === 'string'
+            ? data.error
+            : typeof data?.message === 'string'
+              ? data.message
+              : t('error_update_failed');
         throw new Error(msg);
       }
       setPendingUpdate(null);
       setEditingCheckin(null);
-      setSuccessMessage('Record updated.');
+      setSuccessMessage(t('success_record_updated'));
       router.refresh();
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Update failed');
+      setErrorMessage(err instanceof Error ? err.message : t('error_update_failed'));
     } finally {
       setIsUpdating(false);
     }
@@ -446,8 +482,8 @@ export default function CheckinsList({
             onClick={() => toggleExpanded(checkin)}
             className="btn btn-ghost"
             style={{ minWidth: 32, height: 32, padding: 0 }}
-            aria-label={isExpanded ? 'Hide details' : 'View details'}
-            title={isExpanded ? 'Hide details' : 'View details'}
+            aria-label={isExpanded ? t('aria_hide_details') : t('aria_view_details')}
+            title={isExpanded ? t('aria_hide_details') : t('aria_view_details')}
           >
             {isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
           </button>
@@ -458,8 +494,8 @@ export default function CheckinsList({
                 onClick={() => setEditingCheckin(checkin)}
                 className="btn btn-ghost"
                 style={{ minWidth: 32, height: 32, padding: 0 }}
-                aria-label="Edit check-in"
-                title="Edit check-in"
+                aria-label={t('aria_edit_checkin')}
+                title={t('aria_edit_checkin')}
               >
                 <EditIcon />
               </button>
@@ -468,8 +504,8 @@ export default function CheckinsList({
                 onClick={() => handleDeleteClick(checkin)}
                 className="btn btn-ghost"
                 style={{ minWidth: 32, height: 32, padding: 0 }}
-                aria-label="Delete check-in"
-                title="Delete check-in"
+                aria-label={t('aria_delete_checkin')}
+                title={t('aria_delete_checkin')}
               >
                 <TrashIcon />
               </button>
@@ -484,11 +520,11 @@ export default function CheckinsList({
     if (sectioned) {
       return (
         <>
-          {SECTION_LABELS.map((label, idx) => (
+          {SECTION_BUCKET_KEYS.map((labelKey, idx) => (
             <Fragment key={idx}>
               <tr style={{ backgroundColor: '#f9fafb' }}>
                 <td colSpan={colCount} style={{ padding: 8, fontWeight: 600 }}>
-                  {label}
+                  {t(labelKey)}
                 </td>
               </tr>
               {sectioned.buckets[idx].map((checkin) => (
@@ -497,8 +533,8 @@ export default function CheckinsList({
                     <td style={{ padding: 8 }}>{formatReceiptNumber(checkin.receipt_number ?? '')}</td>
                     <td style={{ padding: 8 }}>{checkin.date}</td>
                     <td style={{ padding: 8 }}>{checkin.time}</td>
-                    <td style={{ padding: 8 }}>{checkin.checkInType ?? 'room'}</td>
-                    <td style={{ padding: 8 }}>{roomDisplay(checkin)}</td>
+                    <td style={{ padding: 8 }}>{typeCell(checkin, t)}</td>
+                    <td style={{ padding: 8 }}>{roomCell(checkin, t)}</td>
                     <td style={{ padding: 8 }}>{checkin.staff_name}</td>
                     <td style={{ padding: 8 }}>${Number(checkin.cost).toFixed(2)}</td>
                     {renderActionsCell(checkin)}
@@ -521,17 +557,19 @@ export default function CheckinsList({
               ))}
               <tr style={{ backgroundColor: '#f3f4f6' }}>
                 <td colSpan={colCountForTotal} style={{ padding: 8, textAlign: 'right', fontWeight: 500 }}>
-                  Section total
+                  {t('list_section_total')}
                 </td>
-                <td style={{ padding: 8, fontWeight: 500 }}>{renderTotalsBreakdown(sectioned.sectionTotals[idx])}</td>
+                <td style={{ padding: 8, fontWeight: 500 }}>
+                  {renderTotalsBreakdown(sectioned.sectionTotals[idx], t)}
+                </td>
               </tr>
             </Fragment>
           ))}
           <tr style={{ backgroundColor: '#e5e7eb', fontWeight: 600 }}>
             <td colSpan={colCountForTotal} style={{ padding: 8, textAlign: 'right' }}>
-              Day total
+              {t('list_day_total')}
             </td>
-            <td style={{ padding: 8 }}>{renderTotalsBreakdown(sectioned.dayTotals)}</td>
+            <td style={{ padding: 8 }}>{renderTotalsBreakdown(sectioned.dayTotals, t)}</td>
           </tr>
         </>
       );
@@ -542,8 +580,8 @@ export default function CheckinsList({
           <td style={{ padding: 8 }}>{formatReceiptNumber(checkin.receipt_number ?? '')}</td>
           <td style={{ padding: 8 }}>{checkin.date}</td>
           <td style={{ padding: 8 }}>{checkin.time}</td>
-          <td style={{ padding: 8 }}>{checkin.checkInType ?? 'room'}</td>
-          <td style={{ padding: 8 }}>{roomDisplay(checkin)}</td>
+          <td style={{ padding: 8 }}>{typeCell(checkin, t)}</td>
+          <td style={{ padding: 8 }}>{roomCell(checkin, t)}</td>
           <td style={{ padding: 8 }}>{checkin.staff_name}</td>
           <td style={{ padding: 8 }}>${Number(checkin.cost).toFixed(2)}</td>
           {renderActionsCell(checkin)}
@@ -569,10 +607,10 @@ export default function CheckinsList({
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       <div className="card" style={{ display: 'grid', gap: 12 }}>
-        <strong>Filter by Day</strong>
+        <strong>{t('list_filter_by_day')}</strong>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
           <label>
-            <div>Date</div>
+            <div>{t('date')}</div>
             <input
               type="date"
               value={selectedDate}
@@ -582,13 +620,13 @@ export default function CheckinsList({
           </label>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <Button variant="primary" onClick={handleFilter}>
-              Filter
+              {t('list_filter')}
             </Button>
             <Button variant="ghost" onClick={handleClearFilters} disabled={!dateFilterActive}>
-              Clear Filters
+              {t('list_clear_filters')}
             </Button>
             <Button variant="secondary" onClick={handleExport}>
-              Export CSV
+              {t('export_csv')}
             </Button>
           </div>
         </div>
@@ -609,19 +647,32 @@ export default function CheckinsList({
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              {['Receipt #', 'Date', 'Time', 'Type', 'Room', 'Staff', 'Total'].map((h) => (
+              {(
+                [
+                  'table_receipt',
+                  'date',
+                  'time',
+                  'table_type',
+                  'table_room',
+                  'table_staff',
+                  'table_total',
+                ] as const
+              ).map((h) => (
                 <th key={h} style={{ textAlign: 'left', padding: 8, borderBottom: '1px solid #e5e7eb' }}>
-                  {h}
+                  {t(h)}
                 </th>
               ))}
-              <th key="actions" style={{ width: 112, padding: 8, borderBottom: '1px solid #e5e7eb', textAlign: 'right' }}>
-                Actions
+              <th
+                key="actions"
+                style={{ width: 112, padding: 8, borderBottom: '1px solid #e5e7eb', textAlign: 'right' }}
+              >
+                {t('table_actions')}
               </th>
             </tr>
           </thead>
           <tbody>{tableBody()}</tbody>
         </table>
-        {initialCheckins.length === 0 && <div style={{ padding: 16 }}>No check-ins found.</div>}
+        {initialCheckins.length === 0 && <div style={{ padding: 16 }}>{t('list_no_checkins')}</div>}
       </div>
 
       <EditCheckinModal
@@ -660,37 +711,37 @@ export default function CheckinsList({
             onClick={(e) => e.stopPropagation()}
           >
             <h2 id="delete-checkin-title" style={{ margin: '0 0 8px', fontSize: 18 }}>
-              Delete check-in?
+              {t('delete_checkin_title')}
             </h2>
-            <p style={{ margin: '0 0 16px', color: '#6b7280' }}>This action cannot be undone.</p>
+            <p style={{ margin: '0 0 16px', color: '#6b7280' }}>{t('delete_irreversible_body')}</p>
             <dl style={{ margin: '0 0 20px', fontSize: 14 }}>
               <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
-                <dt style={{ fontWeight: 500 }}>Receipt #</dt>
+                <dt style={{ fontWeight: 500 }}>{t('label_receipt')}</dt>
                 <dd style={{ margin: 0 }}>{formatReceiptNumber(pendingDelete.receipt_number ?? '')}</dd>
               </div>
               <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
-                <dt style={{ fontWeight: 500 }}>Date</dt>
+                <dt style={{ fontWeight: 500 }}>{t('date')}</dt>
                 <dd style={{ margin: 0 }}>{pendingDelete.date}</dd>
               </div>
               <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
-                <dt style={{ fontWeight: 500 }}>Time</dt>
+                <dt style={{ fontWeight: 500 }}>{t('time')}</dt>
                 <dd style={{ margin: 0 }}>{pendingDelete.time}</dd>
               </div>
               <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
-                <dt style={{ fontWeight: 500 }}>Room</dt>
-                <dd style={{ margin: 0 }}>{pendingDelete.room_id}</dd>
+                <dt style={{ fontWeight: 500 }}>{t('label_room')}</dt>
+                <dd style={{ margin: 0 }}>{formatRoomDisplay(pendingDelete.room_id, t('room'))}</dd>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <dt style={{ fontWeight: 500 }}>Total</dt>
+                <dt style={{ fontWeight: 500 }}>{t('table_total')}</dt>
                 <dd style={{ margin: 0 }}>${Number(pendingDelete.cost).toFixed(2)}</dd>
               </div>
             </dl>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <Button variant="secondary" onClick={handleDeleteCancel} disabled={isDeleting}>
-                Cancel
+                {t('cancel')}
               </Button>
               <Button variant="primary" onClick={handleDeleteConfirm} disabled={isDeleting}>
-                {isDeleting ? 'Deleting…' : 'Delete'}
+                {isDeleting ? t('deleting') : t('delete_checkin_confirm')}
               </Button>
             </div>
           </div>

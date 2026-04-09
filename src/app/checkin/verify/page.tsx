@@ -1,6 +1,7 @@
 import { requireAuth } from '@/server/auth/session';
 import AppLayout from '@/components/AppLayout';
 import VerifyCheckinForm from '@/components/VerifyCheckinForm';
+import LocalizedPageHeading from '@/components/LocalizedPageHeading';
 import { logInfo } from '@/lib/server/log';
 
 export const dynamic = 'force-dynamic';
@@ -15,8 +16,7 @@ export default async function VerifyCheckinPage() {
   return (
     <AppLayout role={session.role}>
       <div className="container">
-        <h1 className="page-title">Verify Check-In</h1>
-        <p className="page-subtitle">Review the information before submitting</p>
+        <LocalizedPageHeading titleKey="verify" subtitleKey="review_before_submitting" />
         <VerifyCheckinForm />
       </div>
     </AppLayout>

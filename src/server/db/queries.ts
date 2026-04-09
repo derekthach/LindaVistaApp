@@ -128,7 +128,7 @@ export function getRoomUsageTop15(): RoomUsageData {
         LIMIT 15
       `
     )
-    .all() as Array<{ room_id: number; usage_count: number }>;
+    .all() as Array<{ room_id: number | string; usage_count: number }>;
 
   return {
     room_numbers: results.map((r) => `Room ${r.room_id}`),

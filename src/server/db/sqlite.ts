@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import Database from 'better-sqlite3';
+import { ROOM_OPTIONS } from '@/lib/checkins/rooms';
 
 let db: Database.Database | null = null;
 
@@ -36,7 +37,7 @@ export function initDbIfMissing() {
 
   database.exec(`
     CREATE TABLE IF NOT EXISTS Rooms (
-      room_id INTEGER PRIMARY KEY,
+      room_id TEXT PRIMARY KEY,
       status TEXT NOT NULL
     )
   `);
@@ -47,7 +48,7 @@ export function initDbIfMissing() {
       receipt_number TEXT,
       date TEXT,
       time TEXT,
-      room_id INTEGER,
+      room_id TEXT,
       cost REAL,
       payment_method TEXT,
       staff_name TEXT,
@@ -75,8 +76,8 @@ export function initDbIfMissing() {
       'INSERT INTO Rooms (room_id, status) VALUES (?, ?)'
     );
     const transaction = database.transaction(() => {
-      for (let i = 1; i <= 40; i++) {
-        insertRoom.run(i, 'Available');
+      for (const id of ROOM_OPTIONS) {
+        insertRoom.run(String(id), 'Available');
       }
     });
     transaction();

@@ -1,8 +1,10 @@
 import type { CheckIn, RoomPaymentSplit } from '@/types';
+import type { TranslationKey } from '@/lib/i18n/translations';
 import {
   type PaymentMethodValue,
   normalizePaymentMethod,
   isValidPaymentMethod,
+  getPaymentMethodTranslationKey,
 } from '@/lib/checkins/paymentMethods';
 
 const METHOD_LABEL_EN: Record<PaymentMethodValue, string> = {
@@ -50,6 +52,17 @@ export function formatPaymentBreakdownLines(splits: RoomPaymentSplit[]): string[
   );
 }
 
+/** Localized payment lines for modals and lists. */
+export function formatPaymentBreakdownLinesLocalized(
+  splits: RoomPaymentSplit[],
+  t: (key: TranslationKey) => string
+): string[] {
+  return splits.map((s) => {
+    const k = getPaymentMethodTranslationKey(s.method) as TranslationKey;
+    return `${t(k)}: $${Number(s.amount).toFixed(2)}`;
+  });
+}
+
 export function parsePaymentSplitsFromFirestore(raw: unknown): RoomPaymentSplit[] | undefined {
   if (!Array.isArray(raw) || raw.length === 0) return undefined;
   const out: RoomPaymentSplit[] = [];
@@ -78,20 +91,20 @@ export function validatePaymentSplits(raw: unknown): ValidatePaymentSplitsResult
   let arr: unknown[];
   if (typeof raw === 'string') {
     const t = raw.trim();
-    if (!t) return { valid: false, error: 'Add at least one payment row' };
+    if (!t) return { valid: false, error: 'err_payment_add_row' };
     try {
       arr = JSON.parse(t) as unknown[];
     } catch {
-      return { valid: false, error: 'Invalid payment data' };
+      return { valid: false, error: 'err_payment_invalid_data' };
     }
   } else if (Array.isArray(raw)) {
     arr = raw;
   } else {
-    return { valid: false, error: 'Add at least one payment row' };
+    return { valid: false, error: 'err_payment_add_row' };
   }
 
   if (!Array.isArray(arr) || arr.length === 0) {
-    return { valid: false, error: 'Add at least one payment row' };
+    return { valid: false, error: 'err_payment_add_row' };
   }
 
   const seen = new Set<PaymentMethodValue>();
@@ -99,40 +112,40 @@ export function validatePaymentSplits(raw: unknown): ValidatePaymentSplitsResult
 
   for (const row of arr) {
     if (row == null || typeof row !== 'object') {
-      return { valid: false, error: 'Each payment row must have a method and amount' };
+      return { valid: false, error: 'err_payment_row_shape' };
     }
     const methodRaw = (row as { method?: unknown }).method;
     const amountRaw = (row as { amount?: unknown }).amount;
     const methodStr = methodRaw != null ? String(methodRaw).trim() : '';
     if (!methodStr || !isValidPaymentMethod(methodStr)) {
-      return { valid: false, error: 'Select a valid payment method for each row' };
+      return { valid: false, error: 'err_payment_method_each' };
     }
     const method = normalizePaymentMethod(methodStr);
     if (seen.has(method)) {
-      return { valid: false, error: 'Each payment method can only be used once' };
+      return { valid: false, error: 'err_payment_duplicate_method' };
     }
     seen.add(method);
 
     if (amountRaw === undefined || amountRaw === null || amountRaw === '') {
-      return { valid: false, error: 'Enter an amount greater than 0 for each row' };
+      return { valid: false, error: 'err_payment_amount_required' };
     }
     const amount = Number(amountRaw);
     if (Number.isNaN(amount)) {
-      return { valid: false, error: 'Each amount must be a valid number' };
+      return { valid: false, error: 'err_payment_amount_number' };
     }
     const rounded = roundMoney(amount);
     if (rounded <= 0) {
-      return { valid: false, error: 'Each amount must be greater than 0' };
+      return { valid: false, error: 'err_payment_amount_positive' };
     }
     if (rounded > COST_MAX) {
-      return { valid: false, error: `Each row cannot exceed $${COST_MAX}` };
+      return { valid: false, error: 'err_payment_row_max' };
     }
     splits.push({ method, amount: rounded });
   }
 
   const total = calculatePaymentSplitTotal(splits);
   if (total > COST_MAX) {
-    return { valid: false, error: `Total collected cannot exceed $${COST_MAX}` };
+    return { valid: false, error: 'err_payment_total_max' };
   }
 
   return { valid: true, splits };
@@ -168,6 +181,46 @@ export function getRoomPaymentBreakdownDisplay(checkin: CheckIn): {
     };
   }
   const pm = checkin.payment_method ? getRoomPaymentMethodEnglishLabel(checkin.payment_method) : '—';
+  const line = `${pm}: $${total.toFixed(2)}`;
+  return {
+    lines: [line],
+    compactComma: `${pm} $${total.toFixed(2)}`,
+    compactPipe: `${pm} $${total.toFixed(2)}`,
+    total,
+  };
+}
+
+/** Same as getRoomPaymentBreakdownDisplay but with translated method labels. */
+export function getRoomPaymentBreakdownDisplayLocalized(
+  checkin: CheckIn,
+  t: (key: TranslationKey) => string
+): {
+  lines: string[];
+  compactComma: string;
+  compactPipe: string;
+  total: number;
+} {
+  const splits = checkin.payment_splits;
+  const total = getRoomCollectedTotal(checkin);
+  if (splits && splits.length > 0) {
+    const lines = formatPaymentBreakdownLinesLocalized(splits, t);
+    const compactComma = splits
+      .map(
+        (s) =>
+          `${t(getPaymentMethodTranslationKey(s.method) as TranslationKey)} $${Number(s.amount).toFixed(2)}`
+      )
+      .join(', ');
+    const compactPipe = splits
+      .map(
+        (s) =>
+          `${t(getPaymentMethodTranslationKey(s.method) as TranslationKey)} $${Number(s.amount).toFixed(2)}`
+      )
+      .join(' | ');
+    return { lines, compactComma, compactPipe, total };
+  }
+  const pm = checkin.payment_method
+    ? t(getPaymentMethodTranslationKey(checkin.payment_method) as TranslationKey)
+    : '—';
   const line = `${pm}: $${total.toFixed(2)}`;
   return {
     lines: [line],

@@ -47,8 +47,9 @@
             <h1>Check-In Form</h1>
             <label for="room_id">Room Number:</label>
             <select name="room_id" id="room_id">
-                {% for room in range(1, 41) %}
-                <option value="{{ room }}" {% if room == request.args.get('room_id', '')|int %}selected{% endif %}>Room {{ room }}</option>
+                {% set selected_room = request.args.get('room_id', '') %}
+                {% for room in room_options %}
+                <option value="{{ room }}" {% if room|string == selected_room %}selected{% endif %}>Room {{ room }}</option>
                 {% endfor %}
             </select>
             <br>

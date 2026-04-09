@@ -1,6 +1,7 @@
 import { requireAuth } from '@/server/auth/session';
 import AppLayout from '@/components/AppLayout';
 import EmployeesAdminClient, { type EmployeeTableRow } from '@/components/EmployeesAdminClient';
+import LocalizedPageHeading from '@/components/LocalizedPageHeading';
 import { countPendingPasswordResets, listUsersPublic } from '@/lib/server/usersRepo';
 import type { PublicUserRow } from '@/lib/server/usersRepo';
 
@@ -34,8 +35,7 @@ export default async function AdminEmployeesPage() {
   return (
     <AppLayout role={session.role}>
       <div className="container">
-        <h1 className="page-title">Employees</h1>
-        <p className="page-subtitle">User accounts and password reset requests</p>
+        <LocalizedPageHeading titleKey="employees_title" subtitleKey="employees_subtitle" />
         <EmployeesAdminClient users={users.map(toTableRow)} pendingResetCount={pendingResetCount} />
       </div>
     </AppLayout>

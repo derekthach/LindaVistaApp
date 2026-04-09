@@ -1,8 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslation } from '@/lib/i18n/useTranslation';
 
 export default function LoginForgotPassword() {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(false);
@@ -20,11 +22,11 @@ export default function LoginForgotPassword() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: username.trim() }),
       });
-      const data = (await res.json().catch(() => ({}))) as { message?: string };
-      setMessage(typeof data.message === 'string' ? data.message : 'Request submitted.');
+      await res.json().catch(() => ({}));
+      setMessage(t('forgot_password_generic'));
       setUsername('');
     } catch {
-      setError('Could not submit request. Try again later.');
+      setError(t('forgot_submit_error'));
     } finally {
       setLoading(false);
     }
@@ -49,7 +51,7 @@ export default function LoginForgotPassword() {
           font: 'inherit',
         }}
       >
-        Forgot password?
+        {t('forgot_password')}
       </button>
 
       {open && (
@@ -58,7 +60,7 @@ export default function LoginForgotPassword() {
           style={{ marginTop: 12, display: 'grid', gap: 10, textAlign: 'left' }}
         >
           <label>
-            <div style={{ fontWeight: 600, marginBottom: 4 }}>Username</div>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>{t('username')}</div>
             <input
               value={username}
               onChange={(e) => setUsername(e.target.value)}
@@ -80,7 +82,7 @@ export default function LoginForgotPassword() {
               cursor: loading ? 'not-allowed' : 'pointer',
             }}
           >
-            {loading ? 'Sending…' : 'Submit request'}
+            {loading ? t('forgot_sending') : t('forgot_submit')}
           </button>
           {message && <p style={{ margin: 0, color: '#166534' }}>{message}</p>}
           {error && <p style={{ margin: 0, color: '#b91c1c' }}>{error}</p>}

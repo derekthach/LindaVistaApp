@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useCallback, useTransition } from 'react';
 import { logoutAction } from '@/app/actions/auth';
+import { useTranslation } from '@/lib/i18n/useTranslation';
 
 const IDLE_LIMIT_MS = 30 * 60 * 1000;
 const WARN_MS = 25 * 60 * 1000;
@@ -10,6 +11,7 @@ const WARN_MS = 25 * 60 * 1000;
  * Client-side idle logout for employees (server still enforces on the next request).
  */
 export default function InactivityGuard() {
+  const { t } = useTranslation();
   const [, startTransition] = useTransition();
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const warnTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -29,7 +31,7 @@ export default function InactivityGuard() {
     warnTimer.current = setTimeout(() => {
       if (!warned.current) {
         warned.current = true;
-        window.alert('Su sesión cerrará en unos minutos por inactividad. Mueva el mouse o pulse una tecla para seguir.');
+        window.alert(t('inactivity_warning'));
       }
     }, WARN_MS);
 
@@ -38,7 +40,7 @@ export default function InactivityGuard() {
         void logoutAction();
       });
     }, IDLE_LIMIT_MS);
-  }, [clearTimers, startTransition]);
+  }, [clearTimers, startTransition, t]);
 
   useEffect(() => {
     const bump = () => schedule();

@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useTranslation } from '@/lib/i18n/useTranslation';
+import type { TranslationKey } from '@/lib/i18n/translations';
 
 const DIGIT_COUNT = 4;
 
@@ -80,6 +82,12 @@ const errorStyle: React.CSSProperties = {
   marginBottom: 16,
 };
 
+function staffPasswordApiErrorKey(message: string | undefined): TranslationKey {
+  if (message === 'Invalid password') return 'staff_password_incorrect';
+  if (message === 'Invalid staff') return 'staff_password_invalid_staff';
+  return 'verify_generic_error';
+}
+
 export interface StaffPasswordModalProps {
   open: boolean;
   staffName: string;
@@ -93,8 +101,9 @@ export default function StaffPasswordModal({
   onClose,
   onSuccess,
 }: StaffPasswordModalProps) {
+  const { t } = useTranslation();
   const [digits, setDigits] = useState<string[]>(Array(DIGIT_COUNT).fill(''));
-  const [error, setError] = useState('');
+  const [errorKey, setErrorKey] = useState<TranslationKey | null>(null);
   const [verifying, setVerifying] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -105,7 +114,7 @@ export default function StaffPasswordModal({
   useEffect(() => {
     if (open) {
       setDigits(Array(DIGIT_COUNT).fill(''));
-      setError('');
+      setErrorKey(null);
       setVerifying(false);
       setTimeout(() => focus(0), 0);
     }
@@ -125,18 +134,18 @@ export default function StaffPasswordModal({
     const next = [...digits];
     next[index] = char;
     setDigits(next);
-    setError('');
+    setErrorKey(null);
     if (char && index < DIGIT_COUNT - 1) focus(index + 1);
   };
 
   const handleVerify = async () => {
     const password = digits.join('');
     if (password.length !== DIGIT_COUNT) {
-      setError('Please enter the 4-digit password');
+      setErrorKey('staff_password_digits_required');
       return;
     }
     setVerifying(true);
-    setError('');
+    setErrorKey(null);
     try {
       const res = await fetch('/api/verify-staff-password', {
         method: 'POST',
@@ -149,9 +158,10 @@ export default function StaffPasswordModal({
         onClose();
         return;
       }
-      setError(data.error || 'Incorrect password');
+      const msg = typeof data.error === 'string' ? data.error : undefined;
+      setErrorKey(staffPasswordApiErrorKey(msg));
     } catch {
-      setError('Something went wrong');
+      setErrorKey('verify_generic_error');
     } finally {
       setVerifying(false);
     }
@@ -169,16 +179,16 @@ export default function StaffPasswordModal({
     >
       <div style={cardStyle} onClick={(e) => e.stopPropagation()}>
         <h2 id="staff-password-title" style={titleStyle}>
-          Enter password
+          {t('staff_password_title')}
         </h2>
-        <p style={descriptionStyle}>
-          Please enter the password for {staffName}
-        </p>
+        <p style={descriptionStyle}>{t('staff_password_intro', { name: staffName })}</p>
         <div style={digitsContainerStyle}>
           {digits.map((d, i) => (
             <input
               key={i}
-              ref={(el) => { inputRefs.current[i] = el; }}
+              ref={(el) => {
+                inputRefs.current[i] = el;
+              }}
               type="text"
               inputMode="numeric"
               maxLength={1}
@@ -187,18 +197,13 @@ export default function StaffPasswordModal({
               onChange={(e) => handleChange(i, e.target.value)}
               onKeyDown={(e) => handleKeyDown(i, e)}
               style={digitInputStyle}
-              aria-label={`Digit ${i + 1}`}
+              aria-label={t('aria_digit_n', { n: i + 1 })}
             />
           ))}
         </div>
-        {error && <div style={errorStyle}>{error}</div>}
-        <button
-          type="button"
-          onClick={handleVerify}
-          disabled={verifying}
-          style={buttonStyle}
-        >
-          {verifying ? 'Verifying…' : 'Verify'}
+        {errorKey && <div style={errorStyle}>{t(errorKey)}</div>}
+        <button type="button" onClick={handleVerify} disabled={verifying} style={buttonStyle}>
+          {verifying ? t('staff_password_verifying') : t('staff_password_verify')}
         </button>
       </div>
     </div>

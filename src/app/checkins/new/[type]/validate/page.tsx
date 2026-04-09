@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { requireAuth } from '@/server/auth/session';
 import AppLayout from '@/components/AppLayout';
 import FoodBeerValidateClient from '@/components/checkins/FoodBeerValidateClient';
+import FoodBeerValidatePageHeading from '@/components/checkins/FoodBeerValidatePageHeading';
 
 interface PageProps {
   params: Promise<{ type: string }>;
@@ -18,10 +19,7 @@ export default async function ValidateCheckinPage({ params }: PageProps) {
   return (
     <AppLayout role={session.role}>
       <div className="container">
-        <h1 className="page-title">
-          {type === 'food' ? 'Food & Beverage' : 'Beer'} — Review
-        </h1>
-        <p className="page-subtitle">Review the information before submitting</p>
+        <FoodBeerValidatePageHeading type={type as 'food' | 'beer'} />
         <FoodBeerValidateClient
           type={type as 'food' | 'beer'}
           staffDisplayOverride={

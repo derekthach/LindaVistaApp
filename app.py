@@ -14,6 +14,13 @@ FLASK_ADMIN_PASS = os.environ.get('FLASK_ADMIN_PASS', 'password')
 FLASK_EMP_USER = os.environ.get('FLASK_EMP_USER', 'employee')
 FLASK_EMP_PASS = os.environ.get('FLASK_EMP_PASS', 'employee123')
 
+# Selectable rooms — keep in sync with src/lib/checkins/rooms.ts ROOM_OPTIONS
+ROOM_SELECT_OPTIONS = (
+    list(range(1, 14))
+    + ['14A', '14B', '15A', '15B']
+    + list(range(16, 51))
+)
+
 # Initialize the database
 def init_db():
     conn = sqlite3.connect('motel.db')
@@ -21,7 +28,7 @@ def init_db():
     
     # Create Rooms table if it doesn't exist
     c.execute('''CREATE TABLE IF NOT EXISTS Rooms (
-                    room_id INTEGER PRIMARY KEY,
+                    room_id TEXT PRIMARY KEY,
                     status TEXT NOT NULL
                 )''')
                 
@@ -31,7 +38,7 @@ def init_db():
                     receipt_number TEXT,                    
                     date TEXT,
                     time TEXT,
-                    room_id INTEGER,
+                    room_id TEXT,
                     cost REAL,
                     payment_method TEXT,
                     staff_name TEXT,
@@ -63,8 +70,10 @@ def init_db():
     
     # Only populate rooms if the table is empty
     if room_count == 0:
-        c.executemany('INSERT INTO Rooms (room_id, status) VALUES (?, ?)', 
-                     [(i, 'Available') for i in range(1, 41)])
+        c.executemany(
+            'INSERT INTO Rooms (room_id, status) VALUES (?, ?)',
+            [(str(rid), 'Available') for rid in ROOM_SELECT_OPTIONS],
+        )
         
     conn.commit()
     conn.close()
@@ -118,9 +127,12 @@ def checkin():
                               logged_in=True,
                               role=session.get('role'),
                               **form_data)
-    return render_template('checkin.html', 
-                           logged_in=True,
-                           role=session.get('role'))
+    return render_template(
+        'checkin.html',
+        logged_in=True,
+        role=session.get('role'),
+        room_options=ROOM_SELECT_OPTIONS,
+    )
 
 @app.route('/view_checkins')
 def view_checkins():
