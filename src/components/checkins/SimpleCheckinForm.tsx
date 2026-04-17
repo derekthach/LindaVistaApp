@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLanguage } from '@/components/LanguageToggle';
 import StaffDropdown from '@/components/checkins/StaffDropdown';
+import ManualStaffNameField from '@/components/checkins/ManualStaffNameField';
 import { getDefaultDateAndTime } from '@/lib/checkins/defaults';
 import { FOOD_ITEMS, BEER_ITEMS } from '@/lib/checkins/items';
 import type { ItemOption } from '@/lib/checkins/items';
@@ -25,10 +26,13 @@ function SimpleCheckinFormContent({
   type,
   isAdmin = false,
   employeeDisplayName,
+  isGuestEmployee = false,
 }: {
   type: 'food' | 'beer';
   isAdmin?: boolean;
   employeeDisplayName?: string;
+  /** Shared Guest login: manual staff name each time; do not restore from draft for display. */
+  isGuestEmployee?: boolean;
 }) {
   const router = useRouter();
   const { t, language } = useLanguage();
@@ -88,7 +92,11 @@ function SimpleCheckinFormContent({
       setDate(draft.date);
       setTime(draft.time);
       setStaffName(
-        !isAdmin && employeeDisplayName ? employeeDisplayName : draft.staff_name
+        isGuestEmployee
+          ? ''
+          : !isAdmin && employeeDisplayName
+            ? employeeDisplayName
+            : draft.staff_name
       );
       setNotes(draft.notes ?? '');
       setLineRows(
@@ -102,13 +110,13 @@ function SimpleCheckinFormContent({
           : [initialRow()]
       );
     }
-  }, [type, isAdmin, employeeDisplayName]);
+  }, [type, isAdmin, employeeDisplayName, isGuestEmployee]);
 
   useEffect(() => {
-    if (!isAdmin && employeeDisplayName) {
+    if (!isAdmin && employeeDisplayName && !isGuestEmployee) {
       setStaffName(employeeDisplayName);
     }
-  }, [isAdmin, employeeDisplayName]);
+  }, [isAdmin, employeeDisplayName, isGuestEmployee]);
 
   const getItemLabel = useCallback(
     (item: ItemOption) => (language === 'es' ? item.label.es : item.label.en),
@@ -248,7 +256,7 @@ function SimpleCheckinFormContent({
             )}
           </label>
 
-          {!isAdmin && employeeDisplayName ? (
+          {!isAdmin && employeeDisplayName && !isGuestEmployee ? (
             <label>
               <div>{t('staff_name')}</div>
               <div
@@ -263,10 +271,17 @@ function SimpleCheckinFormContent({
                 {employeeDisplayName}
               </div>
             </label>
+          ) : isGuestEmployee && !isAdmin ? (
+            <ManualStaffNameField
+              value={staffName}
+              onChange={setStaffName}
+              showGuestHint
+              errorText={hasAttemptedReview && displayErrors.staff_name ? displayErrors.staff_name : null}
+            />
           ) : (
             <StaffDropdown value={staffName} onChange={setStaffName} isAdmin={isAdmin} />
           )}
-          {hasAttemptedReview && displayErrors.staff_name && (
+          {!(isGuestEmployee && !isAdmin) && hasAttemptedReview && displayErrors.staff_name && (
             <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 4 }}>{msg(displayErrors.staff_name)}</div>
           )}
         </div>
@@ -453,10 +468,12 @@ export default function SimpleCheckinForm({
   type,
   isAdmin = false,
   employeeDisplayName,
+  isGuestEmployee = false,
 }: {
   type: 'food' | 'beer';
   isAdmin?: boolean;
   employeeDisplayName?: string;
+  isGuestEmployee?: boolean;
 }) {
   if (!SIMPLE_TYPES.includes(type)) {
     return null;
@@ -466,6 +483,7 @@ export default function SimpleCheckinForm({
       type={type}
       isAdmin={isAdmin}
       employeeDisplayName={employeeDisplayName}
+      isGuestEmployee={isGuestEmployee}
     />
   );
 }

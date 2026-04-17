@@ -10,6 +10,7 @@ import { useTranslation } from '@/lib/i18n/useTranslation';
 import type { TranslationKey } from '@/lib/i18n/translations';
 import { getStaffOptionsForCheckout } from '@/lib/checkins/constants';
 import Button from '@/components/Button';
+import ManualStaffNameField from '@/components/checkins/ManualStaffNameField';
 
 const inputStyle = {
   width: '100%',
@@ -26,6 +27,7 @@ export default function RoomCheckoutModal({
   onSuccess,
   variant = 'admin',
   employeeCleanerName,
+  guestManualStaffEntry = false,
 }: {
   open: boolean;
   checkin: CheckIn | null;
@@ -34,6 +36,8 @@ export default function RoomCheckoutModal({
   variant?: 'admin' | 'employee';
   /** Logged-in employee display name (must match STAFF_MEMBERS). */
   employeeCleanerName?: string;
+  /** Shared Guest login: type who cleaned / verified (not session display name). */
+  guestManualStaffEntry?: boolean;
 }) {
   const { t } = useTranslation();
   const isEmployee = variant === 'employee';
@@ -52,10 +56,15 @@ export default function RoomCheckoutModal({
   }, []);
 
   useEffect(() => {
-    if (open && isEmployee && employeeCleanerName) {
+    if (!open || !isEmployee) return;
+    if (guestManualStaffEntry) {
+      setCleanedBy('');
+      return;
+    }
+    if (employeeCleanerName) {
       setCleanedBy(employeeCleanerName);
     }
-  }, [open, isEmployee, employeeCleanerName]);
+  }, [open, isEmployee, employeeCleanerName, guestManualStaffEntry]);
 
   const handleClose = useCallback(() => {
     if (submitting) return;
@@ -64,7 +73,15 @@ export default function RoomCheckoutModal({
   }, [submitting, reset, onClose]);
 
   const handleConfirm = useCallback(async () => {
-    if (!checkin?.id || (!isEmployee && !cleanedBy) || (isEmployee && !employeeCleanerName) || !verified || submitting)
+    const employeeTypedName = cleanedBy.trim();
+    if (
+      !checkin?.id ||
+      (!isEmployee && !cleanedBy) ||
+      (isEmployee && !guestManualStaffEntry && !employeeCleanerName) ||
+      (isEmployee && guestManualStaffEntry && !employeeTypedName) ||
+      !verified ||
+      submitting
+    )
       return;
     setSubmitting(true);
     setError(null);
@@ -74,7 +91,11 @@ export default function RoomCheckoutModal({
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          cleanedBy: isEmployee ? employeeCleanerName : cleanedBy,
+          cleanedBy: isEmployee
+            ? guestManualStaffEntry
+              ? employeeTypedName
+              : employeeCleanerName
+            : cleanedBy,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -99,6 +120,7 @@ export default function RoomCheckoutModal({
     onClose,
     isEmployee,
     employeeCleanerName,
+    guestManualStaffEntry,
     t,
   ]);
 
@@ -181,7 +203,16 @@ export default function RoomCheckoutModal({
           </div>
         </div>
 
-        {isEmployee ? (
+        {isEmployee && guestManualStaffEntry ? (
+          <div style={{ marginBottom: 12 }}>
+            <ManualStaffNameField
+              name="cleanedBy"
+              value={cleanedBy}
+              onChange={setCleanedBy}
+              showGuestHint
+            />
+          </div>
+        ) : isEmployee ? (
           <div style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>
               {t('employee_responsible')}
@@ -234,7 +265,8 @@ export default function RoomCheckoutModal({
             onClick={() => void handleConfirm()}
             disabled={
               (!isEmployee && !cleanedBy) ||
-              (isEmployee && !employeeCleanerName) ||
+              (isEmployee && !guestManualStaffEntry && !employeeCleanerName) ||
+              (isEmployee && guestManualStaffEntry && !cleanedBy.trim()) ||
               !verified ||
               submitting
             }

@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { requireAuth } from '@/server/auth/session';
+import { isGuestEmployeeUsername } from '@/lib/auth/guestEmployee';
 import AppLayout from '@/components/AppLayout';
 import FoodBeerValidateClient from '@/components/checkins/FoodBeerValidateClient';
 import FoodBeerValidatePageHeading from '@/components/checkins/FoodBeerValidatePageHeading';
@@ -16,6 +17,9 @@ export default async function ValidateCheckinPage({ params }: PageProps) {
     redirect('/checkins/new');
   }
 
+  const hideStaffOverrideForGuest =
+    session.role === 'employee' && isGuestEmployeeUsername(session.username);
+
   return (
     <AppLayout
       role={session.role}
@@ -28,7 +32,9 @@ export default async function ValidateCheckinPage({ params }: PageProps) {
         <FoodBeerValidateClient
           type={type as 'food' | 'beer'}
           staffDisplayOverride={
-            session.role === 'employee' ? session.displayName ?? session.username : undefined
+            hideStaffOverrideForGuest ? undefined : session.role === 'employee'
+              ? session.displayName ?? session.username
+              : undefined
           }
         />
       </div>

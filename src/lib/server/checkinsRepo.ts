@@ -113,6 +113,7 @@ export async function createCheckin(
     }
 
     if (data.employee_id) doc.employeeId = data.employee_id;
+    if (data.created_by_username) doc.createdByUsername = data.created_by_username;
     if (data.employee_name_snapshot) doc.employeeNameSnapshot = data.employee_name_snapshot;
     if (data.created_by_role) doc.createdByRole = data.created_by_role;
 
@@ -154,6 +155,7 @@ export interface CreateSimpleCheckinInput {
   summarizedItems: SummarizedItem[];
   notes?: string;
   employee_id?: string;
+  created_by_username?: string;
   employee_name_snapshot?: string;
   created_by_role?: 'admin' | 'employee';
 }
@@ -201,6 +203,7 @@ export async function createSimpleCheckin(
     };
 
     if (data.employee_id) doc.employeeId = data.employee_id;
+    if (data.created_by_username) doc.createdByUsername = data.created_by_username;
     if (data.employee_name_snapshot) doc.employeeNameSnapshot = data.employee_name_snapshot;
     if (data.created_by_role) doc.createdByRole = data.created_by_role;
 

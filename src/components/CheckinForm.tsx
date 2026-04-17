@@ -21,6 +21,7 @@ import { ROOM_OPTIONS, formatRoomDisplay, parseRoomOptionValue, type RoomId } fr
 import { createRoomSubmissionKey } from '@/lib/checkins/roomSubmissionKey';
 import { getAvailableRoomOptions } from '@/lib/checkins/roomOccupancy';
 import StaffDropdown from '@/components/checkins/StaffDropdown';
+import ManualStaffNameField from '@/components/checkins/ManualStaffNameField';
 import CarMakeCombobox from '@/components/checkins/CarMakeCombobox';
 
 const ZONE = 'America/Puerto_Rico';
@@ -62,6 +63,7 @@ function CheckinFormContent({
   allowEditDateTime = true,
   occupiedRoomIds = [],
   lockedStaffName,
+  guestManualStaffEntry = false,
 }: {
   allowAddCarMake?: boolean;
   allowEditDateTime?: boolean;
@@ -69,6 +71,8 @@ function CheckinFormContent({
   occupiedRoomIds?: string[];
   /** When set, staff is fixed (employee auto-attribution); no dropdown. */
   lockedStaffName?: string;
+  /** Shared Guest login: staff name is typed each time (never locked to session). */
+  guestManualStaffEntry?: boolean;
 }) {
   const router = useRouter();
   const { t } = useLanguage();
@@ -508,6 +512,16 @@ function CheckinFormContent({
                 {lockedStaffName}
               </div>
             </label>
+          ) : guestManualStaffEntry ? (
+            <ManualStaffNameField
+              value={form.staff_name}
+              onChange={(v) => update({ staff_name: v })}
+              onBlur={() => setTouchedField('staff_name')}
+              showGuestHint
+              errorText={
+                showError('staff_name') && validation.errors.staff_name ? validation.errors.staff_name : null
+              }
+            />
           ) : (
             <StaffDropdown
               value={form.staff_name}
@@ -516,7 +530,9 @@ function CheckinFormContent({
               isAdmin={allowEditDateTime}
             />
           )}
-          {showError('staff_name') && <div style={errorStyle}>{te(validation.errors.staff_name)}</div>}
+          {!guestManualStaffEntry && showError('staff_name') && (
+            <div style={errorStyle}>{te(validation.errors.staff_name)}</div>
+          )}
         </div>
 
         <label>
@@ -559,11 +575,13 @@ export default function CheckinForm({
   allowEditDateTime = true,
   occupiedRoomIds = [],
   lockedStaffName,
+  guestManualStaffEntry = false,
 }: {
   allowAddCarMake?: boolean;
   allowEditDateTime?: boolean;
   occupiedRoomIds?: string[];
   lockedStaffName?: string;
+  guestManualStaffEntry?: boolean;
 } = {}) {
   return (
     <CheckinFormContent
@@ -571,6 +589,7 @@ export default function CheckinForm({
       allowEditDateTime={allowEditDateTime}
       occupiedRoomIds={occupiedRoomIds}
       lockedStaffName={lockedStaffName}
+      guestManualStaffEntry={guestManualStaffEntry}
     />
   );
 }

@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "next lint",
     "seed:users": "node scripts/seed-employee-users.mjs",
-    "add:employee:keith": "node --env-file=.env.local scripts/add-keith-thach-employee.mjs"
+    "add:employee:keith": "node --env-file=.env.local scripts/add-keith-thach-employee.mjs",
+    "add:employee:guest": "node --env-file=.env.local scripts/add-guest-employee.mjs",
+    "backfill:guest-checkin-markers": "node --env-file=.env.local scripts/backfill-guest-checkin-markers.mjs"
   },
   "dependencies": {
     "@vercel/analytics": "^1.6.1",

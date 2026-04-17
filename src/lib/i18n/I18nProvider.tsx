@@ -46,15 +46,14 @@ export function I18nProvider({
   /**
    * Per-device only: `localStorage` is not synced across phones/laptops or user accounts.
    * Saved choice always wins so toggling English on one device never affects another.
+   *
+   * Initial state must not read `localStorage` — that only exists on the client, so the
+   * first client render would differ from the server ("Hi …" vs "Hola …") and cause a
+   * hydration mismatch. We sync from `localStorage` in `useEffect` after mount.
    */
-  const [language, setLanguageState] = useState<Language>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('preferredLanguage') as Language | null;
-      if (saved === 'en' || saved === 'es') return saved;
-    }
-    if (defaultLanguage === 'es') return 'es';
-    return 'en';
-  });
+  const [language, setLanguageState] = useState<Language>(() =>
+    defaultLanguage === 'es' ? 'es' : 'en'
+  );
 
   useEffect(() => {
     const saved = localStorage.getItem('preferredLanguage') as Language | null;

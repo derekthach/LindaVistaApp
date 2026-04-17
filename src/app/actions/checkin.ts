@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { requireAuth } from '@/server/auth/session';
+import { isGuestEmployeeUsername } from '@/lib/auth/guestEmployee';
 import { createCheckin, createSimpleCheckin } from '@/lib/server/checkinsRepo';
 import { validateSimpleCheckin } from '@/lib/checkins/validation';
 import { validateRoomCheckin, normalizeReceipt } from '@/lib/checkins/validation/room';
@@ -20,6 +21,7 @@ export type RoomCheckinActionResult =
 
 export async function submitCheckinAction(formData: FormData): Promise<RoomCheckinActionResult> {
   const session = await requireAuth();
+  const guestEmployee = session.role === 'employee' && isGuestEmployeeUsername(session.username);
 
   logInfo('checkin.room.submit.start', {
     role: session.role,
@@ -56,7 +58,9 @@ export async function submitCheckinAction(formData: FormData): Promise<RoomCheck
     car_color: formData.get('car_color'),
     staff_name:
       session.role === 'employee'
-        ? (session.displayName ?? session.username)
+        ? guestEmployee
+          ? formData.get('staff_name')
+          : (session.displayName ?? session.username)
         : formData.get('staff_name'),
     note: formData.get('note'),
   };
@@ -111,7 +115,8 @@ export async function submitCheckinAction(formData: FormData): Promise<RoomCheck
     note: note || undefined,
     ...(session.role === 'employee'
       ? {
-          employee_id: session.userId,
+          employee_id: session.userId?.trim() || (guestEmployee ? 'guest' : undefined),
+          created_by_username: session.username?.trim(),
           employee_name_snapshot: staffName,
           created_by_role: 'employee',
         }
@@ -140,12 +145,15 @@ export async function submitSimpleCheckinAction(
   formData: FormData
 ): Promise<{ error?: string; lineItemErrors?: Record<number, { quantitySold?: string; amountCollected?: string; itemId?: string }> } | void> {
   const session = await requireAuth();
+  const guestEmployee = session.role === 'employee' && isGuestEmployeeUsername(session.username);
 
   const date = (formData.get('date') as string)?.trim();
   const time = (formData.get('time') as string)?.trim();
   const staff_name =
     session.role === 'employee'
-      ? (session.displayName ?? session.username).trim()
+      ? guestEmployee
+        ? String(formData.get('staff_name') ?? '').trim()
+        : (session.displayName ?? session.username).trim()
       : ((formData.get('staff_name') as string) ?? '').trim();
   const notes = (formData.get('notes') as string)?.trim() || undefined;
   let lineItems: LineItem[] = [];
@@ -189,7 +197,8 @@ export async function submitSimpleCheckinAction(
     notes,
     ...(session.role === 'employee'
       ? {
-          employee_id: session.userId,
+          employee_id: session.userId?.trim() || (guestEmployee ? 'guest' : undefined),
+          created_by_username: session.username?.trim(),
           employee_name_snapshot: staff_name!,
           created_by_role: 'employee' as const,
         }
@@ -203,10 +212,13 @@ export async function confirmFoodBeerCheckinAction(
   draft: FoodBeerDraft
 ): Promise<{ error?: string }> {
   const session = await requireAuth();
+  const guestEmployee = session.role === 'employee' && isGuestEmployeeUsername(session.username);
 
   const staff_name =
     session.role === 'employee'
-      ? (session.displayName ?? session.username).trim()
+      ? guestEmployee
+        ? draft.staff_name.trim()
+        : (session.displayName ?? session.username).trim()
       : draft.staff_name.trim();
 
   const validation = validateSimpleCheckin({
@@ -235,7 +247,8 @@ export async function confirmFoodBeerCheckinAction(
     notes: draft.notes,
     ...(session.role === 'employee'
       ? {
-          employee_id: session.userId,
+          employee_id: session.userId?.trim() || (guestEmployee ? 'guest' : undefined),
+          created_by_username: session.username?.trim(),
           employee_name_snapshot: staff_name,
           created_by_role: 'employee' as const,
         }

@@ -38,6 +38,7 @@ export interface CheckinDoc {
   employeeId?: string;
   employeeNameSnapshot?: string;
   createdByRole?: UserRole;
+  createdByUsername?: string;
 }
 
 /** Compute total amount collected for food/beer from summarizedItems or lineItems. */
@@ -141,6 +142,10 @@ export function normalizeCheckin(id: string, data: Record<string, unknown>): Che
     data.createdByRole === 'admin' || data.createdByRole === 'employee'
       ? (data.createdByRole as UserRole)
       : undefined;
+  const createdByUsername =
+    typeof data.createdByUsername === 'string' && data.createdByUsername.trim()
+      ? data.createdByUsername.trim()
+      : undefined;
 
   return {
     id,
@@ -188,6 +193,7 @@ export function normalizeCheckin(id: string, data: Record<string, unknown>): Che
         }
       : {}),
     ...(employeeId ? { employee_id: employeeId } : {}),
+    ...(createdByUsername ? { created_by_username: createdByUsername } : {}),
     ...(employeeNameSnapshot ? { employee_name_snapshot: employeeNameSnapshot } : {}),
     ...(createdByRole ? { created_by_role: createdByRole } : {}),
   };

@@ -4,6 +4,10 @@ import { Fragment, useEffect, useState } from 'react';
 import { DateTime } from 'luxon';
 import type { CheckIn } from '@/types';
 import { formatReceiptNumber } from '@/lib/checkins/receipt';
+import {
+  formatGuestAwarePersonDisplay,
+  formatStaffDisplayForCheckinsTable,
+} from '@/lib/checkins/staffDisplay';
 import { useTranslation } from '@/lib/i18n/useTranslation';
 import type { TranslationKey } from '@/lib/i18n/translations';
 
@@ -91,7 +95,8 @@ export default function EditHistoryPanel({
     };
   }, [checkinId, t]);
 
-  const createdBy = checkin.staff_name?.trim() || t('unknown');
+  const createdByRaw = formatStaffDisplayForCheckinsTable(checkin);
+  const createdBy = createdByRaw.trim() ? createdByRaw : t('unknown');
   const createdAt =
     checkin.date && checkin.time ? `${checkin.date} ${checkin.time}` : t('unknown');
 
@@ -157,7 +162,11 @@ export default function EditHistoryPanel({
                 </div>
                 <div style={{ marginBottom: 6 }}>
                   <span style={labelStyle}>{t('edit_history_edited_by')} </span>
-                  <span style={valueStyle}>{edit.editedBy || unknownLabel}</span>
+                  <span style={valueStyle}>
+                    {edit.editedBy
+                      ? formatGuestAwarePersonDisplay(edit.editedBy, checkin)
+                      : unknownLabel}
+                  </span>
                 </div>
                 <dl
                   style={{

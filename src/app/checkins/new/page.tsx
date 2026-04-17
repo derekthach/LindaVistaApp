@@ -1,4 +1,5 @@
 import { requireAuth } from '@/server/auth/session';
+import { isGuestEmployeeUsername } from '@/lib/auth/guestEmployee';
 import AppLayout from '@/components/AppLayout';
 import CheckInTypeSelector from '@/components/checkins/CheckInTypeSelector';
 import CheckoutRoomsSection from '@/components/checkins/CheckoutRoomsSection';
@@ -15,6 +16,8 @@ export default async function NewCheckinPage({
   const fromLogin = params.from === 'login';
   const employeeGreetingName =
     session.role === 'employee' ? (session.displayName ?? session.username) : undefined;
+  const guestManualStaffEntry =
+    session.role === 'employee' && isGuestEmployeeUsername(session.username);
 
   // Only redirect admins to dashboard when they landed here from login (single-cookie / Preview flow).
   // When an admin clicks "Check-In" in the sidebar, they get the normal check-in page.
@@ -33,7 +36,10 @@ export default async function NewCheckinPage({
         <CheckInTypeSelector />
         <CheckoutRoomsSection
           checkoutVariant={session.role === 'employee' ? 'employee' : 'admin'}
-          employeeCleanerName={session.displayName ?? session.username}
+          employeeCleanerName={
+            guestManualStaffEntry ? undefined : session.displayName ?? session.username
+          }
+          guestManualStaffEntry={guestManualStaffEntry}
         />
       </div>
     </AppLayout>

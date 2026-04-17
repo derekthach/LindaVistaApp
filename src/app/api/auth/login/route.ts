@@ -4,6 +4,7 @@ import { getIronSession } from 'iron-session';
 import { loginSessionOptions } from '@/server/auth/session';
 import type { SessionData } from '@/types';
 import { authenticateUser } from '@/server/auth/users';
+import { isGuestEmployeeUsername } from '@/lib/auth/guestEmployee';
 import { sessionHardMsForRole } from '@/server/auth/sessionPolicy';
 
 export const runtime = 'nodejs';
@@ -57,7 +58,11 @@ export async function POST(request: NextRequest) {
     session.username = user.username;
     session.role = user.role;
     session.isLoggedIn = true;
-    if (user.userId) session.userId = user.userId;
+    if (user.userId) {
+      session.userId = user.userId;
+    } else if (isGuestEmployeeUsername(user.username)) {
+      session.userId = 'guest';
+    }
     session.displayName = user.displayName;
     session.mustChangePassword = user.mustChangePassword;
     const now = Date.now();

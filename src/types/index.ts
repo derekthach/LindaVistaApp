@@ -63,6 +63,8 @@ export interface CheckIn {
   staff_name: string;
   /** Firestore: employeeId (staff user doc id) when set. */
   employee_id?: string;
+  /** Firestore: login username at create time (e.g. `guest`); set for employee-created rows. */
+  created_by_username?: string;
   /** Denormalized label at create time. */
   employee_name_snapshot?: string;
   created_by_role?: UserRole;

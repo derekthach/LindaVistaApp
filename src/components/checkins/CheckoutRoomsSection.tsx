@@ -10,9 +10,11 @@ import { useTranslation } from '@/lib/i18n/useTranslation';
 export default function CheckoutRoomsSection({
   checkoutVariant = 'admin',
   employeeCleanerName,
+  guestManualStaffEntry = false,
 }: {
   checkoutVariant?: 'admin' | 'employee';
   employeeCleanerName?: string;
+  guestManualStaffEntry?: boolean;
 } = {}) {
   const { t } = useTranslation();
   const router = useRouter();
@@ -135,6 +137,7 @@ export default function CheckoutRoomsSection({
         onSuccess={handleSuccess}
         variant={checkoutVariant}
         employeeCleanerName={employeeCleanerName}
+        guestManualStaffEntry={guestManualStaffEntry}
       />
     </>
   );

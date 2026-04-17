@@ -8,6 +8,7 @@ import CheckinFormPageHeading from '@/components/checkins/CheckinFormPageHeading
 import CheckinFormBackButton from '@/components/checkins/CheckinFormBackButton';
 import { listActiveOccupiedRoomCheckins } from '@/lib/server/checkinsRepo';
 import { getOccupiedRoomIdsFromCheckins } from '@/lib/checkins/roomOccupancy';
+import { isGuestEmployeeUsername } from '@/lib/auth/guestEmployee';
 
 interface PageProps {
   params: Promise<{ type: string }>;
@@ -20,6 +21,9 @@ export default async function NewCheckinByTypePage({ params }: PageProps) {
   if (!isCheckInType(type)) {
     notFound();
   }
+
+  const guestManualStaffEntry =
+    session.role === 'employee' && isGuestEmployeeUsername(session.username);
 
   let occupiedRoomIds: string[] = [];
   if (type === 'room') {
@@ -42,6 +46,7 @@ export default async function NewCheckinByTypePage({ params }: PageProps) {
             isAdmin={session.role === 'admin'}
             occupiedRoomIds={occupiedRoomIds}
             employeeDisplayName={session.displayName ?? session.username}
+            guestManualStaffEntry={guestManualStaffEntry}
           />
         )}
         {(type === 'food' || type === 'beer') && (
@@ -49,6 +54,7 @@ export default async function NewCheckinByTypePage({ params }: PageProps) {
             type={type}
             isAdmin={session.role === 'admin'}
             employeeDisplayName={session.displayName ?? session.username}
+            isGuestEmployee={guestManualStaffEntry}
           />
         )}
       </div>

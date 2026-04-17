@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireSessionApi } from '@/server/auth/session';
 import { checkoutRoomCheckin } from '@/lib/server/checkinsRepo';
 import { STAFF_MEMBERS } from '@/lib/checkins/constants';
+import { isGuestEmployeeUsername } from '@/lib/auth/guestEmployee';
 import { logError, logInfo } from '@/lib/server/log';
 import { HttpError, toErrorResponse } from '@/lib/server/httpError';
 
 export const runtime = 'nodejs';
 
 const STAFF_SET = new Set<string>(STAFF_MEMBERS);
+const GUEST_STAFF_NAME_MAX = 80;
 
 export async function POST(
   request: NextRequest,
@@ -26,17 +28,22 @@ export async function POST(
     const body = await request.json().catch(() => ({}));
     let cleanedBy =
       typeof body.cleanedBy === 'string' ? body.cleanedBy.trim() : '';
-    if (session.role === 'employee') {
+    const guestEmployee = session.role === 'employee' && isGuestEmployeeUsername(session.username);
+    if (session.role === 'employee' && !guestEmployee) {
       cleanedBy = (session.displayName ?? session.username).trim();
     }
     if (!cleanedBy) {
       return NextResponse.json({ error: 'Cleaner staff is required' }, { status: 400 });
     }
-    if (!STAFF_SET.has(cleanedBy)) {
+    if (guestEmployee) {
+      if (cleanedBy.length > GUEST_STAFF_NAME_MAX) {
+        return NextResponse.json({ error: 'Staff name is too long' }, { status: 400 });
+      }
+    } else if (!STAFF_SET.has(cleanedBy)) {
       return NextResponse.json({ error: 'Invalid staff selection' }, { status: 400 });
     }
 
-    const performedBy = session.username?.trim() || cleanedBy;
+    const performedBy = guestEmployee ? cleanedBy : session.username?.trim() || cleanedBy;
 
     await checkoutRoomCheckin(id, { cleanedBy, performedBy });
     logInfo('api.checkins.checkout.success', { requestId, id });

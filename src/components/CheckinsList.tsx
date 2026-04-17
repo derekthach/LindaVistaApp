@@ -18,6 +18,10 @@ import {
   getRoomPaymentBreakdownDisplayLocalized,
 } from '@/lib/checkins/roomPaymentSplits';
 import { getPaymentMethodTranslationKey } from '@/lib/checkins/paymentMethods';
+import {
+  formatGuestAwarePersonDisplay,
+  formatStaffDisplayForCheckinsTable,
+} from '@/lib/checkins/staffDisplay';
 
 function TrashIcon() {
   return (
@@ -147,7 +151,7 @@ function DetailsPanel({ checkin, t }: { checkin: CheckIn; t: (key: TranslationKe
               <dt style={labelStyle}>{t('time')}</dt>
               <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.time)}</dd>
               <dt style={labelStyle}>{t('label_staff_checkin')}</dt>
-              <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.staff_name)}</dd>
+              <dd style={{ margin: 0, ...valueStyle }}>{formatStaffDisplayForCheckinsTable(checkin)}</dd>
               <dt style={labelStyle}>{t('car_plate')}</dt>
               <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.car_plate)}</dd>
               <dt style={labelStyle}>{t('payment_breakdown')}</dt>
@@ -179,9 +183,13 @@ function DetailsPanel({ checkin, t }: { checkin: CheckIn; t: (key: TranslationKe
                 <dt style={labelStyle}>{t('label_cleaning_time')}</dt>
                 <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.cleaned_at)}</dd>
                 <dt style={labelStyle}>{t('label_checked_out_by')}</dt>
-                <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.checked_out_by)}</dd>
+                <dd style={{ margin: 0, ...valueStyle }}>
+                  {formatGuestAwarePersonDisplay(checkin.checked_out_by, checkin)}
+                </dd>
                 <dt style={labelStyle}>{t('label_cleaned_by')}</dt>
-                <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.cleaned_by)}</dd>
+                <dd style={{ margin: 0, ...valueStyle }}>
+                  {formatGuestAwarePersonDisplay(checkin.cleaned_by, checkin)}
+                </dd>
               </dl>
             ) : (
               <p style={{ margin: 0, fontSize: 13, color: '#6b7280', fontWeight: 500 }}>
@@ -214,7 +222,7 @@ function DetailsPanel({ checkin, t }: { checkin: CheckIn; t: (key: TranslationKe
       </div>
       <dl style={{ margin: 0, ...gridStyle } as React.CSSProperties}>
         <dt style={labelStyle}>{t('table_staff')}</dt>
-        <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.staff_name)}</dd>
+        <dd style={{ margin: 0, ...valueStyle }}>{formatStaffDisplayForCheckinsTable(checkin)}</dd>
         <dt style={labelStyle}>{t('items')}</dt>
         <dd style={{ margin: 0, ...valueStyle }}>{itemsSummary}</dd>
         <dt style={labelStyle}>{t('total')}</dt>
@@ -535,7 +543,7 @@ export default function CheckinsList({
                     <td style={{ padding: 8 }}>{checkin.time}</td>
                     <td style={{ padding: 8 }}>{typeCell(checkin, t)}</td>
                     <td style={{ padding: 8 }}>{roomCell(checkin, t)}</td>
-                    <td style={{ padding: 8 }}>{checkin.staff_name}</td>
+                    <td style={{ padding: 8 }}>{formatStaffDisplayForCheckinsTable(checkin)}</td>
                     <td style={{ padding: 8 }}>${Number(checkin.cost).toFixed(2)}</td>
                     {renderActionsCell(checkin)}
                   </tr>
@@ -582,7 +590,7 @@ export default function CheckinsList({
           <td style={{ padding: 8 }}>{checkin.time}</td>
           <td style={{ padding: 8 }}>{typeCell(checkin, t)}</td>
           <td style={{ padding: 8 }}>{roomCell(checkin, t)}</td>
-          <td style={{ padding: 8 }}>{checkin.staff_name}</td>
+          <td style={{ padding: 8 }}>{formatStaffDisplayForCheckinsTable(checkin)}</td>
           <td style={{ padding: 8 }}>${Number(checkin.cost).toFixed(2)}</td>
           {renderActionsCell(checkin)}
         </tr>

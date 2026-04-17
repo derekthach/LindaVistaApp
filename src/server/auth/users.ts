@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import bcrypt from 'bcryptjs';
 import type { User, UserRole } from '@/types';
+import { isGuestEmployeeUsername } from '@/lib/auth/guestEmployee';
 import {
   getUserDocByUsername,
   updateUserLastLogin,
@@ -32,7 +33,8 @@ export type AuthenticatedUser = {
   username: string;
   role: UserRole;
   userId?: string;
-  displayName: string;
+  /** Omitted for the shared `guest` employee login so staff-facing forms do not auto-fill a label. */
+  displayName?: string;
   mustChangePassword: boolean;
   source: 'firestore' | 'json';
 };
@@ -50,7 +52,7 @@ async function authenticateFirestoreUser(
     username: doc.username,
     role: doc.role,
     userId: doc.id,
-    displayName: userDisplaySnapshot(doc),
+    displayName: isGuestEmployeeUsername(doc.username) ? undefined : userDisplaySnapshot(doc),
     mustChangePassword: doc.mustChangePassword === true,
     source: 'firestore',
   };
@@ -64,7 +66,12 @@ function authenticateJsonUser(username: string, password: string): Promise<Authe
     return {
       username: user.username,
       role: user.role,
-      displayName: user.username === 'admin' ? 'Administrator' : user.username,
+      displayName:
+        user.username === 'admin'
+          ? 'Administrator'
+          : user.username === 'guest'
+            ? undefined
+            : user.username,
       mustChangePassword: false,
       source: 'json' as const,
     };

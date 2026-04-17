@@ -8,5 +8,10 @@
     "username": "employee",
     "password": "$2b$10$xbE1ykczh5Ug.XsGawOTbejEW9UcH2NH06UIqPYAMSX4LwNdO6Efq",
     "role": "employee"
+  },
+  {
+    "username": "guest",
+    "password": "$2b$10$RDLDvxIMAaUyFwx5Nbea6OclsZ7STrRboiMz4Wg1imkgpg6efLhdO",
+    "role": "employee"
   }
 ]

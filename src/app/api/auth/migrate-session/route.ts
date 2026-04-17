@@ -3,6 +3,7 @@ import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
 import { sessionOptions } from '@/server/auth/session';
 import type { SessionData } from '@/types';
+import { isGuestEmployeeUsername } from '@/lib/auth/guestEmployee';
 import { sessionHardMsForRole } from '@/server/auth/sessionPolicy';
 
 export const runtime = 'nodejs';
@@ -23,6 +24,10 @@ export async function GET(request: NextRequest) {
   }
   if (session.lastActivityAt == null) {
     session.lastActivityAt = now;
+    changed = true;
+  }
+  if (isGuestEmployeeUsername(session.username) && !session.userId?.trim()) {
+    session.userId = 'guest';
     changed = true;
   }
   if (changed) {
