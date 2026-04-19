@@ -2,6 +2,10 @@ import fs from 'fs';
 import path from 'path';
 import bcrypt from 'bcryptjs';
 import type { User, UserRole } from '@/types';
+
+function normalizeRole(raw: unknown): UserRole {
+  return raw === 'admin' ? 'admin' : 'employee';
+}
 import { isGuestEmployeeUsername } from '@/lib/auth/guestEmployee';
 import {
   getUserDocByUsername,
@@ -18,13 +22,22 @@ export function getUsers(): User[] {
 }
 
 export function findUser(username: string): User | undefined {
-  return getUsers().find((user) => user.username === username);
+  const t = username.trim();
+  if (!t) return undefined;
+  const users = getUsers();
+  const exact = users.find((u) => u.username === t);
+  if (exact) return exact;
+  const lower = t.toLowerCase();
+  return users.find((u) => u.username.toLowerCase() === lower);
 }
 
 /** Persists a new hash and clears the first-login flag for legacy `login-system/users.json` accounts. */
 export function updateJsonUserPassword(username: string, passwordHash: string): void {
   const users = getUsers();
-  const idx = users.findIndex((u) => u.username === username);
+  const uname = username.trim();
+  const idx = users.findIndex(
+    (u) => u.username === uname || u.username.toLowerCase() === uname.toLowerCase()
+  );
   if (idx === -1) {
     throw new Error(`[auth] JSON user not found: ${username}`);
   }
@@ -63,7 +76,7 @@ async function authenticateFirestoreUser(
   if (!ok) return null;
   return {
     username: doc.username,
-    role: doc.role,
+    role: normalizeRole(doc.role),
     userId: doc.id,
     displayName: isGuestEmployeeUsername(doc.username) ? undefined : userDisplaySnapshot(doc),
     mustChangePassword: doc.mustChangePassword === true,
@@ -78,7 +91,7 @@ function authenticateJsonUser(username: string, password: string): Promise<Authe
     if (!ok) return null;
     return {
       username: user.username,
-      role: user.role,
+      role: normalizeRole(user.role),
       displayName:
         user.username === 'admin'
           ? 'Administrator'

@@ -29,7 +29,8 @@ function db(): Firestore {
   return getAdminDb();
 }
 
-function docIdForUsername(username: string): string {
+/** Document id for `users/{id}` — lowercase trimmed username (matches login lookup). */
+export function docIdForUsername(username: string): string {
   return username.trim().toLowerCase();
 }
 
