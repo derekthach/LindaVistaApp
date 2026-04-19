@@ -2,13 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireSessionApi } from '@/server/auth/session';
 import { checkoutRoomCheckin } from '@/lib/server/checkinsRepo';
 import { STAFF_MEMBERS } from '@/lib/checkins/constants';
+import { buildCheckoutStaffSet } from '@/lib/server/checkoutStaffAllowlist';
 import { isGuestEmployeeUsername } from '@/lib/auth/guestEmployee';
 import { logError, logInfo } from '@/lib/server/log';
 import { HttpError, toErrorResponse } from '@/lib/server/httpError';
 
 export const runtime = 'nodejs';
-
-const STAFF_SET = new Set<string>(STAFF_MEMBERS);
 const GUEST_STAFF_NAME_MAX = 80;
 
 export async function POST(
@@ -39,8 +38,17 @@ export async function POST(
       if (cleanedBy.length > GUEST_STAFF_NAME_MAX) {
         return NextResponse.json({ error: 'Staff name is too long' }, { status: 400 });
       }
-    } else if (!STAFF_SET.has(cleanedBy)) {
-      return NextResponse.json({ error: 'Invalid staff selection' }, { status: 400 });
+    } else {
+      let staffSet: Set<string>;
+      try {
+        staffSet = await buildCheckoutStaffSet();
+      } catch (err) {
+        console.error('[checkout] staff allowlist merge failed; using legacy STAFF_MEMBERS only', err);
+        staffSet = new Set<string>(STAFF_MEMBERS);
+      }
+      if (!staffSet.has(cleanedBy)) {
+        return NextResponse.json({ error: 'Invalid staff selection' }, { status: 400 });
+      }
     }
 
     const performedBy = guestEmployee ? cleanedBy : session.username?.trim() || cleanedBy;

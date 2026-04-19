@@ -34,7 +34,7 @@ export default function RoomCheckoutModal({
   onClose: () => void;
   onSuccess: () => void;
   variant?: 'admin' | 'employee';
-  /** Logged-in employee display name (must match STAFF_MEMBERS). */
+  /** Logged-in employee display name (must match merged checkout allowlist: legacy STAFF_MEMBERS + Firestore employees). */
   employeeCleanerName?: string;
   /** Shared Guest login: type who cleaned / verified (not session display name). */
   guestManualStaffEntry?: boolean;
@@ -46,7 +46,22 @@ export default function RoomCheckoutModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const staffOptions = getStaffOptionsForCheckout();
+  const [staffOptions, setStaffOptions] = useState<string[]>(() => [...getStaffOptionsForCheckout()]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void fetch('/api/checkins/checkout-staff-options', { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { names?: string[] } | null) => {
+        if (cancelled || !data?.names?.length) return;
+        setStaffOptions(data.names);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   const reset = useCallback(() => {
     setCleanedBy('');
