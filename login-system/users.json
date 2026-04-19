@@ -13,5 +13,19 @@
     "username": "guest",
     "password": "$2b$10$RDLDvxIMAaUyFwx5Nbea6OclsZ7STrRboiMz4Wg1imkgpg6efLhdO",
     "role": "employee"
+  },
+  {
+    "username": "jary",
+    "name": "Jary",
+    "password": "$2b$10$8gAtm0ESqomRkXFMfNWSlOjdqM00CYWHMngU1ESiFszAUbMaxsMaS",
+    "role": "employee",
+    "mustChangePassword": false
+  },
+  {
+    "username": "beatrice",
+    "name": "Beatrice",
+    "password": "$2b$10$1KDGOWzRYiyetRtbmvq69.Fgl.OcFXRq4ZApcMXu5OOzl0UF51Npy",
+    "role": "employee",
+    "mustChangePassword": true
   }
 ]

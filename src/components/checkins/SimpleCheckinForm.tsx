@@ -12,8 +12,10 @@ import type { LineItem } from '@/types';
 import { getDraft, setDraft } from '@/lib/checkins/draft';
 import { validateSimpleCheckin } from '@/lib/checkins/validation';
 import type { TranslationKey } from '@/components/LanguageToggle';
+import { QuantitySoldInput } from '@/components/checkins/QuantitySoldInput';
 
 const SIMPLE_TYPES: ('food' | 'beer')[] = ['food', 'beer'];
+const QUANTITY_MAX = 50;
 
 const initialRow = (): LineItem => ({
   itemId: '',
@@ -194,7 +196,6 @@ function SimpleCheckinFormContent({
     router.push(`/checkins/new/${type}/validate`);
   };
 
-  const QUANTITY_MAX = 50;
   const msg = (code: string) => t(code as TranslationKey);
 
   return (
@@ -326,15 +327,11 @@ function SimpleCheckinFormContent({
                 </label>
                 <label style={{ minWidth: 0 }}>
                   <div style={{ marginBottom: 4 }}>{t('quantity_sold')}</div>
-                  <input
-                    type="number"
+                  <QuantitySoldInput
+                    value={row.quantitySold}
+                    onChange={(n) => updateRow(index, 'quantitySold', n)}
                     min={1}
-                    max={50}
-                    step={1}
-                    value={row.quantitySold || ''}
-                    onChange={(e) =>
-                      updateRow(index, 'quantitySold', parseInt(e.target.value, 10) || 1)
-                    }
+                    max={QUANTITY_MAX}
                     style={{
                       width: '100%',
                       padding: '8px 12px',

@@ -2,7 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { getSession, requireAuth } from '@/server/auth/session';
-import { hashPassword } from '@/server/auth/users';
+import { hashPassword, updateJsonUserPassword } from '@/server/auth/users';
 import { setUserPasswordAfterEmployeeChange } from '@/lib/server/usersRepo';
 
 const MIN_LEN = 8;
@@ -20,12 +20,19 @@ export async function changeEmployeePasswordAction(
   if (pwd.length < MIN_LEN) {
     return { error: `La contraseña debe tener al menos ${MIN_LEN} caracteres.` };
   }
-  if (!session.userId) {
+  const hash = await hashPassword(pwd);
+
+  if (session.userId) {
+    await setUserPasswordAfterEmployeeChange(session.userId, hash);
+  } else if (session.mustChangePassword && session.role === 'employee') {
+    try {
+      updateJsonUserPassword(session.username, hash);
+    } catch {
+      return { error: 'Esta cuenta no admite cambio de contraseña aquí.' };
+    }
+  } else {
     return { error: 'Esta cuenta no admite cambio de contraseña aquí.' };
   }
-
-  const hash = await hashPassword(pwd);
-  await setUserPasswordAfterEmployeeChange(session.userId, hash);
 
   const s = await getSession();
   s.mustChangePassword = false;

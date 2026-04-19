@@ -6,6 +6,10 @@ export interface User {
   username: string;
   password: string;
   role: UserRole;
+  /** Optional display name for staff-facing labels (legacy `users.json` accounts). */
+  name?: string;
+  /** When true, user is sent to `/employee/change-password` until a new password is saved. */
+  mustChangePassword?: boolean;
 }
 
 export interface SessionData {

@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useTranslation } from '@/lib/i18n/useTranslation';
+import { clearRoomCheckinSessionDraft } from '@/lib/checkins/roomDraft';
 
 const CHECKIN_HOME = '/checkins/new';
 
@@ -12,12 +13,16 @@ const CHECKIN_HOME = '/checkins/new';
  */
 export default function CheckinFormBackButton() {
   const router = useRouter();
+  const pathname = usePathname();
   const { t } = useTranslation();
   const busyRef = useRef(false);
 
   const handleClick = useCallback(() => {
     if (busyRef.current) return;
     busyRef.current = true;
+    if (pathname?.includes('/checkins/new/room')) {
+      clearRoomCheckinSessionDraft();
+    }
     if (typeof window !== 'undefined' && window.history.length > 1) {
       router.back();
     } else {
@@ -26,7 +31,7 @@ export default function CheckinFormBackButton() {
     window.setTimeout(() => {
       busyRef.current = false;
     }, 400);
-  }, [router]);
+  }, [pathname, router]);
 
   return (
     <button

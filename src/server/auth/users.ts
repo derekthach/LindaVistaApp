@@ -21,6 +21,19 @@ export function findUser(username: string): User | undefined {
   return getUsers().find((user) => user.username === username);
 }
 
+/** Persists a new hash and clears the first-login flag for legacy `login-system/users.json` accounts. */
+export function updateJsonUserPassword(username: string, passwordHash: string): void {
+  const users = getUsers();
+  const idx = users.findIndex((u) => u.username === username);
+  if (idx === -1) {
+    throw new Error(`[auth] JSON user not found: ${username}`);
+  }
+  const row = users[idx];
+  row.password = passwordHash;
+  row.mustChangePassword = false;
+  fs.writeFileSync(usersFilePath, `${JSON.stringify(users, null, 2)}\n`, 'utf-8');
+}
+
 export async function verifyPassword(password: string, hash: string) {
   return bcrypt.compare(password, hash);
 }
@@ -71,8 +84,8 @@ function authenticateJsonUser(username: string, password: string): Promise<Authe
           ? 'Administrator'
           : user.username === 'guest'
             ? undefined
-            : user.username,
-      mustChangePassword: false,
+            : user.name ?? user.username,
+      mustChangePassword: user.mustChangePassword === true,
       source: 'json' as const,
     };
   });

@@ -18,6 +18,7 @@ import { getPaymentMethodTranslationKey } from '@/lib/checkins/paymentMethods';
 import { useTranslation } from '@/lib/i18n/useTranslation';
 import type { TranslationKey } from '@/lib/i18n/translations';
 import { formatRoomDisplay } from '@/lib/checkins/rooms';
+import { QuantitySoldInput } from '@/components/checkins/QuantitySoldInput';
 
 const COST_MAX = 1000;
 const AMOUNT_COLLECTED_MAX = 1000;
@@ -146,6 +147,8 @@ export default function EditCheckinModal({
   const staffValid = ALLOWED_STAFF.includes(staff_name as (typeof ALLOWED_STAFF)[number]);
   const qtyNum = quantity.trim() === '' ? NaN : Math.floor(Number(quantity));
   const qtyValid = !Number.isNaN(qtyNum) && Number.isInteger(qtyNum) && qtyNum >= QUANTITY_MIN && qtyNum <= QUANTITY_MAX;
+  const qtyInputNumeric =
+    quantity.trim() === '' ? 0 : Number.isFinite(qtyNum) && qtyNum >= 0 ? qtyNum : 0;
   const amountNum = amountCollected.trim() === '' ? NaN : Number(amountCollected);
   const amountValid = !Number.isNaN(amountNum) && amountNum >= 0 && amountNum <= AMOUNT_COLLECTED_MAX;
 
@@ -457,13 +460,11 @@ export default function EditCheckinModal({
               </label>
               <label>
                 <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('diff_label_quantity')}</div>
-                <input
-                  type="number"
+                <QuantitySoldInput
+                  value={qtyInputNumeric}
+                  onChange={(n) => setQuantity(n <= 0 ? '' : String(n))}
                   min={QUANTITY_MIN}
                   max={QUANTITY_MAX}
-                  step={1}
-                  value={quantity}
-                  onChange={(e) => setQuantity(e.target.value)}
                   style={inputStyle}
                 />
               </label>

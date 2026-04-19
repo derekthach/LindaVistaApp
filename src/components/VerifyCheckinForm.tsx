@@ -13,6 +13,7 @@ import {
   validatePaymentSplits,
 } from '@/lib/checkins/roomPaymentSplits';
 import { isValidRoomSubmissionKey } from '@/lib/checkins/roomSubmissionKey';
+import { ROOM_CHECKIN_SESSION_STORAGE_KEY } from '@/lib/checkins/roomDraft';
 
 export default function VerifyCheckinForm() {
   const router = useRouter();
@@ -23,7 +24,7 @@ export default function VerifyCheckinForm() {
   const submitLockRef = useRef(false);
 
   useEffect(() => {
-    const data = sessionStorage.getItem('checkinData');
+    const data = sessionStorage.getItem(ROOM_CHECKIN_SESSION_STORAGE_KEY);
     if (!data) {
       router.push('/checkins/new');
       return;
@@ -55,7 +56,7 @@ export default function VerifyCheckinForm() {
         setSubmitError(result.error ?? t('verify_generic_error'));
         return;
       }
-      sessionStorage.removeItem('checkinData');
+      sessionStorage.removeItem(ROOM_CHECKIN_SESSION_STORAGE_KEY);
     } catch (err: unknown) {
       if (
         typeof err === 'object' &&
@@ -64,7 +65,7 @@ export default function VerifyCheckinForm() {
         typeof (err as { digest?: string }).digest === 'string' &&
         (err as { digest: string }).digest.startsWith('NEXT_REDIRECT')
       ) {
-        sessionStorage.removeItem('checkinData');
+        sessionStorage.removeItem(ROOM_CHECKIN_SESSION_STORAGE_KEY);
         return;
       }
       setSubmitError(err instanceof Error ? err.message : t('verify_generic_error'));
@@ -152,7 +153,7 @@ export default function VerifyCheckinForm() {
         <div style={{ display: 'flex', gap: 10 }}>
           <button
             type="button"
-            onClick={() => router.back()}
+            onClick={() => router.push('/checkins/new/room')}
             disabled={disableActions}
             style={{
               flex: 1,

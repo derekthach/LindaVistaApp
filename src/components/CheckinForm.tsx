@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { DateTime } from 'luxon';
 import { useRouter } from 'next/navigation';
 import { useLanguage } from './LanguageToggle';
@@ -19,6 +19,10 @@ import {
 import type { RoomPaymentSplit } from '@/types';
 import { ROOM_OPTIONS, formatRoomDisplay, parseRoomOptionValue, type RoomId } from '@/lib/checkins/rooms';
 import { createRoomSubmissionKey } from '@/lib/checkins/roomSubmissionKey';
+import {
+  readRoomCheckinDraftFromSession,
+  ROOM_CHECKIN_SESSION_STORAGE_KEY,
+} from '@/lib/checkins/roomDraft';
 import { getAvailableRoomOptions } from '@/lib/checkins/roomOccupancy';
 import StaffDropdown from '@/components/checkins/StaffDropdown';
 import ManualStaffNameField from '@/components/checkins/ManualStaffNameField';
@@ -82,8 +86,36 @@ function CheckinFormContent({
   const [touched, setTouched] = useState<Partial<Record<keyof FormState | 'payment_splits', boolean>>>({});
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [carMakes, setCarMakes] = useState<string[]>([]);
+  /** Set in useLayoutEffect when sessionStorage has a pending room verify draft — skip next-receipt + default date/time. */
+  const restoredFromVerifyDraftRef = useRef(false);
+
+  useLayoutEffect(() => {
+    const draft = readRoomCheckinDraftFromSession();
+    if (!draft) return;
+    restoredFromVerifyDraftRef.current = true;
+    setForm({
+      room_id: draft.room_id,
+      receipt_number: draft.receipt_number,
+      date: draft.date,
+      time: draft.time,
+      car_plate: draft.car_plate,
+      car_make: draft.car_make,
+      car_color: draft.car_color,
+      staff_name: draft.staff_name,
+      note: draft.note,
+    });
+    setPaymentRows(draft.paymentRows.length ? draft.paymentRows : [defaultPaymentRow()]);
+  }, []);
 
   useEffect(() => {
+    fetch('/api/car-makes')
+      .then((res) => res.json())
+      .then((data) => setCarMakes(data.carMakes ?? []));
+  }, []);
+
+  useEffect(() => {
+    if (restoredFromVerifyDraftRef.current) return;
+
     fetch('/api/next-receipt')
       .then((res) => res.json())
       .then((data) => {
@@ -97,10 +129,6 @@ function CheckinFormContent({
       date: now.toISODate() ?? '',
       time: now.toFormat('HH:mm'),
     }));
-
-    fetch('/api/car-makes')
-      .then((res) => res.json())
-      .then((data) => setCarMakes(data.carMakes ?? []));
   }, []);
 
   useEffect(() => {
@@ -267,7 +295,7 @@ function CheckinFormContent({
         note: form.note.trim().slice(0, NOTE_MAX),
         submission_key: submissionKey,
       };
-      sessionStorage.setItem('checkinData', JSON.stringify(data));
+      sessionStorage.setItem(ROOM_CHECKIN_SESSION_STORAGE_KEY, JSON.stringify(data));
       router.push('/checkin/verify');
     },
     [form, paymentRows, validation.valid, router]
