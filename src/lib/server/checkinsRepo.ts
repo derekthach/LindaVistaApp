@@ -601,6 +601,177 @@ export async function updateCheckinFoodBeer(
   }
 }
 
+/** Rolling window for “my recent check-ins” and employee self-edit eligibility. */
+export const EMPLOYEE_RECENT_CHECKINS_HOURS = 8;
+
+export function getRecordEventMs(data: Record<string, unknown>): number {
+  const ts = data.checkInAt as Timestamp | undefined;
+  const cr = data.createdAt as Timestamp | undefined;
+  const a = typeof ts?.toMillis === 'function' ? ts.toMillis() : 0;
+  const b = typeof cr?.toMillis === 'function' ? cr.toMillis() : 0;
+  return Math.max(a, b);
+}
+
+export function checkinOwnedByEmployee(
+  data: Record<string, unknown>,
+  opts: { userId?: string | null; username: string }
+): boolean {
+  if ((data.createdByRole as string) !== 'employee') return false;
+  const un = opts.username.trim().toLowerCase();
+  const cu =
+    typeof data.createdByUsername === 'string' ? data.createdByUsername.trim().toLowerCase() : '';
+  const empId = typeof data.employeeId === 'string' ? data.employeeId.trim() : '';
+  const uid = opts.userId?.trim();
+  if (uid && uid !== 'guest' && empId === uid) return true;
+  if (cu === un) return true;
+  return false;
+}
+
+export function isWithinEmployeeEditHours(
+  data: Record<string, unknown>,
+  hours: number = EMPLOYEE_RECENT_CHECKINS_HOURS
+): boolean {
+  const zone = 'America/Puerto_Rico';
+  const cutoff = DateTime.now().setZone(zone).minus({ hours }).toMillis();
+  return getRecordEventMs(data) >= cutoff;
+}
+
+/**
+ * Employee-created check-ins in the rolling window (newest first).
+ * Uses `checkInAt >= cutoff` query then filters ownership and event time in memory.
+ */
+export async function listRecentCheckinsForEmployee(opts: {
+  userId?: string | null;
+  username: string;
+  hours?: number;
+}): Promise<CheckIn[]> {
+  const hours = opts.hours ?? EMPLOYEE_RECENT_CHECKINS_HOURS;
+  const zone = 'America/Puerto_Rico';
+  const cutoff = DateTime.now().setZone(zone).minus({ hours });
+  const cutoffTs = Timestamp.fromDate(cutoff.toJSDate());
+  const cutoffMs = cutoff.toMillis();
+
+  try {
+    const db = getAdminDb();
+    const snapshot = await db
+      .collection(CHECKINS_COLLECTION)
+      .where('checkInAt', '>=', cutoffTs)
+      .orderBy('checkInAt', 'desc')
+      .limit(400)
+      .get();
+
+    const out: CheckIn[] = [];
+    for (const doc of snapshot.docs) {
+      const data = doc.data();
+      if (!checkinOwnedByEmployee(data, { userId: opts.userId, username: opts.username }))
+        continue;
+      if (getRecordEventMs(data) < cutoffMs) continue;
+      out.push(normalizeCheckin(doc.id, data));
+    }
+    return out;
+  } catch (err) {
+    if (isFirestoreUnavailableError(err)) {
+      if (isProduction()) throw err;
+      console.warn('Firestore unavailable (listRecentCheckinsForEmployee):', (err as Error).message);
+      return [];
+    }
+    throw err;
+  }
+}
+
+export interface EmployeeRoomOperationalPayload {
+  payment_splits: RoomPaymentSplit[];
+  car_plate: string;
+  car_make: string;
+  car_color: string;
+  note?: string;
+}
+
+/**
+ * Employee-only room edits: payment breakdown, vehicle fields, notes. Receipt / staff / room / time unchanged.
+ */
+export async function employeeUpdateRoomOperational(
+  id: string,
+  payload: EmployeeRoomOperationalPayload,
+  editedBy: string
+): Promise<void> {
+  const db = getAdminDb();
+  const ref = db.collection(CHECKINS_COLLECTION).doc(id);
+  const editsRef = ref.collection(EDITS_SUBCOLLECTION);
+  const snapshot = await ref.get();
+  if (!snapshot.exists) {
+    throw new Error('Check-in not found');
+  }
+  const data = snapshot.data()!;
+  if (((data.checkInType as string) ?? 'room') !== 'room') {
+    throw new Error('Check-in is not a room record');
+  }
+
+  const splits = payload.payment_splits;
+  const totalAfter = roundMoney(calculatePaymentSplitTotal(splits));
+
+  const noteTrim = (payload.note ?? '').trim().slice(0, 500);
+  const carPlate = payload.car_plate.trim().toUpperCase().slice(0, 10);
+  const carMake = payload.car_make.trim().toUpperCase().slice(0, 30);
+  const carColor = payload.car_color.trim();
+
+  const before: Record<string, unknown> = {
+    paymentBreakdown: formatPaymentBreakdownForAuditDoc(data),
+    totalCollected: getRoomCollectedTotalFromDoc(data),
+    carPlate: data.carPlate ?? '',
+    carMake: data.carMake ?? '',
+    carColor: data.carColor ?? '',
+    note: data.note ?? '',
+  };
+  const after: Record<string, unknown> = {
+    paymentBreakdown: formatPaymentBreakdownComma(splits),
+    totalCollected: totalAfter,
+    carPlate,
+    carMake,
+    carColor,
+    note: noteTrim,
+  };
+
+  const changedFields: string[] = [];
+  if (String(before.paymentBreakdown) !== String(after.paymentBreakdown))
+    changedFields.push('paymentBreakdown');
+  if (Number(before.totalCollected) !== Number(after.totalCollected)) changedFields.push('totalCollected');
+  if (String(before.carPlate) !== String(after.carPlate)) changedFields.push('carPlate');
+  if (String(before.carMake) !== String(after.carMake)) changedFields.push('carMake');
+  if (String(before.carColor) !== String(after.carColor)) changedFields.push('carColor');
+  if (String(before.note) !== String(after.note)) changedFields.push('note');
+
+  if (changedFields.length === 0) {
+    return;
+  }
+
+  const updateData: Record<string, unknown> = {
+    cost: totalAfter,
+    totalCollected: totalAfter,
+    paymentSplits: splits,
+    paymentMethod: splits[0]?.method,
+    carPlate,
+    carMake,
+    carColor,
+    note: noteTrim,
+    updatedAt: Timestamp.now(),
+    updatedBy: editedBy,
+  };
+
+  await ref.update(updateData);
+  try {
+    await editsRef.add({
+      before,
+      after,
+      editedAt: Timestamp.now(),
+      editedBy,
+      changedFields,
+    });
+  } catch (auditErr) {
+    console.error('checkinsRepo.employeeUpdateRoomOperational: audit write failed', auditErr);
+  }
+}
+
 export interface CheckinEditRecord {
   id: string;
   before: Record<string, unknown>;

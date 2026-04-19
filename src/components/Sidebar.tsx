@@ -5,16 +5,20 @@ import { useEffect, useState, useCallback } from 'react';
 import { usePathname } from 'next/navigation';
 import { logoutAction } from '@/app/actions/auth';
 import { LV_PENDING_RESETS_INVALIDATE } from '@/lib/adminNavEvents';
+import { isGuestEmployeeUsername } from '@/lib/auth/guestEmployee';
 import { useTranslation } from '@/lib/i18n/useTranslation';
 import type { UserRole } from '@/types';
 
 export default function Sidebar({
   role,
   employeeGreetingName,
+  employeeUsername,
 }: {
   role: UserRole;
   /** First-party name for “Hi {name}” (employees only). */
   employeeGreetingName?: string;
+  /** Login username — when set with role employee, enables employee-only nav (excluding shared guest). */
+  employeeUsername?: string;
 }) {
   const { t } = useTranslation();
   const pathname = usePathname();
@@ -90,6 +94,13 @@ export default function Sidebar({
         <Link href="/checkins/new" style={linkStyle('/checkins/new')}>
           {t('nav_checkin_checkout')}
         </Link>
+        {role === 'employee' &&
+          employeeUsername &&
+          !isGuestEmployeeUsername(employeeUsername) && (
+            <Link href="/employee/recent-checkins" style={linkStyle('/employee/recent-checkins', true)}>
+              {t('nav_recent_checkins')}
+            </Link>
+          )}
         {role === 'admin' && (
           <Link
             href="/admin/employees"

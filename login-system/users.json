@@ -27,5 +27,12 @@
     "password": "$2b$10$.uXjbzifS4ETWSBvvSxEDOS4n5oFV1iJ954s7Jn0ArGGMXP4AAP8e",
     "role": "employee",
     "mustChangePassword": true
+  },
+  {
+    "username": "testing",
+    "name": "Testing",
+    "password": "$2b$10$NCd7V1wBzbF2eW0NcP43GOamBin24C7QZB9wKVvW049WNqhf9WKGi",
+    "role": "employee",
+    "mustChangePassword": false
   }
 ]

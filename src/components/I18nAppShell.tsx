@@ -10,10 +10,12 @@ import SessionTouchOnNavigate from '@/components/SessionTouchOnNavigate';
 export default function I18nAppShell({
   role,
   employeeGreetingName,
+  employeeUsername,
   children,
 }: {
   role: UserRole;
   employeeGreetingName?: string;
+  employeeUsername?: string;
   children: React.ReactNode;
 }) {
   const defaultLanguage = role === 'employee' ? 'es' : undefined;
@@ -21,7 +23,7 @@ export default function I18nAppShell({
   return (
     <I18nProvider defaultLanguage={defaultLanguage}>
       <div style={{ display: 'flex', minHeight: '100vh' }}>
-        <Sidebar role={role} employeeGreetingName={employeeGreetingName} />
+        <Sidebar role={role} employeeGreetingName={employeeGreetingName} employeeUsername={employeeUsername} />
         <main style={{ flex: 1, padding: 24 }}>
           <SessionTouchOnNavigate />
           <div

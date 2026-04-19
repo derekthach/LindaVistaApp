@@ -1,7 +1,9 @@
 import { STAFF_MEMBERS } from '@/lib/checkins/constants';
+import { isGuestEmployeeUsername } from '@/lib/auth/guestEmployee';
 import { formatEmployeeNameSnapshot } from '@/lib/employeeDisplayName';
 import { getAdminDb } from '@/lib/server/firebaseAdmin';
 import type { FirestoreUserDoc } from '@/lib/server/usersRepo';
+import { getUsers } from '@/server/auth/users';
 
 const USERS_COLLECTION = 'users';
 
@@ -19,6 +21,16 @@ export async function getMergedCheckoutStaffDisplayNames(): Promise<string[]> {
     const data = doc.data() as Omit<FirestoreUserDoc, 'id'>;
     if (data.role !== 'employee') continue;
     names.add(formatEmployeeNameSnapshot(data.fullName, data.nickname));
+  }
+  try {
+    for (const u of getUsers()) {
+      if (u.role !== 'employee') continue;
+      if (isGuestEmployeeUsername(u.username)) continue;
+      const label = (u.name?.trim() || u.username.trim());
+      if (label) names.add(label);
+    }
+  } catch {
+    /* ignore missing/unreadable legacy users.json in odd environments */
   }
   return [...names].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
 }

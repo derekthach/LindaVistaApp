@@ -26,6 +26,7 @@ export default async function ValidateCheckinPage({ params }: PageProps) {
       employeeGreetingName={
         session.role === 'employee' ? (session.displayName ?? session.username) : undefined
       }
+      employeeUsername={session.role === 'employee' ? session.username : undefined}
     >
       <div className="container">
         <FoodBeerValidatePageHeading type={type as 'food' | 'beer'} />

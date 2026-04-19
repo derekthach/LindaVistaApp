@@ -19,6 +19,7 @@ export default async function VerifyCheckinPage() {
       employeeGreetingName={
         session.role === 'employee' ? (session.displayName ?? session.username) : undefined
       }
+      employeeUsername={session.role === 'employee' ? session.username : undefined}
     >
       <div className="container">
         <LocalizedPageHeading titleKey="verify" subtitleKey="review_before_submitting" />

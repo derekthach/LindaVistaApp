@@ -3,6 +3,7 @@ import { isGuestEmployeeUsername } from '@/lib/auth/guestEmployee';
 import AppLayout from '@/components/AppLayout';
 import CheckInTypeSelector from '@/components/checkins/CheckInTypeSelector';
 import CheckoutRoomsSection from '@/components/checkins/CheckoutRoomsSection';
+import EmployeeRecentCheckinsNavLink from '@/components/checkins/EmployeeRecentCheckinsNavLink';
 import AdminRedirectToDashboard from '@/components/AdminRedirectToDashboard';
 import LocalizedPageHeading from '@/components/LocalizedPageHeading';
 
@@ -30,7 +31,11 @@ export default async function NewCheckinPage({
   }
 
   return (
-    <AppLayout role={session.role} employeeGreetingName={employeeGreetingName}>
+    <AppLayout
+      role={session.role}
+      employeeGreetingName={employeeGreetingName}
+      employeeUsername={session.role === 'employee' ? session.username : undefined}
+    >
       <div className="container">
         <LocalizedPageHeading titleKey="check_in_checkout_title" subtitleKey="choose_type" />
         <CheckInTypeSelector />
@@ -41,6 +46,7 @@ export default async function NewCheckinPage({
           }
           guestManualStaffEntry={guestManualStaffEntry}
         />
+        {session.role === 'employee' && !guestManualStaffEntry && <EmployeeRecentCheckinsNavLink />}
       </div>
     </AppLayout>
   );
