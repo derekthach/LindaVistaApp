@@ -135,7 +135,17 @@ export async function authenticateUser(username: string, password: string): Prom
     return fromFs;
   }
 
-  return authenticateJsonUser(trimmed, password);
+  const fromJson = await authenticateJsonUser(trimmed, password);
+  if (fromJson) {
+    /** If a Firestore `users` row exists for this login name, keep Admin “Last login” in sync even when JSON auth wins (e.g. hash drift). */
+    const fsDoc = await getUserDocByUsername(trimmed);
+    if (fsDoc) {
+      await updateUserLastLogin(fsDoc.id).catch((e) =>
+        console.error('[auth] updateUserLastLogin (json login + firestore doc)', e)
+      );
+    }
+  }
+  return fromJson;
 }
 
 export type { FirestoreUserDoc };

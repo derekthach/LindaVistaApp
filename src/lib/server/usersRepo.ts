@@ -223,7 +223,7 @@ export async function upsertEmployeePasswordAfterChange(
     passwordResetRequestedAt: null,
     createdAt: now,
     updatedAt: now,
-    lastLoginAt: null,
+    lastLoginAt: now,
   });
 }
 

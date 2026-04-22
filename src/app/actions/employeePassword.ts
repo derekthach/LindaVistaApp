@@ -8,6 +8,7 @@ import {
   docIdForUsername,
   firestoreUserDocExists,
   getUserDocByUsername,
+  updateUserLastLogin,
   upsertEmployeePasswordAfterChange,
 } from '@/lib/server/usersRepo';
 
@@ -47,11 +48,14 @@ export async function changeEmployeePasswordAction(
     role: (session.role === 'admin' ? 'admin' : 'employee') as UserRole,
   };
 
+  let lastLoginDocId: string | null = null;
+
   if (targetFirestoreId) {
     try {
       await upsertEmployeePasswordAfterChange(targetFirestoreId, hash, profile, {
         allowCreateIfMissing: false,
       });
+      lastLoginDocId = targetFirestoreId;
     } catch (err) {
       console.error('[change-password] Firestore update failed', err);
       return { error: GENERIC_SAVE_ERROR };
@@ -63,12 +67,14 @@ export async function changeEmployeePasswordAction(
      */
     try {
       updateJsonUserPassword(session.username, hash);
+      lastLoginDocId = (await getUserDocByUsername(session.username))?.id ?? null;
     } catch (err) {
       console.error('[change-password] JSON persist failed; upserting Firestore user doc', err);
       try {
         await upsertEmployeePasswordAfterChange(usernameId, hash, profile, {
           allowCreateIfMissing: true,
         });
+        lastLoginDocId = usernameId;
       } catch (err2) {
         console.error('[change-password] Firestore upsert failed', err2);
         return { error: GENERIC_SAVE_ERROR };
@@ -76,6 +82,12 @@ export async function changeEmployeePasswordAction(
     }
   } else {
     return { error: 'Esta cuenta no admite cambio de contraseña aquí.' };
+  }
+
+  if (lastLoginDocId) {
+    await updateUserLastLogin(lastLoginDocId).catch((e) =>
+      console.error('[change-password] updateUserLastLogin', e)
+    );
   }
 
   const s = await getSession();
