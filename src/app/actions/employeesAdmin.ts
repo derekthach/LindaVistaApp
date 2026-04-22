@@ -4,7 +4,12 @@ import { revalidatePath } from 'next/cache';
 import { requireAuth } from '@/server/auth/session';
 import { requireAdmin } from '@/lib/server/requireAdmin';
 import { findUser, hashPassword, updateJsonUserAdminPasswordReset } from '@/server/auth/users';
-import { getUserPublicById, updatePasswordAndFlags } from '@/lib/server/usersRepo';
+import {
+  docIdForUsername,
+  getUserPublicById,
+  updatePasswordAndFlags,
+  upsertEmployeeAdminPasswordReset,
+} from '@/lib/server/usersRepo';
 
 export async function adminResetEmployeePasswordAction(
   _prev: unknown,
@@ -25,21 +30,37 @@ export async function adminResetEmployeePasswordAction(
   const hash = await hashPassword(newPassword);
   const firestoreRow = await getUserPublicById(userId);
   if (firestoreRow) {
-    await updatePasswordAndFlags(userId, hash, {
-      mustChangePassword: true,
-      passwordResetRequested: false,
-      passwordResetRequestedAt: null,
-    });
+    try {
+      await updatePasswordAndFlags(userId, hash, {
+        mustChangePassword: true,
+        passwordResetRequested: false,
+        passwordResetRequestedAt: null,
+      });
+    } catch (e) {
+      console.error('[admin reset password] Firestore update failed', e);
+      return { error: 'Could not update account.' };
+    }
   } else {
     const jsonUser = findUser(userId);
     if (!jsonUser || jsonUser.role !== 'employee') {
       return { error: 'User not found.' };
     }
+    const fullName = (jsonUser.name?.trim() || jsonUser.username).trim();
+    const usernameNorm = docIdForUsername(jsonUser.username);
     try {
       updateJsonUserAdminPasswordReset(jsonUser.username, hash);
     } catch (e) {
-      console.error('[admin reset password] JSON user update failed', e);
-      return { error: 'Could not update account.' };
+      console.warn('[admin reset password] JSON write failed (expected on read-only deploy); using Firestore', e);
+      try {
+        await upsertEmployeeAdminPasswordReset(usernameNorm, hash, {
+          fullName,
+          username: usernameNorm,
+          role: 'employee',
+        });
+      } catch (e2) {
+        console.error('[admin reset password] Firestore upsert failed', e2);
+        return { error: 'Could not update account.' };
+      }
     }
   }
 

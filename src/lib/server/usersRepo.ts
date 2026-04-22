@@ -116,10 +116,14 @@ export async function listUsersPublic(): Promise<PublicUserRow[]> {
 
     const jsonU = jsonById.get(d.id);
     if (jsonU && jsonU.role === 'employee') {
+      const jsonMust = jsonU.mustChangePassword === true;
+      const fsMust = row.mustChangePassword === true;
       row = {
         ...row,
         fullName: (jsonU.name?.trim() || jsonU.username).trim(),
         username: docIdForUsername(jsonU.username),
+        /** Firestore is auth source when present; merge JSON so missing/stale flags still match `users.json`. */
+        mustChangePassword: fsMust || jsonMust,
       };
     }
 
@@ -183,6 +187,50 @@ export async function updatePasswordAndFlags(
       passwordResetRequestedAt: flags.passwordResetRequestedAt,
       updatedAt: Timestamp.now(),
     });
+}
+
+/**
+ * Creates or updates `users/{userId}` when an admin sets a temporary password and
+ * `login-system/users.json` cannot be written (e.g. Vercel serverless read-only FS).
+ */
+export async function upsertEmployeeAdminPasswordReset(
+  userId: string,
+  passwordHash: string,
+  profile: { fullName: string; username: string; role: UserRole }
+): Promise<void> {
+  const id = docIdForUsername(userId);
+  const ref = db().collection(USERS_COLLECTION).doc(id);
+  const snap = await ref.get();
+  const now = Timestamp.now();
+  const username = docIdForUsername(profile.username);
+  if (snap.exists) {
+    await ref.update({
+      passwordHash,
+      mustChangePassword: true,
+      passwordResetRequested: false,
+      passwordResetRequestedAt: null,
+      updatedAt: now,
+      fullName: profile.fullName.trim() || username,
+      username,
+      role: profile.role,
+    });
+    return;
+  }
+  await ref.set({
+    id,
+    fullName: profile.fullName.trim() || username,
+    nickname: null,
+    username,
+    passwordHash,
+    role: profile.role,
+    status: 'active',
+    mustChangePassword: true,
+    passwordResetRequested: false,
+    passwordResetRequestedAt: null,
+    createdAt: now,
+    updatedAt: now,
+    lastLoginAt: null,
+  });
 }
 
 /**

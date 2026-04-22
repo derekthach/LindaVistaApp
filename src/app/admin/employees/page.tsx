@@ -22,8 +22,8 @@ function toTableRow(u: PublicUserRow): EmployeeTableRow {
     username: u.username,
     role: u.role,
     status: u.status,
-    mustChangePassword: u.mustChangePassword,
-    passwordResetRequested: u.passwordResetRequested,
+    mustChangePassword: u.mustChangePassword === true,
+    passwordResetRequested: u.passwordResetRequested === true,
     lastLoginAt,
   };
 }

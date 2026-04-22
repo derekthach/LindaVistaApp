@@ -197,7 +197,9 @@ export default function EmployeesAdminClient({
                 <td style={{ padding: '10px 8px' }}>{translateRole(u.role, t)}</td>
                 <td style={{ padding: '10px 8px' }}>{translateUserStatus(u.status, t)}</td>
                 <td style={{ padding: '10px 8px' }}>
-                  {u.mustChangePassword ? t('password_status_must_change') : t('password_status_active')}
+                  {u.mustChangePassword === true
+                    ? t('password_status_must_change')
+                    : t('password_status_active')}
                 </td>
                 <td style={{ padding: '10px 8px' }}>
                   {u.passwordResetRequested ? (
