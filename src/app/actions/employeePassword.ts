@@ -3,7 +3,13 @@
 import { redirect } from 'next/navigation';
 import { getSession, requireAuth } from '@/server/auth/session';
 import { hashPassword, updateJsonUserPassword } from '@/server/auth/users';
-import { docIdForUsername, setUserPasswordAfterEmployeeChange } from '@/lib/server/usersRepo';
+import type { UserRole } from '@/types';
+import {
+  docIdForUsername,
+  firestoreUserDocExists,
+  getUserDocByUsername,
+  upsertEmployeePasswordAfterChange,
+} from '@/lib/server/usersRepo';
 
 const MIN_LEN = 8;
 
@@ -25,31 +31,46 @@ export async function changeEmployeePasswordAction(
   }
   const hash = await hashPassword(pwd);
 
-  /** Firestore-backed login (`guest` marker is not a real user doc id). */
+  const usernameId = docIdForUsername(session.username);
   const firestoreUserId =
-    session.userId && session.userId !== 'guest' ? session.userId : undefined;
+    session.userId && session.userId !== 'guest' ? session.userId.trim() : undefined;
 
-  if (firestoreUserId) {
+  const docByUsername = await getUserDocByUsername(session.username);
+
+  let targetFirestoreId: string | null = docByUsername?.id ?? null;
+  if (!targetFirestoreId && firestoreUserId && (await firestoreUserDocExists(firestoreUserId))) {
+    targetFirestoreId = firestoreUserId;
+  }
+
+  const profile = {
+    fullName: (session.displayName ?? session.username).trim() || usernameId,
+    role: (session.role === 'admin' ? 'admin' : 'employee') as UserRole,
+  };
+
+  if (targetFirestoreId) {
     try {
-      await setUserPasswordAfterEmployeeChange(firestoreUserId, hash);
+      await upsertEmployeePasswordAfterChange(targetFirestoreId, hash, profile, {
+        allowCreateIfMissing: false,
+      });
     } catch (err) {
       console.error('[change-password] Firestore update failed', err);
       return { error: GENERIC_SAVE_ERROR };
     }
-  /**
-   * Legacy JSON login has no `userId`. Firestore-backed sessions use the first branch above.
-   * Do not require `role === 'employee'` here: some Firestore docs omit/mis-store `role`, which
-   * would leave `session.role` incorrect while `mustChangePassword` is still true after login.
-   */
   } else if (session.mustChangePassword) {
+    /**
+     * Local/dev: JSON file is writable. Production (e.g. Vercel): write throws — then create or
+     * update Firestore `users/{username}` so the employee is not stuck after first login.
+     */
     try {
       updateJsonUserPassword(session.username, hash);
     } catch (err) {
-      console.error('[change-password] JSON file persist failed, trying Firestore by username id', err);
+      console.error('[change-password] JSON persist failed; upserting Firestore user doc', err);
       try {
-        await setUserPasswordAfterEmployeeChange(docIdForUsername(session.username), hash);
+        await upsertEmployeePasswordAfterChange(usernameId, hash, profile, {
+          allowCreateIfMissing: true,
+        });
       } catch (err2) {
-        console.error('[change-password] Firestore fallback failed', err2);
+        console.error('[change-password] Firestore upsert failed', err2);
         return { error: GENERIC_SAVE_ERROR };
       }
     }

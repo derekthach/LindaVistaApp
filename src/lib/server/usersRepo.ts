@@ -45,6 +45,13 @@ export async function getUserDocByUsername(username: string): Promise<FirestoreU
   return { id: snap.id, ...data };
 }
 
+export async function firestoreUserDocExists(userId: string): Promise<boolean> {
+  const id = userId.trim();
+  if (!id) return false;
+  const snap = await db().collection(USERS_COLLECTION).doc(id).get();
+  return snap.exists;
+}
+
 export function userDisplaySnapshot(u: Pick<FirestoreUserDoc, 'fullName' | 'nickname'>): string {
   return formatEmployeeNameSnapshot(u.fullName, u.nickname);
 }
@@ -178,16 +185,56 @@ export async function updatePasswordAndFlags(
     });
 }
 
+/**
+ * Updates password and clears `mustChangePassword` on an existing `users/{userId}` doc.
+ * If the doc is missing and `allowCreateIfMissing` is true, creates a minimal employee doc
+ * (used when JSON `users.json` is not writable on serverless but the account still logged in via file).
+ */
+export async function upsertEmployeePasswordAfterChange(
+  userId: string,
+  passwordHash: string,
+  profile: { fullName: string; role: UserRole },
+  options?: { allowCreateIfMissing?: boolean }
+): Promise<void> {
+  const ref = db().collection(USERS_COLLECTION).doc(userId);
+  const snap = await ref.get();
+  const now = Timestamp.now();
+  if (snap.exists) {
+    await ref.update({
+      passwordHash,
+      mustChangePassword: false,
+      updatedAt: now,
+    });
+    return;
+  }
+  if (!options?.allowCreateIfMissing) {
+    throw new Error(`[auth] Firestore user doc not found: ${userId}`);
+  }
+  await ref.set({
+    id: userId,
+    fullName: profile.fullName,
+    nickname: null,
+    username: userId,
+    passwordHash,
+    role: profile.role,
+    status: 'active',
+    mustChangePassword: false,
+    passwordResetRequested: false,
+    passwordResetRequestedAt: null,
+    createdAt: now,
+    updatedAt: now,
+    lastLoginAt: null,
+  });
+}
+
 export async function setUserPasswordAfterEmployeeChange(
   userId: string,
   passwordHash: string
 ): Promise<void> {
-  await db()
-    .collection(USERS_COLLECTION)
-    .doc(userId)
-    .update({
-      passwordHash,
-      mustChangePassword: false,
-      updatedAt: Timestamp.now(),
-    });
+  await upsertEmployeePasswordAfterChange(
+    userId,
+    passwordHash,
+    { fullName: userId, role: 'employee' },
+    { allowCreateIfMissing: false }
+  );
 }
