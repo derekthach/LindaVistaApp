@@ -17,9 +17,9 @@
   {
     "username": "jahaira",
     "name": "Jahaira",
-    "password": "$2b$10$ufimYPDacq/im72BouR9Y.g2.zn9nmx3CWu74u/GjpLb8TSBTEoyu",
+    "password": "$2b$10$ww9B/CMteKGk4bheF.cOs.IrxQarCA9mk4EePxnn5aITVkl4kdpuC",
     "role": "employee",
-    "mustChangePassword": false
+    "mustChangePassword": true
   },
   {
     "username": "beatrice",
