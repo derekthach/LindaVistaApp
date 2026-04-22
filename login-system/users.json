@@ -34,5 +34,12 @@
     "password": "$2b$10$NCd7V1wBzbF2eW0NcP43GOamBin24C7QZB9wKVvW049WNqhf9WKGi",
     "role": "employee",
     "mustChangePassword": false
+  },
+  {
+    "username": "bernie",
+    "name": "Bernie",
+    "password": "$2b$10$U.6vAau8vUbto7/efHQxWeW2A.ftEvXlAjH0Uckd4rKK3DpsMp.wG",
+    "role": "employee",
+    "mustChangePassword": false
   }
 ]
