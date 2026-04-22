@@ -35,8 +35,8 @@ export async function POST(request: Request) {
       requireEnvs(['SESSION_SECRET']);
     }
     const session = await requireSessionApi();
-    if (session.role !== 'admin') {
-      throw new HttpError(403, 'FORBIDDEN', { message: 'Only admins can add car makes' });
+    if (session.role !== 'admin' && session.role !== 'employee') {
+      throw new HttpError(403, 'FORBIDDEN', { message: 'Only signed-in staff can add car makes' });
     }
     const body = await request.json();
     const name = typeof body?.name === 'string' ? body.name.trim() : '';

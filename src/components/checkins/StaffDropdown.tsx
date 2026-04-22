@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '@/components/LanguageToggle';
-import { getStaffOptionsForRole } from '@/lib/checkins/constants';
+import { getStaffOptionsForRole, STAFF_HIDDEN_FOR_EMPLOYEE } from '@/lib/checkins/constants';
 import StaffPasswordModal from './StaffPasswordModal';
 
 const STAFF_REQUIRING_PASSWORD = 'Derek Thach';
@@ -30,7 +30,25 @@ export default function StaffDropdown({
   const { t } = useLanguage();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const controlled = value !== undefined;
-  const staffOptions = getStaffOptionsForRole(isAdmin);
+  const baseOptions = useMemo(() => [...getStaffOptionsForRole(isAdmin)], [isAdmin]);
+  const [staffOptions, setStaffOptions] = useState<string[]>(baseOptions);
+
+  useEffect(() => {
+    setStaffOptions(baseOptions);
+    let cancelled = false;
+    void fetch('/api/checkins/checkout-staff-options', { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { names?: string[] } | null) => {
+        if (cancelled || !data?.names?.length) return;
+        const hidden = new Set<string>(STAFF_HIDDEN_FOR_EMPLOYEE as readonly string[]);
+        const merged = isAdmin ? data.names : data.names.filter((s) => !hidden.has(s));
+        setStaffOptions(merged);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin, baseOptions]);
 
   const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newValue = e.target.value;

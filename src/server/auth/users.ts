@@ -47,6 +47,22 @@ export function updateJsonUserPassword(username: string, passwordHash: string): 
   fs.writeFileSync(usersFilePath, `${JSON.stringify(users, null, 2)}\n`, 'utf-8');
 }
 
+/** Admin temp password: same as Firestore reset — user must change password on next login. */
+export function updateJsonUserAdminPasswordReset(username: string, passwordHash: string): void {
+  const users = getUsers();
+  const uname = username.trim();
+  const idx = users.findIndex(
+    (u) => u.username === uname || u.username.toLowerCase() === uname.toLowerCase()
+  );
+  if (idx === -1) {
+    throw new Error(`[auth] JSON user not found: ${username}`);
+  }
+  const row = users[idx];
+  row.password = passwordHash;
+  row.mustChangePassword = true;
+  fs.writeFileSync(usersFilePath, `${JSON.stringify(users, null, 2)}\n`, 'utf-8');
+}
+
 export async function verifyPassword(password: string, hash: string) {
   return bcrypt.compare(password, hash);
 }

@@ -19,7 +19,7 @@ export default function RoomCheckinForm({
 }) {
   return (
     <CheckinForm
-      allowAddCarMake={isAdmin}
+      allowAddCarMake
       allowEditDateTime={isAdmin}
       occupiedRoomIds={occupiedRoomIds}
       lockedStaffName={!isAdmin && !guestManualStaffEntry ? employeeDisplayName : undefined}

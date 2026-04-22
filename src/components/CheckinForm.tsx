@@ -108,7 +108,7 @@ function CheckinFormContent({
   }, []);
 
   useEffect(() => {
-    fetch('/api/car-makes')
+    void fetch('/api/car-makes', { credentials: 'include' })
       .then((res) => res.json())
       .then((data) => setCarMakes(data.carMakes ?? []));
   }, []);
@@ -256,6 +256,7 @@ function CheckinFormContent({
     try {
       const res = await fetch('/api/car-makes', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: trimmedName }),
       });

@@ -1,3 +1,4 @@
+import { CAR_MAKE_MAX } from '@/lib/checkins/carMakeNormalize';
 import { isValidCarColorKey } from '../colors';
 import { normalizeReceiptNumber } from '../receipt';
 import { PAYMENT_METHODS } from '../paymentMethods';
@@ -29,7 +30,6 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_24 = /^([01]?\d|2[0-3]):[0-5]\d$/;
 const LICENSE_PLATE = /^[A-Za-z0-9\- ]+$/;
 const COST_MAX = 1000;
-const CAR_MAKE_MAX = 30;
 const NOTE_MAX = 500;
 const PLATE_MAX = 10;
 

@@ -3,8 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { requireAuth } from '@/server/auth/session';
 import { requireAdmin } from '@/lib/server/requireAdmin';
-import { hashPassword } from '@/server/auth/users';
-import { updatePasswordAndFlags } from '@/lib/server/usersRepo';
+import { findUser, hashPassword, updateJsonUserAdminPasswordReset } from '@/server/auth/users';
+import { getUserPublicById, updatePasswordAndFlags } from '@/lib/server/usersRepo';
 
 export async function adminResetEmployeePasswordAction(
   _prev: unknown,
@@ -23,11 +23,25 @@ export async function adminResetEmployeePasswordAction(
   }
 
   const hash = await hashPassword(newPassword);
-  await updatePasswordAndFlags(userId, hash, {
-    mustChangePassword: true,
-    passwordResetRequested: false,
-    passwordResetRequestedAt: null,
-  });
+  const firestoreRow = await getUserPublicById(userId);
+  if (firestoreRow) {
+    await updatePasswordAndFlags(userId, hash, {
+      mustChangePassword: true,
+      passwordResetRequested: false,
+      passwordResetRequestedAt: null,
+    });
+  } else {
+    const jsonUser = findUser(userId);
+    if (!jsonUser || jsonUser.role !== 'employee') {
+      return { error: 'User not found.' };
+    }
+    try {
+      updateJsonUserAdminPasswordReset(jsonUser.username, hash);
+    } catch (e) {
+      console.error('[admin reset password] JSON user update failed', e);
+      return { error: 'Could not update account.' };
+    }
+  }
 
   revalidatePath('/admin/employees');
   return { ok: true };

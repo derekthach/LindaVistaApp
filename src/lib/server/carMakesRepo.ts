@@ -1,4 +1,5 @@
 import { Timestamp } from 'firebase-admin/firestore';
+import { normalizeCarMakeName } from '@/lib/checkins/carMakeNormalize';
 import { getAdminDb } from './firebaseAdmin';
 import { isFirestoreUnavailableError, isProduction } from './firestoreError';
 
@@ -44,7 +45,7 @@ export async function getCarMakes(): Promise<CarMakeDoc[]> {
  */
 export async function addCarMake(name: string): Promise<string> {
   const db = getAdminDb();
-  const nameUpper = name.trim().toUpperCase().slice(0, 30);
+  const nameUpper = normalizeCarMakeName(name);
   if (!nameUpper) {
     throw new Error('Car make name is required');
   }

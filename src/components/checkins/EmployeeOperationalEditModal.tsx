@@ -105,7 +105,7 @@ export default function EmployeeOperationalEditModal({
   const itemOptions: ItemOption[] = checkin?.checkInType === 'beer' ? BEER_ITEMS : FOOD_ITEMS;
 
   useEffect(() => {
-    void fetch('/api/car-makes')
+    void fetch('/api/car-makes', { credentials: 'include' })
       .then((r) => r.json())
       .then((data) => setCarMakes(data.carMakes ?? []));
   }, []);
@@ -146,6 +146,7 @@ export default function EmployeeOperationalEditModal({
     try {
       const res = await fetch('/api/car-makes', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: trimmedName }),
       });

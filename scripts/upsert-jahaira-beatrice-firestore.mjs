@@ -1,12 +1,14 @@
 /**
- * Creates or updates Firestore `users` docs for Jary and Beatrice so they appear on Admin → Empleados.
+ * Creates or updates Firestore `users` docs for Jahaira and Beatrice so they appear on Admin → Empleados.
  * The admin UI lists Firestore only (`listUsersPublic`), not login-system/users.json.
  *
  * Default: copies password hash + mustChangePassword + display name from login-system/users.json
  * so login (Firestore-first) matches your repo.
  *
+ * After syncing `jahaira` from JSON, removes legacy `users/jary` if present (username rename).
+ *
  * Reset Beatrice to temporary password "123123123" and force change on first login:
- *   RESET_BEATRICE_TEMP_PASSWORD=1 node --env-file=.env.local scripts/upsert-jary-beatrice-firestore.mjs
+ *   RESET_BEATRICE_TEMP_PASSWORD=1 npm run upsert:jahaira-beatrice:reset-beatrice
  *
  * Prerequisites: same Firebase Admin env as the app (see scripts/add-keith-thach-employee.mjs).
  */
@@ -102,11 +104,11 @@ const BEATRICE_TEMP_PLAIN = process.env.BEATRICE_TEMP_PASSWORD || '123123123';
 async function main() {
   const raw = fs.readFileSync(USERS_PATH, 'utf8');
   const list = JSON.parse(raw);
-  const wanted = new Set(['jary', 'beatrice']);
+  const wanted = new Set(['jahaira', 'beatrice']);
   const rows = list.filter((u) => wanted.has(String(u.username).toLowerCase()));
 
   if (rows.length === 0) {
-    console.error(`No jary or beatrice entries found in ${USERS_PATH}`);
+    console.error(`No jahaira or beatrice entries found in ${USERS_PATH}`);
     process.exit(1);
   }
 
@@ -158,7 +160,14 @@ async function main() {
     console.log(`Upserted users/${docId} (${fullName}). mustChangePassword=${mustChangePassword}`);
   }
 
-  console.log('\nDone. Refresh Admin → Empleados to see Jary and Beatrice.');
+  const legacyJary = db.collection('users').doc('jary');
+  const legacySnap = await legacyJary.get();
+  if (legacySnap.exists) {
+    await legacyJary.delete();
+    console.log('\nRemoved legacy Firestore users/jary (account renamed to jahaira in users.json).');
+  }
+
+  console.log('\nDone. Refresh Admin → Empleados to see Jahaira and Beatrice.');
   if (RESET_BEATRICE) {
     console.log(`Beatrice can log in with temp password (plain): env BEATRICE_TEMP_PASSWORD or default 123123123`);
   }

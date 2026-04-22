@@ -15,9 +15,9 @@
     "role": "employee"
   },
   {
-    "username": "jary",
-    "name": "Jary",
-    "password": "$2b$10$8gAtm0ESqomRkXFMfNWSlOjdqM00CYWHMngU1ESiFszAUbMaxsMaS",
+    "username": "jahaira",
+    "name": "Jahaira",
+    "password": "$2b$10$ufimYPDacq/im72BouR9Y.g2.zn9nmx3CWu74u/GjpLb8TSBTEoyu",
     "role": "employee",
     "mustChangePassword": false
   },

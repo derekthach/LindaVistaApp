@@ -1,7 +1,9 @@
 import { Timestamp, type Firestore } from 'firebase-admin/firestore';
 import { getAdminDb } from '@/lib/server/firebaseAdmin';
 import { formatEmployeeNameSnapshot } from '@/lib/employeeDisplayName';
-import type { UserRole } from '@/types';
+import { isGuestEmployeeUsername } from '@/lib/auth/guestEmployee';
+import { readLoginSystemUsersJson } from '@/lib/server/readLoginSystemUsersJson';
+import type { User, UserRole } from '@/types';
 
 const USERS_COLLECTION = 'users';
 
@@ -70,14 +72,75 @@ export async function requestPasswordResetByUsername(username: string): Promise<
   return true;
 }
 
+function jsonEmployeesByDocId(): Map<string, User> {
+  const map = new Map<string, User>();
+  for (const u of readLoginSystemUsersJson()) {
+    if (u.role !== 'employee' || isGuestEmployeeUsername(u.username)) continue;
+    map.set(docIdForUsername(u.username), u);
+  }
+  return map;
+}
+
+/**
+ * Firestore `users` is the primary store for Admin → Employees, but login also supports
+ * `login-system/users.json`. After a username rename, a stale Firestore doc (e.g. `jary`)
+ * can remain while JSON already has `jahaira`. We hide that stale row and align name/username
+ * from JSON when the document id matches a JSON employee. JSON-only employees appear so
+ * the table matches who can authenticate from the file.
+ */
 export async function listUsersPublic(): Promise<PublicUserRow[]> {
   const snap = await db().collection(USERS_COLLECTION).orderBy('username').get();
-  return snap.docs.map((d) => {
+  const jsonById = jsonEmployeesByDocId();
+  const jsonDocIds = new Set(jsonById.keys());
+
+  const omitStaleFirestoreJary =
+    jsonDocIds.has('jahaira') && !jsonDocIds.has('jary');
+
+  const seen = new Set<string>();
+  const rows: PublicUserRow[] = [];
+
+  for (const d of snap.docs) {
+    if (omitStaleFirestoreJary && d.id === 'jary') continue;
+
     const data = d.data() as FirestoreUserDoc;
     const { passwordHash: _ph, ...rest } = data;
     void _ph;
-    return { ...rest, id: d.id } as PublicUserRow;
-  });
+    let row: PublicUserRow = { ...rest, id: d.id } as PublicUserRow;
+
+    const jsonU = jsonById.get(d.id);
+    if (jsonU && jsonU.role === 'employee') {
+      row = {
+        ...row,
+        fullName: (jsonU.name?.trim() || jsonU.username).trim(),
+        username: docIdForUsername(jsonU.username),
+      };
+    }
+
+    rows.push(row);
+    seen.add(d.id);
+  }
+
+  const now = Timestamp.now();
+  for (const [id, jsonU] of jsonById) {
+    if (seen.has(id)) continue;
+    rows.push({
+      id,
+      fullName: (jsonU.name?.trim() || jsonU.username).trim(),
+      username: docIdForUsername(jsonU.username),
+      nickname: null,
+      role: 'employee',
+      status: 'active',
+      mustChangePassword: jsonU.mustChangePassword === true,
+      passwordResetRequested: false,
+      passwordResetRequestedAt: null,
+      createdAt: now,
+      updatedAt: now,
+      lastLoginAt: null,
+    });
+  }
+
+  rows.sort((a, b) => a.username.localeCompare(b.username, 'en', { sensitivity: 'base' }));
+  return rows;
 }
 
 export async function countPendingPasswordResets(): Promise<number> {

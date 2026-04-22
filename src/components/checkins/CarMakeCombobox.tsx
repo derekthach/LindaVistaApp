@@ -379,10 +379,12 @@ export default function CarMakeCombobox({
             <h2 id={`${baseId}-add-title`} style={{ margin: '0 0 12px', fontSize: 18 }}>
               {t('car_make_add_modal_title')}
             </h2>
-            <p style={{ margin: '0 0 8px', color: '#374151', fontSize: 14 }}>{t('car_make_add_modal_body')}</p>
-            <p style={{ margin: '0 0 16px', color: '#6b7280', fontSize: 13 }}>
-              {t('car_make_add_modal_detail').replace(/\{make\}/g, pendingTrimmed)}
-            </p>
+            <p style={{ margin: '0 0 16px', color: '#374151', fontSize: 14 }}>{t('car_make_add_modal_body')}</p>
+            {t('car_make_add_modal_detail').trim() ? (
+              <p style={{ margin: '0 0 16px', color: '#6b7280', fontSize: 13 }}>
+                {t('car_make_add_modal_detail').replace(/\{make\}/g, pendingTrimmed)}
+              </p>
+            ) : null}
             {confirmError && (
               <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 12 }}>
                 {t(confirmError as TranslationKey)}
