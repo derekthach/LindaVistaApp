@@ -108,6 +108,8 @@ export const translations = {
     employee_recent_error_window: 'This check-in can no longer be edited (outside the 8-hour window).',
     employee_recent_error_forbidden: 'You can only edit your own recent check-ins.',
     employee_recent_saved: 'Saved.',
+    employee_recent_room_locked_help:
+      'Room number is locked because this stay has already been checked out and cleaned.',
     employee_recent_page_link: 'View my recent check-ins',
     loading: 'Loading…',
     error_failed_to_load: 'Failed to load',
@@ -483,6 +485,8 @@ export const translations = {
     employee_recent_error_window: 'Este registro ya no se puede editar (fuera de las 8 horas).',
     employee_recent_error_forbidden: 'Solo puede editar sus propios registros recientes.',
     employee_recent_saved: 'Guardado.',
+    employee_recent_room_locked_help:
+      'La habitación está bloqueada porque esta estadía ya fue finalizada y limpiada.',
     employee_recent_page_link: 'Ver mis registros recientes',
     loading: 'Cargando…',
     error_failed_to_load: 'No se pudo cargar',

@@ -24,7 +24,7 @@ import {
   getRoomCollectedTotalFromDoc,
   roundMoney,
 } from '@/lib/checkins/roomPaymentSplits';
-import { sortRoomsForDisplay } from '@/lib/checkins/roomOccupancy';
+import { isEmployeeRoomNumberLockedForCompletedStayDoc, sortRoomsForDisplay } from '@/lib/checkins/roomOccupancy';
 import { dedupeActiveRoomStaySnapshots } from '@/lib/server/activeRoomStayDedupe';
 import { logInfo } from '@/lib/server/log';
 
@@ -719,7 +719,8 @@ export async function employeeUpdateRoomOperational(
   const carColor = payload.car_color.trim();
   const roomIdBefore =
     data.roomId != null && data.roomId !== '' ? (data.roomId as number | string) : 0;
-  const roomIdAfter = payload.room_id;
+  const roomLifecycleLocked = isEmployeeRoomNumberLockedForCompletedStayDoc(data);
+  const roomIdAfter = roomLifecycleLocked ? roomIdBefore : payload.room_id;
 
   const before: Record<string, unknown> = {
     roomId: roomIdBefore,

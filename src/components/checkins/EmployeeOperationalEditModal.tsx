@@ -26,6 +26,7 @@ import CarMakeCombobox from '@/components/checkins/CarMakeCombobox';
 import type { PersistNewCarMakeResult } from '@/components/checkins/CarMakeCombobox';
 import { CAR_COLORS, carColorLabel } from '@/lib/checkins/colors';
 import { isValidCarColorKey } from '@/lib/checkins/colors';
+import { isEmployeeRoomNumberLockedForCompletedStay } from '@/lib/checkins/roomOccupancy';
 
 const COST_MAX = 1000;
 const AMOUNT_COLLECTED_MAX = 1000;
@@ -110,6 +111,8 @@ export default function EmployeeOperationalEditModal({
   const [error, setError] = useState<string | null>(null);
 
   const isRoom = checkin?.checkInType !== 'food' && checkin?.checkInType !== 'beer';
+  const roomNumberLifecycleLocked =
+    checkin != null && isRoom && isEmployeeRoomNumberLockedForCompletedStay(checkin);
   const itemOptions: ItemOption[] = checkin?.checkInType === 'beer' ? BEER_ITEMS : FOOD_ITEMS;
 
   useEffect(() => {
@@ -219,7 +222,7 @@ export default function EmployeeOperationalEditModal({
   );
 
   const hasChangesRoom =
-    String(roomIdSelect) !== String(initialRoomParsed) ||
+    (!roomNumberLifecycleLocked && String(roomIdSelect) !== String(initialRoomParsed)) ||
     currentSplitsJson !== initialSplitsJson ||
     carPlate.trim().toUpperCase() !== (checkin?.car_plate ?? '').trim().toUpperCase() ||
     carMake.trim().toUpperCase() !== (checkin?.car_make ?? '').trim().toUpperCase() ||
@@ -238,7 +241,9 @@ export default function EmployeeOperationalEditModal({
     !Number.isNaN(qtyNum) && Number.isInteger(qtyNum) && qtyNum >= QUANTITY_MIN && qtyNum <= QUANTITY_MAX;
   const amountValid =
     !Number.isNaN(amountNum) && amountNum >= 0 && amountNum <= AMOUNT_COLLECTED_MAX;
-  const formValidRoom = splitsValid && isValidEmployeeRoomCorrection(roomIdSelect);
+  const formValidRoom =
+    splitsValid &&
+    (roomNumberLifecycleLocked || isValidEmployeeRoomCorrection(roomIdSelect));
   const formValidFood = itemId !== '' && qtyValid && amountValid;
   const formValid = isRoom ? formValidRoom : formValidFood;
   const canSave = formValid && hasChanges && !saving && !!checkin?.id;
@@ -270,7 +275,7 @@ export default function EmployeeOperationalEditModal({
 
       const body = isRoom
         ? {
-            room_id: roomIdSelect,
+            room_id: roomNumberLifecycleLocked ? initialRoomParsed : roomIdSelect,
             payment_splits: splitValidation.splits,
             car_plate: carPlate.trim().toUpperCase().slice(0, PLATE_MAX),
             car_make: carMake.trim(),
@@ -371,20 +376,39 @@ export default function EmployeeOperationalEditModal({
           {isRoom && (
             <label>
               <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('label_room')}</div>
-              <select
-                value={String(roomIdSelect)}
-                onChange={(e) => {
-                  const next = parseEmployeeRoomPatchValue(e.target.value);
-                  if (next != null) setRoomIdSelect(next);
-                }}
-                style={inputStyle}
-              >
-                {roomOptionsForEmployeeEdit(checkin.room_id).map((r) => (
-                  <option key={String(r)} value={String(r)}>
-                    {formatRoomDisplay(r, t('room'))}
-                  </option>
-                ))}
-              </select>
+              {roomNumberLifecycleLocked ? (
+                <input
+                  type="text"
+                  readOnly
+                  disabled
+                  value={formatRoomDisplay(checkin.room_id, t('room'))}
+                  style={{ ...inputStyle, background: '#f9fafb' }}
+                  aria-describedby="employee-room-locked-help"
+                />
+              ) : (
+                <select
+                  value={String(roomIdSelect)}
+                  onChange={(e) => {
+                    const next = parseEmployeeRoomPatchValue(e.target.value);
+                    if (next != null) setRoomIdSelect(next);
+                  }}
+                  style={inputStyle}
+                >
+                  {roomOptionsForEmployeeEdit(checkin.room_id).map((r) => (
+                    <option key={String(r)} value={String(r)}>
+                      {formatRoomDisplay(r, t('room'))}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {roomNumberLifecycleLocked && (
+                <div
+                  id="employee-room-locked-help"
+                  style={{ fontSize: 12, color: '#6b7280', marginTop: 6, lineHeight: 1.35 }}
+                >
+                  {t('employee_recent_room_locked_help')}
+                </div>
+              )}
             </label>
           )}
           <label>

@@ -12,6 +12,7 @@ import {
   validateEmployeeOperationalRoom,
 } from '@/lib/checkins/validation/updateCheckin';
 import { normalizeReceipt } from '@/lib/checkins/validation/room';
+import { isEmployeeRoomNumberLockedForCompletedStayDoc } from '@/lib/checkins/roomOccupancy';
 import { Timestamp } from 'firebase-admin/firestore';
 import { HttpError } from '@/lib/server/httpError';
 import { logError } from '@/lib/server/log';
@@ -23,7 +24,7 @@ export const runtime = 'nodejs';
 /**
  * Employee self-service update: own records only, within rolling edit window.
  * Room: payment splits + vehicle + notes. Food/beer: item + qty + amount + notes.
- * Does not change receipt #, staff attribution, or check-in type. Room number may be corrected for room stays.
+ * Does not change receipt #, staff attribution, or check-in type. Room number may be corrected only for room stays that are not fully checked out and cleaned.
  */
 export async function PATCH(
   request: NextRequest,
@@ -64,7 +65,19 @@ export async function PATCH(
     const editedBy = session.username?.trim() || 'employee';
 
     if (checkInType === 'room') {
-      const validation = validateEmployeeOperationalRoom(body as Record<string, unknown>);
+      const roomLocked = isEmployeeRoomNumberLockedForCompletedStayDoc(raw);
+      const bodyObj =
+        typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
+      const mergedRoomBody = roomLocked
+        ? {
+            ...bodyObj,
+            room_id:
+              raw.roomId != null && raw.roomId !== ''
+                ? raw.roomId
+                : (bodyObj.room_id as string | number | undefined),
+          }
+        : bodyObj;
+      const validation = validateEmployeeOperationalRoom(mergedRoomBody);
       if (!validation.valid || !validation.payment_splits || validation.room_id === undefined) {
         return NextResponse.json(
           {
