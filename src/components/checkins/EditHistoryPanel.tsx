@@ -48,7 +48,8 @@ function formatDiffValue(field: string, value: unknown, unknownLabel: string): s
       return String(value);
     case 'quantity':
     case 'roomId':
-      return String(Number(value));
+      if (value === undefined || value === null) return unknownLabel;
+      return String(value);
     case 'roomCheckout':
       return String(value);
     default:

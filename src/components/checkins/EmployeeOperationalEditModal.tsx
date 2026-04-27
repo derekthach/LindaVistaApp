@@ -13,7 +13,14 @@ import {
 import { getPaymentMethodTranslationKey } from '@/lib/checkins/paymentMethods';
 import { useTranslation } from '@/lib/i18n/useTranslation';
 import type { TranslationKey } from '@/lib/i18n/translations';
-import { formatRoomDisplay } from '@/lib/checkins/rooms';
+import {
+  ROOM_OPTIONS,
+  formatRoomDisplay,
+  isValidEmployeeRoomCorrection,
+  roomOptionsForEmployeeEdit,
+  parseEmployeeRoomPatchValue,
+  type RoomId,
+} from '@/lib/checkins/rooms';
 import { QuantitySoldInput } from '@/components/checkins/QuantitySoldInput';
 import CarMakeCombobox from '@/components/checkins/CarMakeCombobox';
 import type { PersistNewCarMakeResult } from '@/components/checkins/CarMakeCombobox';
@@ -93,6 +100,7 @@ export default function EmployeeOperationalEditModal({
   const [carMake, setCarMake] = useState('');
   const [carColor, setCarColor] = useState(CAR_COLORS[0]?.key ?? 'black');
   const [noteRoom, setNoteRoom] = useState('');
+  const [roomIdSelect, setRoomIdSelect] = useState<RoomId>(1);
   const [itemId, setItemId] = useState('');
   const [quantity, setQuantity] = useState('');
   const [amountCollected, setAmountCollected] = useState('');
@@ -128,6 +136,8 @@ export default function EmployeeOperationalEditModal({
       const cc = checkin.car_color ?? '';
       setCarColor(isValidCarColorKey(cc) ? cc : 'other');
       setNoteRoom((checkin.note ?? '').slice(0, NOTE_MAX_ROOM));
+      const parsedRoom = parseEmployeeRoomPatchValue(checkin.room_id);
+      setRoomIdSelect(parsedRoom ?? (ROOM_OPTIONS[0] as RoomId));
     } else {
       const options = checkin.checkInType === 'beer' ? BEER_ITEMS : FOOD_ITEMS;
       const firstId = getFirstItemId(checkin);
@@ -203,7 +213,13 @@ export default function EmployeeOperationalEditModal({
         ? checkin.car_color
         : 'other';
 
+  const initialRoomParsed = useMemo(
+    () => parseEmployeeRoomPatchValue(checkin?.room_id) ?? (ROOM_OPTIONS[0] as RoomId),
+    [checkin?.room_id]
+  );
+
   const hasChangesRoom =
+    String(roomIdSelect) !== String(initialRoomParsed) ||
     currentSplitsJson !== initialSplitsJson ||
     carPlate.trim().toUpperCase() !== (checkin?.car_plate ?? '').trim().toUpperCase() ||
     carMake.trim().toUpperCase() !== (checkin?.car_make ?? '').trim().toUpperCase() ||
@@ -222,7 +238,7 @@ export default function EmployeeOperationalEditModal({
     !Number.isNaN(qtyNum) && Number.isInteger(qtyNum) && qtyNum >= QUANTITY_MIN && qtyNum <= QUANTITY_MAX;
   const amountValid =
     !Number.isNaN(amountNum) && amountNum >= 0 && amountNum <= AMOUNT_COLLECTED_MAX;
-  const formValidRoom = splitsValid;
+  const formValidRoom = splitsValid && isValidEmployeeRoomCorrection(roomIdSelect);
   const formValidFood = itemId !== '' && qtyValid && amountValid;
   const formValid = isRoom ? formValidRoom : formValidFood;
   const canSave = formValid && hasChanges && !saving && !!checkin?.id;
@@ -254,6 +270,7 @@ export default function EmployeeOperationalEditModal({
 
       const body = isRoom
         ? {
+            room_id: roomIdSelect,
             payment_splits: splitValidation.splits,
             car_plate: carPlate.trim().toUpperCase().slice(0, PLATE_MAX),
             car_make: carMake.trim(),
@@ -276,14 +293,17 @@ export default function EmployeeOperationalEditModal({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        const rawErr = typeof data.error === 'string' ? data.error : '';
         const msg =
-          typeof data.error === 'string'
-            ? data.error === 'Edit window expired'
-              ? t('employee_recent_error_window')
-              : data.error === 'Forbidden'
-                ? t('employee_recent_error_forbidden')
-                : data.error
-            : t('error_failed_to_load');
+          rawErr === 'Edit window expired'
+            ? t('employee_recent_error_window')
+            : rawErr === 'Forbidden'
+              ? t('employee_recent_error_forbidden')
+              : rawErr === 'error_room_required'
+                ? t('error_room_required')
+                : rawErr === 'error_room_invalid'
+                  ? t('error_room_invalid')
+                  : rawErr || t('error_failed_to_load');
         setError(msg);
         return;
       }
@@ -351,12 +371,20 @@ export default function EmployeeOperationalEditModal({
           {isRoom && (
             <label>
               <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('label_room')}</div>
-              <input
-                type="text"
-                readOnly
-                value={formatRoomDisplay(checkin.room_id, t('room'))}
-                style={{ ...inputStyle, background: '#f9fafb' }}
-              />
+              <select
+                value={String(roomIdSelect)}
+                onChange={(e) => {
+                  const next = parseEmployeeRoomPatchValue(e.target.value);
+                  if (next != null) setRoomIdSelect(next);
+                }}
+                style={inputStyle}
+              >
+                {roomOptionsForEmployeeEdit(checkin.room_id).map((r) => (
+                  <option key={String(r)} value={String(r)}>
+                    {formatRoomDisplay(r, t('room'))}
+                  </option>
+                ))}
+              </select>
             </label>
           )}
           <label>

@@ -681,6 +681,8 @@ export async function listRecentCheckinsForEmployee(opts: {
 
 export interface EmployeeRoomOperationalPayload {
   payment_splits: RoomPaymentSplit[];
+  /** Firestore `roomId` (same semantics as check-in form / admin edit). */
+  room_id: number | string;
   car_plate: string;
   car_make: string;
   car_color: string;
@@ -688,7 +690,8 @@ export interface EmployeeRoomOperationalPayload {
 }
 
 /**
- * Employee-only room edits: payment breakdown, vehicle fields, notes. Receipt / staff / room / time unchanged.
+ * Employee-only room edits: payment breakdown, room number, vehicle fields, notes.
+ * Receipt / staff / check-in time unchanged.
  */
 export async function employeeUpdateRoomOperational(
   id: string,
@@ -714,8 +717,12 @@ export async function employeeUpdateRoomOperational(
   const carPlate = payload.car_plate.trim().toUpperCase().slice(0, 10);
   const carMake = payload.car_make.trim().toUpperCase().slice(0, 30);
   const carColor = payload.car_color.trim();
+  const roomIdBefore =
+    data.roomId != null && data.roomId !== '' ? (data.roomId as number | string) : 0;
+  const roomIdAfter = payload.room_id;
 
   const before: Record<string, unknown> = {
+    roomId: roomIdBefore,
     paymentBreakdown: formatPaymentBreakdownForAuditDoc(data),
     totalCollected: getRoomCollectedTotalFromDoc(data),
     carPlate: data.carPlate ?? '',
@@ -724,6 +731,7 @@ export async function employeeUpdateRoomOperational(
     note: data.note ?? '',
   };
   const after: Record<string, unknown> = {
+    roomId: roomIdAfter,
     paymentBreakdown: formatPaymentBreakdownComma(splits),
     totalCollected: totalAfter,
     carPlate,
@@ -733,6 +741,7 @@ export async function employeeUpdateRoomOperational(
   };
 
   const changedFields: string[] = [];
+  if (String(before.roomId) !== String(after.roomId)) changedFields.push('roomId');
   if (String(before.paymentBreakdown) !== String(after.paymentBreakdown))
     changedFields.push('paymentBreakdown');
   if (Number(before.totalCollected) !== Number(after.totalCollected)) changedFields.push('totalCollected');
@@ -746,6 +755,7 @@ export async function employeeUpdateRoomOperational(
   }
 
   const updateData: Record<string, unknown> = {
+    roomId: roomIdAfter,
     cost: totalAfter,
     totalCollected: totalAfter,
     paymentSplits: splits,

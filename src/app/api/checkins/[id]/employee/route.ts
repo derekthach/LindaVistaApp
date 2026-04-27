@@ -23,7 +23,7 @@ export const runtime = 'nodejs';
 /**
  * Employee self-service update: own records only, within rolling edit window.
  * Room: payment splits + vehicle + notes. Food/beer: item + qty + amount + notes.
- * Does not change receipt #, staff attribution, room, or check-in type.
+ * Does not change receipt #, staff attribution, or check-in type. Room number may be corrected for room stays.
  */
 export async function PATCH(
   request: NextRequest,
@@ -65,7 +65,7 @@ export async function PATCH(
 
     if (checkInType === 'room') {
       const validation = validateEmployeeOperationalRoom(body as Record<string, unknown>);
-      if (!validation.valid || !validation.payment_splits) {
+      if (!validation.valid || !validation.payment_splits || validation.room_id === undefined) {
         return NextResponse.json(
           {
             error: Object.values(validation.errors).find(Boolean) ?? 'Validation failed',
@@ -78,6 +78,7 @@ export async function PATCH(
         id,
         {
           payment_splits: validation.payment_splits,
+          room_id: validation.room_id,
           car_plate: String(body.car_plate ?? ''),
           car_make: String(body.car_make ?? ''),
           car_color: String(body.car_color ?? ''),

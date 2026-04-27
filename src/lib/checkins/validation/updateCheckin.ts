@@ -1,5 +1,5 @@
 import { normalizeReceipt } from './room';
-import { isValidRoomId } from '../rooms';
+import { isValidRoomId, isValidEmployeeRoomCorrection, parseEmployeeRoomPatchValue } from '../rooms';
 import { validatePaymentSplits } from '../roomPaymentSplits';
 import type { RoomPaymentSplit } from '@/types';
 
@@ -17,6 +17,8 @@ export interface UpdateCheckinValidationResult {
   errors: Partial<Record<keyof UpdateCheckinPayload, string>>;
   /** Populated when valid and isRoomType. */
   payment_splits?: RoomPaymentSplit[];
+  /** Populated when employee room PATCH is valid. */
+  room_id?: number | string;
 }
 
 /**
@@ -129,7 +131,7 @@ export function validateEmployeeOperationalFoodBeer(
   };
 }
 
-/** Payment breakdown only (employee room edit). */
+/** Payment breakdown + room (employee room edit). */
 export function validateEmployeeOperationalRoom(
   raw: Record<string, unknown>
 ): UpdateCheckinValidationResult {
@@ -139,10 +141,25 @@ export function validateEmployeeOperationalRoom(
     errors.payment_splits = splitResult.error ?? 'Invalid payment breakdown';
     return { valid: false, errors };
   }
+  const roomVal = raw.room_id;
+  if (roomVal === undefined || roomVal === null || roomVal === '') {
+    errors.room_id = 'error_room_required';
+    return { valid: false, errors };
+  }
+  if (!isValidEmployeeRoomCorrection(roomVal)) {
+    errors.room_id = 'error_room_invalid';
+    return { valid: false, errors };
+  }
+  const parsedRoom = parseEmployeeRoomPatchValue(roomVal);
+  if (parsedRoom === null) {
+    errors.room_id = 'error_room_invalid';
+    return { valid: false, errors };
+  }
   return {
     valid: true,
     errors: {},
     payment_splits: splitResult.splits,
+    room_id: parsedRoom,
   };
 }
 
