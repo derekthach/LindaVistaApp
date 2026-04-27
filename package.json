@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "generate:pwa-icons": "node scripts/generate-pwa-icons.mjs",
     "seed:users": "node scripts/seed-employee-users.mjs",
     "add:employee:keith": "node --env-file=.env.local scripts/add-keith-thach-employee.mjs",
     "upsert:jahaira-beatrice": "node --env-file=.env.local scripts/upsert-jahaira-beatrice-firestore.mjs",
@@ -35,6 +36,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "15.1.5",
+    "sharp": "^0.34.5",
     "typescript": "^5"
   }
 }
