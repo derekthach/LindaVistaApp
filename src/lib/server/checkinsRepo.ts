@@ -24,7 +24,12 @@ import {
   getRoomCollectedTotalFromDoc,
   roundMoney,
 } from '@/lib/checkins/roomPaymentSplits';
-import { isEmployeeRoomNumberLockedForCompletedStayDoc, sortRoomsForDisplay } from '@/lib/checkins/roomOccupancy';
+import {
+  isEmployeeRoomNumberLockedForCompletedStayDoc,
+  isTargetRoomAvailableForEmployeeCorrection,
+  sortRoomsForDisplay,
+} from '@/lib/checkins/roomOccupancy';
+import { HttpError } from '@/lib/server/httpError';
 import { dedupeActiveRoomStaySnapshots } from '@/lib/server/activeRoomStayDedupe';
 import { logInfo } from '@/lib/server/log';
 
@@ -721,6 +726,13 @@ export async function employeeUpdateRoomOperational(
     data.roomId != null && data.roomId !== '' ? (data.roomId as number | string) : 0;
   const roomLifecycleLocked = isEmployeeRoomNumberLockedForCompletedStayDoc(data);
   const roomIdAfter = roomLifecycleLocked ? roomIdBefore : payload.room_id;
+
+  if (!roomLifecycleLocked) {
+    const activeStays = await listActiveOccupiedRoomCheckins();
+    if (!isTargetRoomAvailableForEmployeeCorrection(activeStays, id, roomIdAfter, roomIdBefore)) {
+      throw new HttpError(400, 'error_employee_room_occupied');
+    }
+  }
 
   const before: Record<string, unknown> = {
     roomId: roomIdBefore,

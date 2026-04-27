@@ -26,7 +26,11 @@ import CarMakeCombobox from '@/components/checkins/CarMakeCombobox';
 import type { PersistNewCarMakeResult } from '@/components/checkins/CarMakeCombobox';
 import { CAR_COLORS, carColorLabel } from '@/lib/checkins/colors';
 import { isValidCarColorKey } from '@/lib/checkins/colors';
-import { isEmployeeRoomNumberLockedForCompletedStay } from '@/lib/checkins/roomOccupancy';
+import {
+  isEmployeeRoomNumberLockedForCompletedStay,
+  occupiedRoomKeysFromOtherActiveStays,
+  roomOptionsForEmployeeRecentEdit,
+} from '@/lib/checkins/roomOccupancy';
 
 const COST_MAX = 1000;
 const AMOUNT_COLLECTED_MAX = 1000;
@@ -109,6 +113,8 @@ export default function EmployeeOperationalEditModal({
   const [carMakes, setCarMakes] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** `null` = loading or not applicable; same `/api/checkins/active-occupied` list as Checkout Rooms. */
+  const [activeOccupiedStays, setActiveOccupiedStays] = useState<CheckIn[] | null>(null);
 
   const isRoom = checkin?.checkInType !== 'food' && checkin?.checkInType !== 'beer';
   const roomNumberLifecycleLocked =
@@ -120,6 +126,34 @@ export default function EmployeeOperationalEditModal({
       .then((r) => r.json())
       .then((data) => setCarMakes(data.carMakes ?? []));
   }, []);
+
+  useEffect(() => {
+    if (!open) {
+      setActiveOccupiedStays(null);
+      return;
+    }
+    if (!checkin?.id || !isRoom || roomNumberLifecycleLocked) {
+      setActiveOccupiedStays(null);
+      return;
+    }
+    let cancelled = false;
+    setActiveOccupiedStays(null);
+    void fetch('/api/checkins/active-occupied', { credentials: 'include' })
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(typeof data.error === 'string' ? data.error : 'load_failed');
+        return Array.isArray(data.checkins) ? (data.checkins as CheckIn[]) : [];
+      })
+      .then((list) => {
+        if (!cancelled) setActiveOccupiedStays(list);
+      })
+      .catch(() => {
+        if (!cancelled) setActiveOccupiedStays([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, checkin?.id, checkin?.checkInType, roomNumberLifecycleLocked]);
 
   useEffect(() => {
     if (!checkin) return;
@@ -221,6 +255,27 @@ export default function EmployeeOperationalEditModal({
     [checkin?.room_id]
   );
 
+  const occupiedOtherKeys = useMemo(() => {
+    if (activeOccupiedStays === null || !checkin?.id) return null as Set<string> | null;
+    return occupiedRoomKeysFromOtherActiveStays(activeOccupiedStays, checkin.id);
+  }, [activeOccupiedStays, checkin?.id]);
+
+  const employeeRoomDropdownOptions = useMemo(() => {
+    if (!checkin || !isRoom || roomNumberLifecycleLocked) return [] as RoomId[];
+    const base = roomOptionsForEmployeeEdit(checkin.room_id);
+    if (occupiedOtherKeys === null) return base;
+    return roomOptionsForEmployeeRecentEdit(checkin.room_id, occupiedOtherKeys);
+  }, [checkin, isRoom, roomNumberLifecycleLocked, occupiedOtherKeys]);
+
+  useEffect(() => {
+    if (!checkin?.id || !isRoom || roomNumberLifecycleLocked || occupiedOtherKeys === null) return;
+    const opts = roomOptionsForEmployeeRecentEdit(checkin.room_id, occupiedOtherKeys);
+    const allowed = new Set(opts.map((o) => String(o)));
+    setRoomIdSelect((prev) => (allowed.has(String(prev)) ? prev : initialRoomParsed));
+  }, [occupiedOtherKeys, checkin?.id, checkin?.room_id, roomNumberLifecycleLocked, isRoom, initialRoomParsed]);
+
+  const occupancyResolved = !isRoom || roomNumberLifecycleLocked || activeOccupiedStays !== null;
+
   const hasChangesRoom =
     (!roomNumberLifecycleLocked && String(roomIdSelect) !== String(initialRoomParsed)) ||
     currentSplitsJson !== initialSplitsJson ||
@@ -246,7 +301,8 @@ export default function EmployeeOperationalEditModal({
     (roomNumberLifecycleLocked || isValidEmployeeRoomCorrection(roomIdSelect));
   const formValidFood = itemId !== '' && qtyValid && amountValid;
   const formValid = isRoom ? formValidRoom : formValidFood;
-  const canSave = formValid && hasChanges && !saving && !!checkin?.id;
+  const canSave =
+    formValid && hasChanges && !saving && !!checkin?.id && occupancyResolved;
 
   const updatePaymentRow = useCallback((index: number, patch: Partial<PayRow>) => {
     setPaymentRows((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -308,7 +364,9 @@ export default function EmployeeOperationalEditModal({
                 ? t('error_room_required')
                 : rawErr === 'error_room_invalid'
                   ? t('error_room_invalid')
-                  : rawErr || t('error_failed_to_load');
+                  : rawErr === 'error_employee_room_occupied'
+                    ? t('error_employee_room_occupied')
+                    : rawErr || t('error_failed_to_load');
         setError(msg);
         return;
       }
@@ -386,20 +444,26 @@ export default function EmployeeOperationalEditModal({
                   aria-describedby="employee-room-locked-help"
                 />
               ) : (
-                <select
-                  value={String(roomIdSelect)}
-                  onChange={(e) => {
-                    const next = parseEmployeeRoomPatchValue(e.target.value);
-                    if (next != null) setRoomIdSelect(next);
-                  }}
-                  style={inputStyle}
-                >
-                  {roomOptionsForEmployeeEdit(checkin.room_id).map((r) => (
-                    <option key={String(r)} value={String(r)}>
-                      {formatRoomDisplay(r, t('room'))}
-                    </option>
-                  ))}
-                </select>
+                <>
+                  <select
+                    value={String(roomIdSelect)}
+                    disabled={activeOccupiedStays === null}
+                    onChange={(e) => {
+                      const next = parseEmployeeRoomPatchValue(e.target.value);
+                      if (next != null) setRoomIdSelect(next);
+                    }}
+                    style={inputStyle}
+                  >
+                    {employeeRoomDropdownOptions.map((r) => (
+                      <option key={String(r)} value={String(r)}>
+                        {formatRoomDisplay(r, t('room'))}
+                      </option>
+                    ))}
+                  </select>
+                  {activeOccupiedStays === null && (
+                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>{t('loading')}</div>
+                  )}
+                </>
               )}
               {roomNumberLifecycleLocked && (
                 <div

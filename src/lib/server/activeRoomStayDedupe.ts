@@ -1,14 +1,8 @@
 import type { QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { Timestamp } from 'firebase-admin/firestore';
+import { normalizeOccupiedRoomKey } from '@/lib/checkins/roomOccupancy';
 
-/**
- * Normalize room id for occupancy grouping (e.g. "40", "14A", "14b" → same logical key).
- * Trims whitespace and uppercases so "14a" / "14A" collapse to one bucket.
- */
-export function normalizeOccupiedRoomKey(roomId: unknown): string {
-  if (roomId == null || roomId === '') return '';
-  return String(roomId).trim().toUpperCase().replace(/\s+/g, '');
-}
+export { normalizeOccupiedRoomKey } from '@/lib/checkins/roomOccupancy';
 
 function docRecencyMs(data: Record<string, unknown>): number {
   const created = data.createdAt as Timestamp | undefined;

@@ -349,6 +349,8 @@ export const translations = {
     delete_irreversible_body: 'This action cannot be undone.',
     error_room_required: 'Room number is required',
     error_room_invalid: 'Please select a valid room',
+    error_employee_room_occupied:
+      'This room is already occupied or awaiting turnover. Please choose another room.',
     error_receipt_required: 'Receipt number is required',
     error_receipt_format: 'Receipt must be 5 digits (00000–99999).',
     error_date_invalid_format: 'Invalid date format (YYYY-MM-DD)',
@@ -726,6 +728,8 @@ export const translations = {
     delete_irreversible_body: 'Esta acción no se puede deshacer.',
     error_room_required: 'El número de habitación es obligatorio',
     error_room_invalid: 'Seleccione una habitación válida',
+    error_employee_room_occupied:
+      'Esta habitación ya está ocupada o pendiente de limpieza. Por favor, elija otra habitación.',
     error_receipt_required: 'El número de recibo es obligatorio',
     error_receipt_format: 'El recibo debe tener 5 dígitos (00000–99999).',
     error_date_invalid_format: 'Formato de fecha no válido (AAAA-MM-DD)',

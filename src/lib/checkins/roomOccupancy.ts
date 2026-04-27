@@ -1,5 +1,15 @@
 import type { CheckIn } from '@/types';
-import { ROOM_OPTIONS, type RoomId } from '@/lib/checkins/rooms';
+import { ROOM_OPTIONS, roomOptionsForEmployeeEdit, type RoomId } from '@/lib/checkins/rooms';
+
+/**
+ * Normalize room id for occupancy grouping (e.g. "40", "14A", "14b" → same logical key).
+ * Trims whitespace and uppercases so "14a" / "14A" collapse to one bucket.
+ * (Shared with checkout dedupe and employee room correction.)
+ */
+export function normalizeOccupiedRoomKey(roomId: unknown): string {
+  if (roomId == null || roomId === '') return '';
+  return String(roomId).trim().toUpperCase().replace(/\s+/g, '');
+}
 
 /** Room stay is open for checkout: room type and explicitly still checked in (`is_checked_out === false`). */
 export function isActiveOccupiedRoom(record: CheckIn): boolean {
@@ -72,4 +82,60 @@ export function getAvailableRoomOptions(
   occupiedRoomIds: ReadonlySet<string>
 ): RoomId[] {
   return allRoomOptions.filter((r) => !occupiedRoomIds.has(String(r)));
+}
+
+/**
+ * Normalized room keys for active stays **other than** the check-in being edited
+ * (same source as Checkout Rooms: `listActiveOccupiedRoomCheckins`).
+ */
+export function occupiedRoomKeysFromOtherActiveStays(
+  activeStays: CheckIn[],
+  editingCheckinId: string | undefined
+): Set<string> {
+  const set = new Set<string>();
+  for (const c of activeStays) {
+    if (!c.id || c.id === editingCheckinId) continue;
+    const k = normalizeOccupiedRoomKey(c.room_id);
+    if (k) set.add(k);
+  }
+  return set;
+}
+
+/**
+ * Employee Recent Receipts room dropdown: catalog + legacy head from
+ * {@link roomOptionsForEmployeeEdit}, minus rooms held by **other** active stays,
+ * but always keeping the receipt’s current room selectable.
+ */
+export function roomOptionsForEmployeeRecentEdit(
+  currentRoomId: unknown,
+  keysOccupiedByOtherActiveStays: ReadonlySet<string>
+): RoomId[] {
+  const options = roomOptionsForEmployeeEdit(currentRoomId);
+  const curKey = normalizeOccupiedRoomKey(currentRoomId);
+  return options.filter((r) => {
+    const rk = normalizeOccupiedRoomKey(r);
+    if (!keysOccupiedByOtherActiveStays.has(rk)) return true;
+    return curKey !== '' && rk === curKey;
+  });
+}
+
+/**
+ * Whether `targetRoomId` is allowed for an employee correction: same as current room on the doc,
+ * or not claimed by any other active occupied stay.
+ */
+export function isTargetRoomAvailableForEmployeeCorrection(
+  activeStays: CheckIn[],
+  editingCheckinId: string,
+  targetRoomId: number | string,
+  currentRoomIdOnEditingDoc: number | string
+): boolean {
+  const tk = normalizeOccupiedRoomKey(targetRoomId);
+  const curKey = normalizeOccupiedRoomKey(currentRoomIdOnEditingDoc);
+  if (!tk) return false;
+  if (tk === curKey) return true;
+  for (const c of activeStays) {
+    if (c.id === editingCheckinId) continue;
+    if (normalizeOccupiedRoomKey(c.room_id) === tk) return false;
+  }
+  return true;
 }
