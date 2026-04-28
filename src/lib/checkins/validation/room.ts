@@ -45,8 +45,8 @@ export function validateRoomCheckin(raw: Record<string, unknown>): RoomCheckinVa
   const errors: RoomCheckinValidationResult['errors'] = {};
 
   const roomId = raw.room_id;
-  if (roomId === undefined || roomId === null) {
-    errors.room_id = 'error_room_required';
+  if (roomId === undefined || roomId === null || String(roomId).trim() === '') {
+    errors.room_id = 'error_room_select_before_continue';
   } else if (!isValidRoomId(roomId)) {
     errors.room_id = 'error_room_invalid';
   }

@@ -5,6 +5,7 @@
 export const translations = {
   en: {
     room_number: 'Room Number',
+    room_choose_placeholder: 'Please choose room',
     receipt_number: 'Receipt Number',
     date: 'Date',
     time: 'Time',
@@ -348,6 +349,7 @@ export const translations = {
     list_no_checkins: 'No check-ins found.',
     delete_irreversible_body: 'This action cannot be undone.',
     error_room_required: 'Room number is required',
+    error_room_select_before_continue: 'Please select a room before continuing.',
     error_room_invalid: 'Please select a valid room',
     error_employee_room_occupied:
       'This room is already occupied or awaiting turnover. Please choose another room.',
@@ -383,6 +385,7 @@ export const translations = {
   },
   es: {
     room_number: 'Número de Habitación',
+    room_choose_placeholder: 'Por favor elija una habitación',
     receipt_number: 'Número de Recibo',
     date: 'Fecha',
     time: 'Hora',
@@ -727,6 +730,7 @@ export const translations = {
     list_no_checkins: 'No se encontraron registros.',
     delete_irreversible_body: 'Esta acción no se puede deshacer.',
     error_room_required: 'El número de habitación es obligatorio',
+    error_room_select_before_continue: 'Por favor seleccione una habitación antes de continuar.',
     error_room_invalid: 'Seleccione una habitación válida',
     error_employee_room_occupied:
       'Esta habitación ya está ocupada o pendiente de limpieza. Por favor, elija otra habitación.',

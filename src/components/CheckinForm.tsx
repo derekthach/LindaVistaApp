@@ -17,7 +17,7 @@ import {
   validatePaymentSplits,
 } from '@/lib/checkins/roomPaymentSplits';
 import type { RoomPaymentSplit } from '@/types';
-import { ROOM_OPTIONS, formatRoomDisplay, parseRoomOptionValue, type RoomId } from '@/lib/checkins/rooms';
+import { ROOM_OPTIONS, formatRoomDisplay, parseRoomOptionValue } from '@/lib/checkins/rooms';
 import { createRoomSubmissionKey } from '@/lib/checkins/roomSubmissionKey';
 import {
   readRoomCheckinDraftFromSession,
@@ -49,7 +49,7 @@ type FormState = {
 };
 
 const defaultState: FormState = {
-  room_id: 1,
+  room_id: '',
   receipt_number: '',
   date: '',
   time: '',
@@ -200,8 +200,8 @@ function CheckinFormContent({
         return { ...f, room_id: '' };
       }
       const cur = String(f.room_id);
-      if (availableRooms.some((r) => String(r) === cur)) return f;
-      return { ...f, room_id: availableRooms[0] as RoomId };
+      if (cur !== '' && availableRooms.some((r) => String(r) === cur)) return f;
+      return { ...f, room_id: '' };
     });
   }, [availableRooms]);
 
@@ -331,11 +331,16 @@ function CheckinFormContent({
               {availableRooms.length === 0 ? (
                 <option value="">{t('all_rooms_occupied')}</option>
               ) : (
-                availableRooms.map((room) => (
-                  <option key={String(room)} value={String(room)}>
-                    {formatRoomDisplay(room, t('room'))}
+                <>
+                  <option value="" disabled>
+                    {t('room_choose_placeholder')}
                   </option>
-                ))
+                  {availableRooms.map((room) => (
+                    <option key={String(room)} value={String(room)}>
+                      {formatRoomDisplay(room, t('room'))}
+                    </option>
+                  ))}
+                </>
               )}
             </select>
             {showError('room_id') && <div style={errorStyle}>{te(validation.errors.room_id)}</div>}
