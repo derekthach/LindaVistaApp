@@ -15,8 +15,8 @@ export const metadata: Metadata = {
   description: 'Linda Vista Motel Management System',
   applicationName: 'Linda Vista HMS',
   icons: {
-    icon: '/icons/icon-192.png',
-    apple: '/apple-touch-icon.png',
+    icon: '/tmp_icon-192.png',
+    apple: '/tmp_apple-touch-icon.png',
   },
   appleWebApp: {
     capable: true,
@@ -39,7 +39,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="manifest" href="/manifest.json" />
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <link rel="apple-touch-icon" href="/tmp_apple-touch-icon.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-title" content="Linda Vista" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
