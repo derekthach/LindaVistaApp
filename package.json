@@ -13,6 +13,7 @@
     "upsert:jahaira-beatrice": "node --env-file=.env.local scripts/upsert-jahaira-beatrice-firestore.mjs",
     "upsert:jahaira-beatrice:reset-beatrice": "RESET_BEATRICE_TEMP_PASSWORD=1 node --env-file=.env.local scripts/upsert-jahaira-beatrice-firestore.mjs",
     "add:employee:guest": "node --env-file=.env.local scripts/add-guest-employee.mjs",
+    "add:employee:shakira": "node --env-file=.env.local scripts/add-shakira-employee.mjs",
     "backfill:guest-checkin-markers": "node --env-file=.env.local scripts/backfill-guest-checkin-markers.mjs"
   },
   "dependencies": {
