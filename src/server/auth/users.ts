@@ -13,6 +13,7 @@ import {
   userDisplaySnapshot,
   type FirestoreUserDoc,
 } from '@/lib/server/usersRepo';
+import { isFirestoreQuotaExceededError } from '@/lib/server/firestoreError';
 
 const usersFilePath = path.join(process.cwd(), 'login-system', 'users.json');
 
@@ -85,7 +86,16 @@ async function authenticateFirestoreUser(
   username: string,
   password: string
 ): Promise<AuthenticatedUser | null> {
-  const doc = await getUserDocByUsername(username);
+  let doc: FirestoreUserDoc | null;
+  try {
+    doc = await getUserDocByUsername(username);
+  } catch (err) {
+    if (isFirestoreQuotaExceededError(err)) {
+      console.warn('[auth] Firestore quota exceeded during user lookup; trying JSON users');
+      return null;
+    }
+    throw err;
+  }
   if (!doc) return null;
   if (doc.status !== 'active') return null;
   const ok = await verifyPassword(password, doc.passwordHash);
@@ -138,11 +148,19 @@ export async function authenticateUser(username: string, password: string): Prom
   const fromJson = await authenticateJsonUser(trimmed, password);
   if (fromJson) {
     /** If a Firestore `users` row exists for this login name, keep Admin “Last login” in sync even when JSON auth wins (e.g. hash drift). */
-    const fsDoc = await getUserDocByUsername(trimmed);
-    if (fsDoc) {
-      await updateUserLastLogin(fsDoc.id).catch((e) =>
-        console.error('[auth] updateUserLastLogin (json login + firestore doc)', e)
-      );
+    try {
+      const fsDoc = await getUserDocByUsername(trimmed);
+      if (fsDoc) {
+        await updateUserLastLogin(fsDoc.id).catch((e) =>
+          console.error('[auth] updateUserLastLogin (json login + firestore doc)', e)
+        );
+      }
+    } catch (err) {
+      if (isFirestoreQuotaExceededError(err)) {
+        console.warn('[auth] Skipping Firestore last-login sync (quota exceeded)');
+      } else {
+        throw err;
+      }
     }
   }
   return fromJson;
