@@ -103,6 +103,27 @@ function stableCheckinRowId(c: CheckIn): string {
   return `legacy:${c.receipt_number}:${c.date}:${c.time}:${String(c.room_id)}:${c.cost}`;
 }
 
+function PastEntryTypeChip({ t }: { t: (key: TranslationKey) => string }) {
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        fontSize: 11,
+        fontWeight: 600,
+        padding: '4px 10px',
+        borderRadius: 9999,
+        background: '#fef3c7',
+        color: '#92400e',
+        border: '1px solid #fcd34d',
+        lineHeight: 1.2,
+        verticalAlign: 'middle',
+      }}
+    >
+      {t('past_entry_badge')}
+    </span>
+  );
+}
+
 function DetailsPanel({ checkin, t }: { checkin: CheckIn; t: (key: TranslationKey) => string }) {
   const isRoom = checkin.checkInType !== 'food' && checkin.checkInType !== 'beer';
   const gridStyle = {
@@ -117,7 +138,8 @@ function DetailsPanel({ checkin, t }: { checkin: CheckIn; t: (key: TranslationKe
 
   if (isRoom) {
     const pay = getRoomPaymentBreakdownDisplayLocalized(checkin, (k) => t(k as TranslationKey));
-    const hasCheckoutData = checkin.is_checked_out === true;
+    const isPastEntry = checkin.is_past_entry === true;
+    const hasCheckoutData = !isPastEntry && checkin.is_checked_out === true;
     const sectionHeaderStyle: React.CSSProperties = {
       fontSize: 12,
       color: '#6b7280',
@@ -140,18 +162,62 @@ function DetailsPanel({ checkin, t }: { checkin: CheckIn; t: (key: TranslationKe
           }}
         >
           <div style={columnStyle}>
-            <div style={sectionHeaderStyle}>{t('details_checkin_info')}</div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                marginBottom: 8,
+              }}
+            >
+              {isPastEntry ? (
+                <span
+                  title={t('past_entry_badge')}
+                  aria-hidden
+                  style={{
+                    width: 4,
+                    alignSelf: 'stretch',
+                    minHeight: 14,
+                    borderRadius: 2,
+                    background: '#f59e0b',
+                    flexShrink: 0,
+                  }}
+                />
+              ) : null}
+              <span style={{ ...sectionHeaderStyle, marginBottom: 0 }}>{t('details_checkin_info')}</span>
+            </div>
             <dl style={{ margin: 0, ...gridStyle } as React.CSSProperties}>
               <dt style={labelStyle}>{t('label_receipt')}</dt>
               <dd style={{ margin: 0, ...valueStyle }}>{formatReceiptNumber(checkin.receipt_number ?? '')}</dd>
               <dt style={labelStyle}>{t('label_room')}</dt>
               <dd style={{ margin: 0, ...valueStyle }}>{formatRoomDisplay(checkin.room_id, t('room'))}</dd>
-              <dt style={labelStyle}>{t('date')}</dt>
-              <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.date)}</dd>
-              <dt style={labelStyle}>{t('time')}</dt>
-              <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.time)}</dd>
-              <dt style={labelStyle}>{t('label_staff_checkin')}</dt>
-              <dd style={{ margin: 0, ...valueStyle }}>{formatStaffDisplayForCheckinsTable(checkin)}</dd>
+              {isPastEntry ? (
+                <>
+                  <dt style={labelStyle}>{t('detail_employee_label')}</dt>
+                  <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.staff_name)}</dd>
+                  <dt style={labelStyle}>{t('detail_entry_type')}</dt>
+                  <dd style={{ margin: 0, ...valueStyle }}>
+                    <PastEntryTypeChip t={t} />
+                  </dd>
+                  <dt style={labelStyle}>{t('detail_checkin_at_label')}</dt>
+                  <dd style={{ margin: 0, ...valueStyle }}>
+                    {orDash(checkin.date)} {orDash(checkin.time)}
+                  </dd>
+                  <dt style={labelStyle}>{t('detail_added_to_system')}</dt>
+                  <dd style={{ margin: 0, ...valueStyle }}>
+                    {orDash(checkin.past_entry_system_created_at)} {t('detail_added_by_admin')}
+                  </dd>
+                </>
+              ) : (
+                <>
+                  <dt style={labelStyle}>{t('date')}</dt>
+                  <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.date)}</dd>
+                  <dt style={labelStyle}>{t('time')}</dt>
+                  <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.time)}</dd>
+                  <dt style={labelStyle}>{t('label_staff_checkin')}</dt>
+                  <dd style={{ margin: 0, ...valueStyle }}>{formatStaffDisplayForCheckinsTable(checkin)}</dd>
+                </>
+              )}
               <dt style={labelStyle}>{t('car_plate')}</dt>
               <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.car_plate)}</dd>
               <dt style={labelStyle}>{t('payment_breakdown')}</dt>
@@ -176,7 +242,11 @@ function DetailsPanel({ checkin, t }: { checkin: CheckIn; t: (key: TranslationKe
           </div>
           <div style={columnStyle}>
             <div style={sectionHeaderStyle}>{t('details_checkout_info')}</div>
-            {hasCheckoutData ? (
+            {isPastEntry ? (
+              <p style={{ margin: 0, fontSize: 13, color: '#6b7280', fontWeight: 500, lineHeight: 1.45 }}>
+                {t('past_room_checkout_na')}
+              </p>
+            ) : hasCheckoutData ? (
               <dl style={{ margin: 0, ...gridStyle } as React.CSSProperties}>
                 <dt style={labelStyle}>{t('label_checkout_time')}</dt>
                 <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.checked_out_at)}</dd>
@@ -254,6 +324,7 @@ export default function CheckinsList({
   const [isDeleting, setIsDeleting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [editStaffOptions, setEditStaffOptions] = useState<string[] | undefined>(undefined);
 
   const isAdmin = role === 'admin';
   const colCount = 8;
@@ -266,6 +337,24 @@ export default function CheckinsList({
   useEffect(() => {
     setSelectedDate(initialDate ?? '');
   }, [initialDate]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch('/api/checkins/checkout-staff-options', { credentials: 'include' });
+        if (!res.ok) return;
+        const data = (await res.json()) as { names?: string[] };
+        if (!cancelled && Array.isArray(data.names)) setEditStaffOptions(data.names);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin]);
 
   const handleFilter = () => {
     const params = new URLSearchParams();
@@ -351,6 +440,18 @@ export default function CheckinsList({
     }
     const isRoom = checkin.checkInType !== 'food' && checkin.checkInType !== 'beer';
     if (isRoom) {
+      if (checkin.is_past_entry === true) {
+        const fromDt = `${checkin.date ?? ''} ${checkin.time ?? ''}`.trim();
+        const toDt =
+          `${draft.check_in_date ?? checkin.date ?? ''} ${draft.check_in_time ?? checkin.time ?? ''}`.trim();
+        if (fromDt !== toDt) {
+          lines.push({
+            label: t('diff_label_checkin_datetime'),
+            from: fromDt || '—',
+            to: toDt || '—',
+          });
+        }
+      }
       const fromPay = getRoomPaymentBreakdownDisplayLocalized(checkin, (k) => t(k as TranslationKey));
       const toSplits = draft.payment_splits;
       if (toSplits && toSplits.length > 0) {
@@ -434,6 +535,14 @@ export default function CheckinsList({
                 staff_name: pendingUpdate.draft.staff_name,
                 room_id: pendingUpdate.draft.room_id,
                 payment_splits: pendingUpdate.draft.payment_splits,
+                ...(pendingUpdate.checkin.is_past_entry === true
+                  ? {
+                      check_in_date:
+                        pendingUpdate.draft.check_in_date ?? pendingUpdate.checkin.date ?? '',
+                      check_in_time:
+                        pendingUpdate.draft.check_in_time ?? pendingUpdate.checkin.time ?? '',
+                    }
+                  : {}),
               }
             : {
                 receipt_number: pendingUpdate.draft.receipt_number,
@@ -689,6 +798,7 @@ export default function CheckinsList({
         checkin={editingCheckin}
         onSave={handleEditSave}
         saveDisabled={isUpdating}
+        staffOptions={editStaffOptions}
       />
       <ConfirmDiffModal
         open={!!pendingUpdate}

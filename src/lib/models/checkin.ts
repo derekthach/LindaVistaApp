@@ -39,6 +39,13 @@ export interface CheckinDoc {
   employeeNameSnapshot?: string;
   createdByRole?: UserRole;
   createdByUsername?: string;
+  createdByUid?: string;
+  isPastEntry?: boolean;
+  source?: string;
+  requiresCheckout?: boolean;
+  requiresCleaning?: boolean;
+  checkoutStatus?: string;
+  cleaningStatus?: string;
 }
 
 /** Compute total amount collected for food/beer from summarizedItems or lineItems. */
@@ -67,6 +74,7 @@ export function normalizeCheckin(id: string, data: Record<string, unknown>): Che
   const summarizedItems = Array.isArray(rawSummarized) ? rawSummarized : undefined;
 
   const isRoom = checkInType === 'room';
+  const isPastEntry = data.isPastEntry === true;
   const receiptNumber =
     (data.receiptNumber as string) ?? (data.receiptNo as string) ?? '';
   const staffName =
@@ -114,7 +122,7 @@ export function normalizeCheckin(id: string, data: Record<string, unknown>): Che
   let cleaned_at: string | undefined;
   let checked_out_by: string | undefined;
   let cleaned_by: string | undefined;
-  if (isRoom) {
+  if (isRoom && !isPastEntry) {
     if (data.isCheckedOut === true) {
       is_checked_out = true;
       checked_out_at = formatCheckoutTs(data.checkedOutAt);
@@ -130,6 +138,12 @@ export function normalizeCheckin(id: string, data: Record<string, unknown>): Che
     } else if (data.isCheckedOut === false) {
       is_checked_out = false;
     }
+  }
+
+  let past_entry_system_created_at: string | undefined;
+  if (isPastEntry) {
+    const createdRaw = data.createdAt;
+    past_entry_system_created_at = formatCheckoutTs(createdRaw);
   }
 
   const employeeId =
@@ -196,5 +210,14 @@ export function normalizeCheckin(id: string, data: Record<string, unknown>): Che
     ...(createdByUsername ? { created_by_username: createdByUsername } : {}),
     ...(employeeNameSnapshot ? { employee_name_snapshot: employeeNameSnapshot } : {}),
     ...(createdByRole ? { created_by_role: createdByRole } : {}),
+    ...(isPastEntry
+      ? {
+          is_past_entry: true as const,
+          ...(typeof data.source === 'string' && data.source.trim()
+            ? { past_entry_source: data.source.trim() }
+            : {}),
+          ...(past_entry_system_created_at ? { past_entry_system_created_at } : {}),
+        }
+      : {}),
   };
 }

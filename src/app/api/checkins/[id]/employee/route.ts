@@ -48,6 +48,9 @@ export async function PATCH(
     }
 
     const raw = docSnap.data()!;
+    if (raw.isPastEntry === true) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
     if (
       !checkinOwnedByEmployee(raw, {
         userId: session.userId,

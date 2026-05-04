@@ -145,6 +145,11 @@ export default function Sidebar({
             {t('nav_view_checkins')}
           </Link>
         )}
+        {role === 'admin' && (
+          <Link href="/admin/past-room-check-in" style={linkStyle('/admin/past-room-check-in', true)}>
+            {t('nav_past_room_checkin')}
+          </Link>
+        )}
       </nav>
 
       <div style={{ marginTop: 16, padding: 16 }}>

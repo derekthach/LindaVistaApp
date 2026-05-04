@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CheckIn, RoomPaymentSplit } from '@/types';
 import Button from '@/components/Button';
 import { FOOD_ITEMS, BEER_ITEMS } from '@/lib/checkins/items';
@@ -31,6 +31,9 @@ export interface EditCheckinDraft {
   room_id?: number | string;
   /** Room check-in: split payments (replaces single cost field). */
   payment_splits?: RoomPaymentSplit[];
+  /** Past-entry room: editable check-in moment (America/Puerto_Rico). */
+  check_in_date?: string;
+  check_in_time?: string;
   itemId?: string;
   itemLabel?: string;
   quantity?: number;
@@ -43,6 +46,8 @@ interface EditCheckinModalProps {
   checkin: CheckIn | null;
   onSave: (draft: EditCheckinDraft) => void;
   saveDisabled?: boolean;
+  /** When set (e.g. admin View Check-Ins), staff dropdown matches server merged list. */
+  staffOptions?: string[];
 }
 
 const inputStyle = {
@@ -91,6 +96,7 @@ export default function EditCheckinModal({
   checkin,
   onSave,
   saveDisabled = false,
+  staffOptions,
 }: EditCheckinModalProps) {
   const { t, language } = useTranslation();
   const checkInTypeLabel = (type: string | undefined) => {
@@ -106,8 +112,11 @@ export default function EditCheckinModal({
   const [itemId, setItemId] = useState('');
   const [quantity, setQuantity] = useState('');
   const [amountCollected, setAmountCollected] = useState('');
+  const [pastCheckinDate, setPastCheckinDate] = useState('');
+  const [pastCheckinTime, setPastCheckinTime] = useState('');
 
   const isRoom = checkin?.checkInType !== 'food' && checkin?.checkInType !== 'beer';
+  const isPastEntry = checkin?.is_past_entry === true;
   const itemOptions: ItemOption[] = checkin?.checkInType === 'beer' ? BEER_ITEMS : FOOD_ITEMS;
 
   useEffect(() => {
@@ -140,11 +149,31 @@ export default function EditCheckinModal({
       setItemId(resolved?.id ?? '');
       setQuantity(String(getFirstQuantity(checkin)));
       setAmountCollected(String(getFirstAmountCollected(checkin)));
+      if (checkin.is_past_entry === true) {
+        setPastCheckinDate(checkin.date ?? '');
+        setPastCheckinTime(checkin.time ?? '');
+      } else {
+        setPastCheckinDate('');
+        setPastCheckinTime('');
+      }
     }
   }, [checkin]);
 
+  const baseStaffList = useMemo(() => {
+    if (staffOptions && staffOptions.length > 0) return [...staffOptions];
+    return [...ALLOWED_STAFF];
+  }, [staffOptions]);
+
+  const effectiveStaffOptions = useMemo(() => {
+    const s = (checkin?.staff_name ?? '').trim();
+    if (s && !baseStaffList.includes(s)) {
+      return [...baseStaffList, s].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
+    }
+    return baseStaffList;
+  }, [baseStaffList, checkin?.staff_name]);
+
   const receiptNormalized = normalizeReceipt(receipt_number);
-  const staffValid = ALLOWED_STAFF.includes(staff_name as (typeof ALLOWED_STAFF)[number]);
+  const staffValid = Boolean(staff_name.trim()) && effectiveStaffOptions.includes(staff_name);
   const qtyNum = quantity.trim() === '' ? NaN : Math.floor(Number(quantity));
   const qtyValid = !Number.isNaN(qtyNum) && Number.isInteger(qtyNum) && qtyNum >= QUANTITY_MIN && qtyNum <= QUANTITY_MAX;
   const qtyInputNumeric =
@@ -192,7 +221,9 @@ export default function EditCheckinModal({
     receiptNormalized !== formatReceiptNumber(checkin?.receipt_number ?? '') ||
     staff_name !== (checkin?.staff_name ?? '') ||
     currentSplitsJson !== initialSplitsJson ||
-    String(room_id) !== String(checkin?.room_id ?? 1);
+    String(room_id) !== String(checkin?.room_id ?? 1) ||
+    (isPastEntry &&
+      (pastCheckinDate !== (checkin?.date ?? '') || pastCheckinTime !== (checkin?.time ?? '')));
   const hasChangesFoodBeer =
     receiptNormalized !== formatReceiptNumber(checkin?.receipt_number ?? '') ||
     staff_name !== (checkin?.staff_name ?? '') ||
@@ -201,8 +232,12 @@ export default function EditCheckinModal({
     String(amountNum) !== String(getFirstAmountCollected(checkin ?? ({} as CheckIn)));
   const hasChanges = isRoom ? hasChangesRoom : hasChangesFoodBeer;
 
+  const pastDateTimeOk =
+    !isPastEntry ||
+    (/^\d{4}-\d{2}-\d{2}$/.test(pastCheckinDate.trim()) &&
+      /^\d{2}:\d{2}/.test(pastCheckinTime.trim()));
   const formValidRoom =
-    receiptNormalized !== null && staffValid && splitsValid && isValidRoomId(room_id);
+    receiptNormalized !== null && staffValid && splitsValid && isValidRoomId(room_id) && pastDateTimeOk;
   const formValidFoodBeer =
     receiptNormalized !== null &&
     staffValid &&
@@ -221,6 +256,9 @@ export default function EditCheckinModal({
         staff_name,
         room_id,
         payment_splits: splitValidation.splits,
+        ...(isPastEntry
+          ? { check_in_date: pastCheckinDate.trim(), check_in_time: pastCheckinTime.trim() }
+          : {}),
       });
     } else {
       const selected = itemOptions.find((o) => o.id === itemId);
@@ -284,14 +322,45 @@ export default function EditCheckinModal({
           {t('aria_edit_checkin')}
         </h2>
         <form onSubmit={handleSubmit} style={{ display: 'grid', gap: 12 }}>
-          <label>
-            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('edit_field_date_readonly')}</div>
-            <input type="text" readOnly value={checkin?.date ?? ''} style={inputStyle} />
-          </label>
-          <label>
-            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('edit_field_time_readonly')}</div>
-            <input type="text" readOnly value={checkin?.time ?? ''} style={inputStyle} />
-          </label>
+          {isPastEntry ? (
+            <>
+              <label>
+                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>
+                  {t('edit_field_checkin_date_past')}
+                </div>
+                <input
+                  type="date"
+                  value={pastCheckinDate}
+                  onChange={(e) => setPastCheckinDate(e.target.value)}
+                  style={inputStyle}
+                  required
+                />
+              </label>
+              <label>
+                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>
+                  {t('edit_field_checkin_time_past')}
+                </div>
+                <input
+                  type="time"
+                  value={pastCheckinTime}
+                  onChange={(e) => setPastCheckinTime(e.target.value)}
+                  style={inputStyle}
+                  required
+                />
+              </label>
+            </>
+          ) : (
+            <>
+              <label>
+                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('edit_field_date_readonly')}</div>
+                <input type="text" readOnly value={checkin?.date ?? ''} style={inputStyle} />
+              </label>
+              <label>
+                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('edit_field_time_readonly')}</div>
+                <input type="text" readOnly value={checkin?.time ?? ''} style={inputStyle} />
+              </label>
+            </>
+          )}
           <label>
             <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('edit_field_type_readonly')}</div>
             <input
@@ -328,7 +397,7 @@ export default function EditCheckinModal({
               required
             >
               <option value="">{t('select_staff')}</option>
-              {ALLOWED_STAFF.map((name) => (
+              {effectiveStaffOptions.map((name) => (
                 <option key={name} value={name}>
                   {name}
                 </option>

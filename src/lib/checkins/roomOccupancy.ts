@@ -20,6 +20,7 @@ export function isActiveOccupiedRoom(record: CheckIn): boolean {
 /** Firestore/query semantics: only docs with checkInType room and isCheckedOut === false. */
 export function isActiveOccupiedRoomDoc(data: Record<string, unknown>): boolean {
   if ((data.checkInType as string | undefined) !== 'room') return false;
+  if (data.isPastEntry === true) return false;
   return data.isCheckedOut === false;
 }
 

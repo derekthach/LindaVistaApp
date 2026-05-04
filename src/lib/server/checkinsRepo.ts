@@ -152,6 +152,70 @@ export async function createCheckin(
   return result.receiptNumber;
 }
 
+export interface CreatePastRoomCheckinInput {
+  room_id: number | string;
+  check_in_date: string;
+  check_in_time: string;
+  staff_name: string;
+  receipt_number: string;
+  payment_splits: RoomPaymentSplit[];
+  note?: string;
+  adminUsername: string;
+  adminUserId?: string;
+}
+
+/**
+ * Admin-only historical room stay. Does not bump `settings/receipts` counter.
+ * Stored as a normal room doc with `isPastEntry` + closed flags so occupancy/checkout flows ignore it.
+ */
+export async function createPastRoomCheckin(data: CreatePastRoomCheckinInput): Promise<string> {
+  const db = getAdminDb();
+  const receiptNumber = formatReceiptNumber(data.receipt_number);
+  const dt = DateTime.fromFormat(
+    `${data.check_in_date} ${data.check_in_time}`,
+    'yyyy-MM-dd HH:mm',
+    { zone: 'America/Puerto_Rico' }
+  );
+  const checkInAt = dt.isValid ? Timestamp.fromDate(dt.toJSDate()) : Timestamp.now();
+  const splits = data.payment_splits;
+  const totalCollected = roundMoney(calculatePaymentSplitTotal(splits));
+  const createdAt = Timestamp.now();
+  const noteTrim = (data.note ?? '').trim().slice(0, 500);
+
+  const doc: Record<string, unknown> = {
+    receiptNumber,
+    checkInAt,
+    createdAt,
+    checkInType: 'room' as const,
+    roomId: data.room_id,
+    cost: totalCollected,
+    staffName: data.staff_name,
+    employeeNameSnapshot: data.staff_name,
+    carPlate: '',
+    carMake: '',
+    carColor: 'other',
+    note: noteTrim,
+    paymentSplits: splits,
+    totalCollected: totalCollected,
+    paymentMethod: splits[0]?.method,
+    isCheckedOut: true,
+    isPastEntry: true,
+    source: 'admin_past_room_checkin',
+    requiresCheckout: false,
+    requiresCleaning: false,
+    checkoutStatus: 'not_required',
+    cleaningStatus: 'not_required',
+    createdByRole: 'admin',
+    createdByUsername: data.adminUsername,
+  };
+  if (data.adminUserId?.trim()) {
+    doc.createdByUid = data.adminUserId.trim();
+  }
+
+  const ref = await db.collection(CHECKINS_COLLECTION).add(doc);
+  return ref.id;
+}
+
 export interface CreateSimpleCheckinInput {
   date: string;
   time: string;
@@ -375,6 +439,9 @@ export async function checkoutRoomCheckin(id: string, payload: CheckoutRoomInput
   if (data.isCheckedOut === true) {
     throw new Error('Room already checked out');
   }
+  if (data.isPastEntry === true) {
+    throw new Error('Past entries do not require checkout');
+  }
 
   const now = Timestamp.now();
   const before = {
@@ -416,10 +483,15 @@ export interface UpdateCheckinInput {
   staff_name: string;
   room_id?: number | string;
   payment_splits: RoomPaymentSplit[];
+  /** Only applied when the doc has `isPastEntry === true`. */
+  check_in_date?: string;
+  check_in_time?: string;
 }
 
+const ZONE = 'America/Puerto_Rico';
+
 /**
- * Update check-in editable fields. Does not change checkInAt.
+ * Update check-in editable fields. For past-entry docs, optional check_in_date/time updates `checkInAt`.
  * Writes audit snapshot to checkins/{id}/edits. Editing receipt does not affect next receipt counter.
  */
 export async function updateCheckin(
@@ -441,10 +513,30 @@ export async function updateCheckin(
     throw new Error('Check-in is not a room record');
   }
 
+  const isPastEntry = data.isPastEntry === true;
+  let newCheckInAt: Timestamp | undefined;
+  if (isPastEntry && payload.check_in_date && payload.check_in_time) {
+    const timeHm = String(payload.check_in_time).trim().slice(0, 5);
+    const dt = DateTime.fromFormat(
+      `${payload.check_in_date} ${timeHm}`,
+      'yyyy-MM-dd HH:mm',
+      { zone: ZONE }
+    );
+    if (dt.isValid) {
+      newCheckInAt = Timestamp.fromDate(dt.toJSDate());
+    }
+  }
+
   const receiptNumber = formatReceiptNumber(payload.receipt_number);
   const splits = payload.payment_splits;
   const totalAfter = roundMoney(calculatePaymentSplitTotal(splits));
   const breakdownAfter = formatPaymentBreakdownComma(splits);
+
+  const beforeTs = data.checkInAt as Timestamp | undefined;
+  const beforeCheckInIso =
+    beforeTs && typeof beforeTs.toDate === 'function'
+      ? DateTime.fromJSDate(beforeTs.toDate(), { zone: ZONE }).toISO() ?? ''
+      : '';
 
   const before: Record<string, unknown> = {
     receiptNumber: data.receiptNumber ?? '',
@@ -452,6 +544,7 @@ export async function updateCheckin(
     roomId: data.roomId != null && data.roomId !== '' ? data.roomId : 0,
     paymentBreakdown: formatPaymentBreakdownForAuditDoc(data),
     totalCollected: getRoomCollectedTotalFromDoc(data),
+    ...(isPastEntry ? { checkInAt: beforeCheckInIso } : {}),
   };
   const after: Record<string, unknown> = {
     receiptNumber,
@@ -459,6 +552,12 @@ export async function updateCheckin(
     roomId: payload.room_id ?? 0,
     paymentBreakdown: breakdownAfter,
     totalCollected: totalAfter,
+    ...(isPastEntry && newCheckInAt
+      ? {
+          checkInAt:
+            DateTime.fromJSDate(newCheckInAt.toDate(), { zone: ZONE }).toISO() ?? beforeCheckInIso,
+        }
+      : {}),
   };
 
   const changedFields: string[] = [];
@@ -470,6 +569,11 @@ export async function updateCheckin(
   }
   if (Number(before.totalCollected) !== Number(after.totalCollected)) {
     changedFields.push('totalCollected');
+  }
+  if (isPastEntry && newCheckInAt && beforeTs && typeof beforeTs.toMillis === 'function') {
+    if (beforeTs.toMillis() !== newCheckInAt.toMillis()) {
+      changedFields.push('checkInAt');
+    }
   }
 
   if (changedFields.length === 0) {
@@ -487,6 +591,12 @@ export async function updateCheckin(
     updatedAt: Timestamp.now(),
     updatedBy: editedBy,
   };
+  if (isPastEntry && newCheckInAt && changedFields.includes('checkInAt')) {
+    updateData.checkInAt = newCheckInAt;
+  }
+  if (isPastEntry && changedFields.includes('staffName')) {
+    updateData.employeeNameSnapshot = payload.staff_name;
+  }
 
   await ref.update(updateData);
   try {
@@ -714,6 +824,9 @@ export async function employeeUpdateRoomOperational(
   if (((data.checkInType as string) ?? 'room') !== 'room') {
     throw new Error('Check-in is not a room record');
   }
+  if (data.isPastEntry === true) {
+    throw new Error('Past entries cannot be edited by employees');
+  }
 
   const splits = payload.payment_splits;
   const totalAfter = roundMoney(calculatePaymentSplitTotal(splits));
@@ -850,8 +963,6 @@ export async function getCheckinEdits(checkinId: string): Promise<CheckinEditRec
   records.sort((a, b) => (b.editedAt || '').localeCompare(a.editedAt || ''));
   return records;
 }
-
-const ZONE = 'America/Puerto_Rico';
 
 /**
  * Guest room stays only for dashboard counts (excludes food/beer).

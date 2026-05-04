@@ -69,7 +69,9 @@ export async function POST(
               ? new HttpError(400, 'BAD_REQUEST')
               : msg === 'Room already checked out'
                 ? new HttpError(409, 'CONFLICT')
-                : new HttpError(500, 'CHECKOUT_FAILED');
+                : msg === 'Past entries do not require checkout'
+                  ? new HttpError(400, 'BAD_REQUEST')
+                  : new HttpError(500, 'CHECKOUT_FAILED');
     logError('api.checkins.checkout.error', { requestId, message: String(err) });
     const { status, body } = toErrorResponse(httpErr, requestId);
     return NextResponse.json({ ...body, error: msg }, { status });

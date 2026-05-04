@@ -21,13 +21,19 @@ export interface UpdateCheckinValidationResult {
   room_id?: number | string;
 }
 
+export interface ValidateUpdateCheckinOptions {
+  /** When provided (e.g. merged Firestore + legacy staff), staff_name must be in this list. */
+  staffAllowlist?: readonly string[];
+}
+
 /**
  * Server-side validation for admin check-in update.
- * Does not validate checkInAt (not allowed to change).
+ * checkInAt changes are validated separately in the PATCH handler for past-entry docs only.
  */
 export function validateUpdateCheckin(
   raw: Record<string, unknown>,
-  isRoomType: boolean
+  isRoomType: boolean,
+  options?: ValidateUpdateCheckinOptions
 ): UpdateCheckinValidationResult {
   const errors: UpdateCheckinValidationResult['errors'] = {};
 
@@ -42,8 +48,13 @@ export function validateUpdateCheckin(
   }
 
   const staff = raw.staff_name != null ? String(raw.staff_name).trim() : '';
+  const allowlist = options?.staffAllowlist;
   if (!staff) {
     errors.staff_name = 'Staff is required';
+  } else if (allowlist && allowlist.length > 0) {
+    if (!allowlist.includes(staff)) {
+      errors.staff_name = 'Staff must be selected from the allowed list';
+    }
   } else if (!ALLOWED_STAFF.includes(staff as (typeof ALLOWED_STAFF)[number])) {
     errors.staff_name = 'Staff must be one of: ' + ALLOWED_STAFF.join(', ');
   }
