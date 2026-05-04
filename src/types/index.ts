@@ -142,3 +142,18 @@ export interface MonthlyComparisonData {
   };
   years_available: string[];
 }
+
+/** Single-response dashboard payload (one check-in read range + optional cleanups query). */
+export interface DashboardBundleResponse {
+  summaryMetrics: SummaryMetrics;
+  sevenDayTrend: DashboardData;
+  monthlyRevenue: MonthlyComparisonData;
+  roomUsage: RoomUsageData;
+  employeeRoomActivity: EmployeeRoomActivityData;
+  meta: {
+    rangeStart: string;
+    rangeEnd: string;
+    generatedAt: string;
+    source: 'dashboard-bundle';
+  };
+}

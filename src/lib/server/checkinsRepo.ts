@@ -970,7 +970,8 @@ export async function getCheckinEdits(checkinId: string): Promise<CheckinEditRec
  * - Explicit room → included.
  * - Legacy without checkInType: excluded if line/summary item rows exist (typical F&B shape); else treated as room.
  */
-function isRoomCheckinRecord(c: CheckIn): boolean {
+/** Exported for dashboard bundle in-memory metrics (same rules as dashboard totals). */
+export function isRoomCheckinRecord(c: CheckIn): boolean {
   if (c.checkInType === 'food' || c.checkInType === 'beer') return false;
   if (c.checkInType === 'room') return true;
   const hasItemData =
@@ -1208,25 +1209,7 @@ export async function getEmployeeRoomActivityForMonth(params: {
 
   let cleanups: EmployeeRoomCountSeries = { labels: [], counts: [] };
   try {
-    const db = getAdminDb();
-    const endExclusive = startOfMonth.plus({ months: 1 });
-    const startTs = Timestamp.fromDate(startOfMonth.toJSDate());
-    const endTs = Timestamp.fromDate(endExclusive.toJSDate());
-    const snap = await db
-      .collection(CHECKINS_COLLECTION)
-      .where('checkedOutAt', '>=', startTs)
-      .where('checkedOutAt', '<', endTs)
-      .orderBy('checkedOutAt', 'asc')
-      .get();
-    const byCleaner = new Map<string, number>();
-    for (const doc of snap.docs) {
-      const data = doc.data() as Record<string, unknown>;
-      if (!isRoomCheckinDocData(data)) continue;
-      const cleanedBy = typeof data.cleanedBy === 'string' ? data.cleanedBy.trim() : '';
-      if (!cleanedBy) continue;
-      byCleaner.set(cleanedBy, (byCleaner.get(cleanedBy) ?? 0) + 1);
-    }
-    cleanups = sortAndLimitStaffCounts(byCleaner);
+    cleanups = await getEmployeeRoomCleanupsForMonth(year, month);
   } catch (err) {
     console.warn(
       'getEmployeeRoomActivityForMonth: cleanups query failed',
@@ -1235,4 +1218,33 @@ export async function getEmployeeRoomActivityForMonth(params: {
   }
 
   return { check_ins, cleanups };
+}
+
+/**
+ * Room cleanups in a calendar month (Firestore `checkedOutAt` range). Used by employee activity and dashboard bundle.
+ */
+export async function getEmployeeRoomCleanupsForMonth(
+  year: number,
+  month: number
+): Promise<EmployeeRoomCountSeries> {
+  const startOfMonth = DateTime.fromObject({ year, month, day: 1 }, { zone: ZONE }).startOf('day');
+  const endExclusive = startOfMonth.plus({ months: 1 });
+  const startTs = Timestamp.fromDate(startOfMonth.toJSDate());
+  const endTs = Timestamp.fromDate(endExclusive.toJSDate());
+  const db = getAdminDb();
+  const snap = await db
+    .collection(CHECKINS_COLLECTION)
+    .where('checkedOutAt', '>=', startTs)
+    .where('checkedOutAt', '<', endTs)
+    .orderBy('checkedOutAt', 'asc')
+    .get();
+  const byCleaner = new Map<string, number>();
+  for (const doc of snap.docs) {
+    const data = doc.data() as Record<string, unknown>;
+    if (!isRoomCheckinDocData(data)) continue;
+    const cleanedBy = typeof data.cleanedBy === 'string' ? data.cleanedBy.trim() : '';
+    if (!cleanedBy) continue;
+    byCleaner.set(cleanedBy, (byCleaner.get(cleanedBy) ?? 0) + 1);
+  }
+  return sortAndLimitStaffCounts(byCleaner);
 }

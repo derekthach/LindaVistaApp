@@ -4,12 +4,15 @@ import { useEffect, useState } from 'react';
 import { DateTime } from 'luxon';
 import LineChart from './charts/LineChart';
 import BarChart from './charts/BarChart';
+import DashboardSummaryCards from '@/components/DashboardSummaryCards';
 import { useTranslation } from '@/lib/i18n/useTranslation';
 import type {
+  DashboardBundleResponse,
   DashboardData,
   RoomUsageData,
   MonthlyComparisonData,
   EmployeeRoomActivityData,
+  SummaryMetrics,
 } from '@/types';
 
 const ZONE = 'America/Puerto_Rico';
@@ -43,6 +46,13 @@ const EMPTY_EMPLOYEE_ACTIVITY: EmployeeRoomActivityData = {
   cleanups: { labels: [], counts: [] },
 };
 
+const DEFAULT_METRICS: SummaryMetrics = {
+  carsToday: 0,
+  carsThisWeek: 0,
+  profitToday: 0,
+  profitThisWeek: 0,
+};
+
 function emptyMonthly(month: number, year: number, monthName: string, prevMonthName: string): MonthlyComparisonData {
   const prevMonth = month === 1 ? 12 : month - 1;
   const prevYear = month === 1 ? year - 1 : year;
@@ -56,9 +66,10 @@ function emptyMonthly(month: number, year: number, monthName: string, prevMonthN
 export default function DashboardCharts() {
   const { t } = useTranslation();
   const monthLabel = (m: number) => t(`month_short_${MONTH_KEY_SUFFIXES[m - 1]}` as 'month_short_jan');
+  const [metrics, setMetrics] = useState<SummaryMetrics>(DEFAULT_METRICS);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [roomUsage, setRoomUsage] = useState<RoomUsageData | null>(null);
-  const [roomUsageLoading, setRoomUsageLoading] = useState(true);
+  const [bundleLoading, setBundleLoading] = useState(true);
   const [roomUsageMonth, setRoomUsageMonth] = useState(() =>
     DateTime.now().setZone(ZONE).month
   );
@@ -69,65 +80,64 @@ export default function DashboardCharts() {
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
   const [employeeActivity, setEmployeeActivity] = useState<EmployeeRoomActivityData | null>(null);
-  const [employeeActivityLoading, setEmployeeActivityLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/dashboard')
-      .then((res) => (res.ok ? res.json() : EMPTY_DASHBOARD))
-      .then(setDashboard)
-      .catch(() => setDashboard(EMPTY_DASHBOARD));
-  }, []);
-
-  useEffect(() => {
-    setRoomUsageLoading(true);
-    fetch(`/api/room-usage?month=${roomUsageMonth}&year=${roomUsageYear}`)
-      .then((res) => (res.ok ? res.json() : EMPTY_ROOM_USAGE))
-      .then((data) => {
-        setRoomUsage(data);
-        setRoomUsageLoading(false);
-      })
-      .catch(() => {
-        setRoomUsage(EMPTY_ROOM_USAGE);
-        setRoomUsageLoading(false);
-      });
-  }, [roomUsageMonth, roomUsageYear]);
-
-  useEffect(() => {
-    setEmployeeActivityLoading(true);
-    fetch(
-      `/api/dashboard/employee-room-activity?month=${roomUsageMonth}&year=${roomUsageYear}`
-    )
-      .then((res) => (res.ok ? res.json() : EMPTY_EMPLOYEE_ACTIVITY))
-      .then((data: EmployeeRoomActivityData) => {
-        setEmployeeActivity(data);
-        setEmployeeActivityLoading(false);
-      })
-      .catch(() => {
-        setEmployeeActivity(EMPTY_EMPLOYEE_ACTIVITY);
-        setEmployeeActivityLoading(false);
-      });
-  }, [roomUsageMonth, roomUsageYear]);
-
-  useEffect(() => {
+    setBundleLoading(true);
+    const params = new URLSearchParams({
+      roomMonth: String(roomUsageMonth),
+      roomYear: String(roomUsageYear),
+      revenueMonth: String(month),
+      revenueYear: String(year),
+    });
     const prevCalMonth = month === 1 ? 12 : month - 1;
     const fallback = emptyMonthly(month, year, monthLabel(month), monthLabel(prevCalMonth));
-    fetch(`/api/monthly-revenue?month=${month}&year=${year}`)
-      .then((res) => (res.ok ? res.json() : fallback))
-      .then((data: MonthlyComparisonData) => {
+
+    fetch(`/api/dashboard/bundle?${params.toString()}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: DashboardBundleResponse | null) => {
+        if (!data) {
+          setMetrics(DEFAULT_METRICS);
+          setDashboard(EMPTY_DASHBOARD);
+          setRoomUsage(EMPTY_ROOM_USAGE);
+          setMonthly(fallback);
+          setEmployeeActivity(EMPTY_EMPLOYEE_ACTIVITY);
+          setBundleLoading(false);
+          return;
+        }
+        setMetrics(data.summaryMetrics);
+        setDashboard(data.sevenDayTrend);
+        setRoomUsage(data.roomUsage);
         setMonthly({
-          ...data,
-          current_month: { ...data.current_month, name: monthLabel(month) },
-          prev_month: { ...data.prev_month, name: monthLabel(prevCalMonth) },
+          ...data.monthlyRevenue,
+          current_month: {
+            ...data.monthlyRevenue.current_month,
+            name: monthLabel(month),
+          },
+          prev_month: {
+            ...data.monthlyRevenue.prev_month,
+            name: monthLabel(prevCalMonth),
+          },
         });
+        setEmployeeActivity(data.employeeRoomActivity);
+        setBundleLoading(false);
       })
-      .catch(() => setMonthly(fallback));
-  }, [month, year, t]);
+      .catch(() => {
+        setMetrics(DEFAULT_METRICS);
+        setDashboard(EMPTY_DASHBOARD);
+        setRoomUsage(EMPTY_ROOM_USAGE);
+        setMonthly(fallback);
+        setEmployeeActivity(EMPTY_EMPLOYEE_ACTIVITY);
+        setBundleLoading(false);
+      });
+  }, [roomUsageMonth, roomUsageYear, month, year, t]);
 
   const localizeRoomChartLabel = (label: string) =>
     label.replace(/^Room\s+/i, `${t('room')} `);
 
   return (
-    <div style={{ display: 'grid', gap: 24 }}>
+    <>
+      <DashboardSummaryCards metrics={metrics} />
+      <div style={{ display: 'grid', gap: 24, marginTop: 24 }}>
       <section>
         <h2 style={{ marginBottom: 12 }}>{t('trend_analytics')}</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
@@ -208,7 +218,7 @@ export default function DashboardCharts() {
               </div>
             </div>
             <div style={{ height: 280 }}>
-              {roomUsageLoading ? (
+              {bundleLoading ? (
                 <p style={{ color: '#6b7280', padding: 24 }}>{t('loading')}</p>
               ) : roomUsage && roomUsage.room_numbers.length > 0 ? (
                 <BarChart
@@ -287,7 +297,7 @@ export default function DashboardCharts() {
               {t('chart_checkins_by_staff_help')}
             </p>
             <div style={{ height: 280 }}>
-              {employeeActivityLoading ? (
+              {bundleLoading ? (
                 <p style={{ color: '#6b7280', padding: 24 }}>{t('loading')}</p>
               ) : employeeActivity && employeeActivity.check_ins.labels.length > 0 ? (
                 <BarChart
@@ -308,7 +318,7 @@ export default function DashboardCharts() {
               {t('chart_cleanups_by_staff_help')}
             </p>
             <div style={{ height: 280 }}>
-              {employeeActivityLoading ? (
+              {bundleLoading ? (
                 <p style={{ color: '#6b7280', padding: 24 }}>{t('loading')}</p>
               ) : employeeActivity && employeeActivity.cleanups.labels.length > 0 ? (
                 <BarChart
@@ -326,5 +336,6 @@ export default function DashboardCharts() {
         </div>
       </section>
     </div>
+    </>
   );
 }
