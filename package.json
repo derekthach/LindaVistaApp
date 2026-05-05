@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
     "generate:pwa-icons": "node scripts/generate-pwa-icons.mjs",
     "seed:users": "node scripts/seed-employee-users.mjs",
     "add:employee:keith": "node --env-file=.env.local scripts/add-keith-thach-employee.mjs",
@@ -38,6 +40,7 @@
     "eslint": "^9",
     "eslint-config-next": "15.1.5",
     "sharp": "^0.34.5",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.4"
   }
 }

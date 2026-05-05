@@ -1,4 +1,5 @@
 import type { CheckIn } from '@/types';
+import { isRoomCheckinRecord } from '@/lib/checkins/roomCheckinRecord';
 
 /** Parse "HH:mm" to minutes since midnight. Invalid => 0. */
 export function timeToMinutes(timeHHmm: string): number {
@@ -27,18 +28,12 @@ export function getBucketIndex(mins: number): number {
   return 2;
 }
 
-/** True if this check-in counts as a "car" (room check-in with non-empty license plate). */
+/**
+ * One car per room receipt for section/day totals — uses `isRoomCheckinRecord` (dashboard monthly
+ * car_count rules), not license-plate presence (past/admin room rows may omit plate).
+ */
 export function countsAsCar(checkin: CheckIn): boolean {
-  if ((checkin.checkInType ?? 'room') !== 'room') return false;
-  const plate =
-    (checkin as CheckIn & { licensePlate?: string }).licensePlate ??
-    (checkin as CheckIn & { plate?: string }).plate ??
-    checkin.car_plate ??
-    '';
-  const trimmed = String(plate).trim();
-  if (!trimmed) return false;
-  if (trimmed === '—' || trimmed === '-') return false;
-  return true;
+  return isRoomCheckinRecord(checkin);
 }
 
 /** Single monetary amount for a check-in (already normalized: room cost or food/beer total). */

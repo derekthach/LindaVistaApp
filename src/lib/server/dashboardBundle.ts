@@ -9,11 +9,8 @@ import type {
   RoomUsageData,
   SummaryMetrics,
 } from '@/types';
-import {
-  getEmployeeRoomCleanupsForMonth,
-  isRoomCheckinRecord,
-  listCheckinsByDateRange,
-} from '@/lib/server/checkinsRepo';
+import { isRoomCheckinRecord } from '@/lib/checkins/roomCheckinRecord';
+import { getEmployeeRoomCleanupsForMonth, listCheckinsByDateRange } from '@/lib/server/checkinsRepo';
 
 const ZONE = 'America/Puerto_Rico';
 

@@ -32,6 +32,7 @@ import {
 import { HttpError } from '@/lib/server/httpError';
 import { dedupeActiveRoomStaySnapshots } from '@/lib/server/activeRoomStayDedupe';
 import { logInfo } from '@/lib/server/log';
+import { isRoomCheckinRecord } from '@/lib/checkins/roomCheckinRecord';
 
 const CHECKINS_COLLECTION = 'checkins';
 /** Idempotency ledger: one doc per room check-in confirmation (client submission_key). */
@@ -964,22 +965,8 @@ export async function getCheckinEdits(checkinId: string): Promise<CheckinEditRec
   return records;
 }
 
-/**
- * Guest room stays only for dashboard counts (excludes food/beer).
- * - Explicit food/beer → excluded.
- * - Explicit room → included.
- * - Legacy without checkInType: excluded if line/summary item rows exist (typical F&B shape); else treated as room.
- */
-/** Exported for dashboard bundle in-memory metrics (same rules as dashboard totals). */
-export function isRoomCheckinRecord(c: CheckIn): boolean {
-  if (c.checkInType === 'food' || c.checkInType === 'beer') return false;
-  if (c.checkInType === 'room') return true;
-  const hasItemData =
-    (Array.isArray(c.lineItems) && c.lineItems.length > 0) ||
-    (Array.isArray(c.summarizedItems) && c.summarizedItems.length > 0);
-  if (hasItemData) return false;
-  return true;
-}
+/** Re-export for callers that imported room classification from this module. */
+export { isRoomCheckinRecord };
 
 export async function getSummaryMetrics(): Promise<SummaryMetrics> {
   const now = DateTime.now().setZone(ZONE);
