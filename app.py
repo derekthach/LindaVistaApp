@@ -30,12 +30,24 @@ def _motel_week_start(today: date) -> date:
     return today - timedelta(days=days_since_fri)
 
 
-# Selectable rooms — keep in sync with src/lib/checkins/rooms.ts ROOM_OPTIONS
-ROOM_SELECT_OPTIONS = (
-    list(range(1, 14))
-    + ['14A', '14B', '15A', '15B']
-    + list(range(16, 51))
-)
+# Selectable rooms for legacy Flask check-in — keep in sync with src/lib/checkins/rooms.ts ROOM_OPTIONS
+def _room_select_options_filtered():
+    rooms = []
+    for n in range(1, 14):
+        if 4 <= n <= 13:
+            continue
+        rooms.append(n)
+    rooms.extend(['14A', '14B', '15A', '15B'])
+    for n in range(16, 51):
+        if 30 <= n <= 37:
+            continue
+        if n in (39, 49, 50):
+            continue
+        rooms.append(n)
+    return rooms
+
+
+ROOM_SELECT_OPTIONS = tuple(_room_select_options_filtered())
 
 # Initialize the database
 def init_db():

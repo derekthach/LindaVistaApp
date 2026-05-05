@@ -8,7 +8,7 @@ import type { ItemOption } from '@/lib/checkins/items';
 import { normalizeReceipt } from '@/lib/checkins/validation/room';
 import { formatReceiptNumber } from '@/lib/checkins/receipt';
 import { ALLOWED_STAFF } from '@/lib/checkins/validation/updateCheckin';
-import { ROOM_OPTIONS, parseRoomOptionValue, isValidRoomId } from '@/lib/checkins/rooms';
+import { parseRoomOptionValue, isValidRoomId, roomOptionsForEmployeeEdit } from '@/lib/checkins/rooms';
 import { PAYMENT_METHODS } from '@/lib/checkins/paymentMethods';
 import {
   calculatePaymentSplitTotal,
@@ -503,7 +503,7 @@ export default function EditCheckinModal({
                   onChange={(e) => setRoomId(parseRoomOptionValue(e.target.value))}
                   style={inputStyle}
                 >
-                  {ROOM_OPTIONS.map((r) => (
+                  {roomOptionsForEmployeeEdit(room_id).map((r) => (
                     <option key={String(r)} value={String(r)}>
                       {formatRoomDisplay(r, t('room'))}
                     </option>

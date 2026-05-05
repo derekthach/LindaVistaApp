@@ -2,7 +2,7 @@ import { CAR_MAKE_MAX } from '@/lib/checkins/carMakeNormalize';
 import { isValidCarColorKey } from '../colors';
 import { normalizeReceiptNumber } from '../receipt';
 import { PAYMENT_METHODS } from '../paymentMethods';
-import { isValidRoomId } from '../rooms';
+import { isValidRoomForNewCheckin } from '../rooms';
 import { validatePaymentSplits } from '../roomPaymentSplits';
 import type { RoomPaymentSplit } from '@/types';
 
@@ -47,7 +47,7 @@ export function validateRoomCheckin(raw: Record<string, unknown>): RoomCheckinVa
   const roomId = raw.room_id;
   if (roomId === undefined || roomId === null || String(roomId).trim() === '') {
     errors.room_id = 'error_room_select_before_continue';
-  } else if (!isValidRoomId(roomId)) {
+  } else if (!isValidRoomForNewCheckin(roomId)) {
     errors.room_id = 'error_room_invalid';
   }
 

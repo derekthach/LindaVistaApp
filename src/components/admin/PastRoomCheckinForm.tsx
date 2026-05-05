@@ -4,7 +4,12 @@ import { useActionState, useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { submitPastRoomCheckinAction } from '@/app/actions/pastRoomCheckin';
 import Button from '@/components/Button';
-import { ROOM_OPTIONS, parseRoomOptionValue, formatRoomDisplay, isValidRoomId } from '@/lib/checkins/rooms';
+import {
+  FULL_ROOM_CATALOG,
+  parseRoomOptionValue,
+  formatRoomDisplay,
+  isValidRoomId,
+} from '@/lib/checkins/rooms';
 import { PAYMENT_METHODS } from '@/lib/checkins/paymentMethods';
 import {
   calculatePaymentSplitTotal,
@@ -135,7 +140,7 @@ export default function PastRoomCheckinForm({ staffNames }: { staffNames: string
               style={inputStyle}
               required
             >
-              {ROOM_OPTIONS.map((r) => (
+              {FULL_ROOM_CATALOG.map((r) => (
                 <option key={String(r)} value={String(r)}>
                   {formatRoomDisplay(r, t('room'))}
                 </option>

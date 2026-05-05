@@ -1,5 +1,5 @@
 import type { CheckIn } from '@/types';
-import { ROOM_OPTIONS, roomOptionsForEmployeeEdit, type RoomId } from '@/lib/checkins/rooms';
+import { FULL_ROOM_CATALOG, roomOptionsForEmployeeEdit, type RoomId } from '@/lib/checkins/rooms';
 
 /**
  * Normalize room id for occupancy grouping (e.g. "40", "14A", "14b" → same logical key).
@@ -56,9 +56,9 @@ export function isEmployeeRoomNumberLockedForCompletedStayDoc(data: Record<strin
   return hasFirestoreCleanedTimestamp(data.cleanedAt);
 }
 
-/** Sort by ROOM_OPTIONS order, then unknown ids last. */
+/** Sort by full catalog order, then unknown ids last. */
 export function sortRoomsForDisplay<T extends { room_id: number | string }>(items: T[]): T[] {
-  const order = new Map(ROOM_OPTIONS.map((r, i) => [String(r), i]));
+  const order = new Map(FULL_ROOM_CATALOG.map((r, i) => [String(r), i]));
   return [...items].sort((a, b) => {
     const ia = order.get(String(a.room_id)) ?? 10000;
     const ib = order.get(String(b.room_id)) ?? 10000;
