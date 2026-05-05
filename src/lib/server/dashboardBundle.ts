@@ -10,6 +10,9 @@ import type {
   SummaryMetrics,
 } from '@/types';
 import { isRoomCheckinRecord } from '@/lib/checkins/roomCheckinRecord';
+import { deriveMotelWeekTrendComparisonFromCheckins } from '@/lib/dashboard/motelWeekTrendData';
+import { deriveSummaryMetricsFromCheckins } from '@/lib/dashboard/summaryMetrics';
+import { getMotelBusinessWeekStart } from '@/lib/dates/motelBusinessWeek';
 import { getEmployeeRoomCleanupsForMonth, listCheckinsByDateRange } from '@/lib/server/checkinsRepo';
 
 const ZONE = 'America/Puerto_Rico';
@@ -59,63 +62,8 @@ function sortAndLimitStaffCounts(counts: Map<string, number>, limit = 20): Emplo
   return { labels: top.map(([k]) => k), counts: top.map(([, v]) => v) };
 }
 
-export function deriveSummaryMetricsFromCheckins(checkins: CheckIn[], now: DateTime): SummaryMetrics {
-  const todayISO = now.toISODate() ?? '';
-  const startOfWeekISO = now.startOf('week').toISODate() ?? '';
-  const todayCheckins = checkins.filter((c) => c.date === todayISO);
-  const weekCheckins = checkins.filter((c) => c.date >= startOfWeekISO && c.date <= todayISO);
-  const profitToday = todayCheckins.reduce((sum, c) => sum + c.cost, 0);
-  const profitThisWeek = weekCheckins.reduce((sum, c) => sum + c.cost, 0);
-  const roomToday = todayCheckins.filter(isRoomCheckinRecord);
-  const roomWeek = weekCheckins.filter(isRoomCheckinRecord);
-  return {
-    carsToday: roomToday.length,
-    carsThisWeek: roomWeek.length,
-    profitToday,
-    profitThisWeek,
-  };
-}
-
-/** Matches get7DayTrends() output using pre-fetched check-ins. */
-export function deriveSevenDayTrendFromCheckins(checkins: CheckIn[], now: DateTime): DashboardData {
-  const endDate = now;
-  /** Same window as get7DayTrends(): inclusive last 7 calendar days in PR. */
-  const startDate = endDate.minus({ days: 6 });
-  const startISO = startDate.toISODate() ?? '';
-  const endISO = endDate.toISODate() ?? '';
-  const inRange = checkins.filter((c) => c.date >= startISO && c.date <= endISO);
-  const byDay = new Map<string, { count: number; revenue: number }>();
-  let current = startDate;
-  const end = endDate;
-  while (current <= end) {
-    const key = current.toISODate() ?? '';
-    byDay.set(key, { count: 0, revenue: 0 });
-    current = current.plus({ days: 1 });
-  }
-  for (const c of inRange) {
-    const key = c.date;
-    const cell = byDay.get(key);
-    if (cell) {
-      if (isRoomCheckinRecord(c)) {
-        cell.count += 1;
-      }
-      cell.revenue += c.cost;
-    }
-  }
-  const dates: string[] = [];
-  const checkinsArr: number[] = [];
-  const revenue: number[] = [];
-  current = startDate;
-  while (current <= end) {
-    dates.push(current.toFormat('MM/dd'));
-    const key = current.toISODate() ?? '';
-    const cell = byDay.get(key) ?? { count: 0, revenue: 0 };
-    checkinsArr.push(cell.count);
-    revenue.push(cell.revenue);
-    current = current.plus({ days: 1 });
-  }
-  return { dates, checkins: checkinsArr, revenue };
-}
+/** Re-export for callers that imported summary derivation from this module. */
+export { deriveSummaryMetricsFromCheckins } from '@/lib/dashboard/summaryMetrics';
 
 export function deriveRoomUsageFromCheckins(
   checkins: CheckIn[],
@@ -207,8 +155,8 @@ export async function getDashboardBundle(params: {
   const now = DateTime.now().setZone(ZONE);
   const todayISO = now.toISODate() ?? '';
 
-  const weekStart = now.startOf('week');
-  const sevenStart = now.minus({ days: 6 });
+  const weekStart = getMotelBusinessWeekStart(now, ZONE);
+  const prevWeekStart = weekStart.minus({ days: 7 });
 
   const roomStart = DateTime.fromObject(
     { year: params.roomYear, month: params.roomMonth, day: 1 },
@@ -222,8 +170,7 @@ export async function getDashboardBundle(params: {
   );
 
   const starts = [
-    weekStart.toISODate() ?? '',
-    sevenStart.toISODate() ?? '',
+    prevWeekStart.toISODate() ?? '',
     roomStart.toISODate() ?? '',
     currentMonthStart,
     prevMonthStart,
@@ -250,8 +197,19 @@ export async function getDashboardBundle(params: {
     carsThisWeek: 0,
     profitToday: 0,
     profitThisWeek: 0,
+    todayCarsDeltaVsYesterday: 0,
+    todayRevenueDeltaVsYesterday: 0,
+    weekCarsDeltaVsPrior: 0,
+    weekRevenueDeltaVsPrior: 0,
   };
-  let sevenDayTrend: DashboardData = { dates: [], checkins: [], revenue: [] };
+  let sevenDayTrend: DashboardData = {
+    dates: [],
+    trendAxisIsos: [],
+    checkins: [],
+    revenue: [],
+    checkinsPrevWeek: [],
+    revenuePrevWeek: [],
+  };
   let monthlyRevenue: MonthlyComparisonData;
   let roomUsage: RoomUsageData = { room_numbers: [], usage_counts: [] };
   let employeeRoomActivity: EmployeeRoomActivityData = {
@@ -266,7 +224,7 @@ export async function getDashboardBundle(params: {
   }
 
   try {
-    sevenDayTrend = deriveSevenDayTrendFromCheckins(checkins, now);
+    sevenDayTrend = deriveMotelWeekTrendComparisonFromCheckins(checkins, now, ZONE);
   } catch (e) {
     console.warn('[dashboard-bundle] seven-day trend derivation failed', e);
   }

@@ -103,12 +103,25 @@ export interface SummaryMetrics {
   carsThisWeek: number;
   profitToday: number;
   profitThisWeek: number;
+  /** Room count vs yesterday 12:00 a.m. through same clock time (current − prior). */
+  todayCarsDeltaVsYesterday: number;
+  /** Revenue vs yesterday same window (dollars, not a ratio). */
+  todayRevenueDeltaVsYesterday: number;
+  /** Room count vs prior motel week at same elapsed time (this week count − prior). */
+  weekCarsDeltaVsPrior: number;
+  /** Revenue vs prior motel week at same elapsed time (dollars, not a ratio). */
+  weekRevenueDeltaVsPrior: number;
 }
 
 export interface DashboardData {
   dates: string[];
+  /** YYYY-MM-DD for each x-axis step (Fri→Thu of current motel week); use for localized weekday labels */
+  trendAxisIsos: string[];
   checkins: number[];
   revenue: number[];
+  /** Prior motel week (Fri→Thu), aligned by day index with `dates` */
+  checkinsPrevWeek: number[];
+  revenuePrevWeek: number[];
 }
 
 export interface RoomUsageData {

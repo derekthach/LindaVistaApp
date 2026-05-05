@@ -5,16 +5,15 @@ import { logError, logInfo } from '@/lib/server/log';
 import { HttpError, toErrorResponse } from '@/lib/server/httpError';
 import { requireEnvs } from '@/lib/server/requireEnv';
 import { DateTime } from 'luxon';
+import { deriveMotelWeekTrendComparisonFromCheckins } from '@/lib/dashboard/motelWeekTrendData';
 
 export const runtime = 'nodejs';
 
+const PR = 'America/Puerto_Rico';
+
 function empty7DayData() {
-  const endDate = DateTime.now().setZone('America/Puerto_Rico');
-  const dates: string[] = [];
-  for (let i = 6; i >= 0; i--) {
-    dates.push(endDate.minus({ days: i }).toFormat('MM/dd'));
-  }
-  return { dates, checkins: dates.map(() => 0), revenue: dates.map(() => 0) };
+  const now = DateTime.now().setZone(PR);
+  return deriveMotelWeekTrendComparisonFromCheckins([], now, PR);
 }
 
 export async function GET() {

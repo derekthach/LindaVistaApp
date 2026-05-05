@@ -33,6 +33,9 @@ import { HttpError } from '@/lib/server/httpError';
 import { dedupeActiveRoomStaySnapshots } from '@/lib/server/activeRoomStayDedupe';
 import { logInfo } from '@/lib/server/log';
 import { isRoomCheckinRecord } from '@/lib/checkins/roomCheckinRecord';
+import { deriveMotelWeekTrendComparisonFromCheckins } from '@/lib/dashboard/motelWeekTrendData';
+import { deriveSummaryMetricsFromCheckins } from '@/lib/dashboard/summaryMetrics';
+import { getMotelBusinessWeekStart } from '@/lib/dates/motelBusinessWeek';
 
 const CHECKINS_COLLECTION = 'checkins';
 /** Idempotency ledger: one doc per room check-in confirmation (client submission_key). */
@@ -971,68 +974,19 @@ export { isRoomCheckinRecord };
 export async function getSummaryMetrics(): Promise<SummaryMetrics> {
   const now = DateTime.now().setZone(ZONE);
   const todayISO = now.toISODate() ?? '';
-  const startOfWeekISO = now.startOf('week').toISODate() ?? '';
-
-  const [todayCheckins, weekCheckins] = await Promise.all([
-    listCheckinsByDateRange(todayISO, todayISO),
-    listCheckinsByDateRange(startOfWeekISO, todayISO),
-  ]);
-
-  const profitToday = todayCheckins.reduce((sum, c) => sum + c.cost, 0);
-  const profitThisWeek = weekCheckins.reduce((sum, c) => sum + c.cost, 0);
-
-  const roomToday = todayCheckins.filter(isRoomCheckinRecord);
-  const roomWeek = weekCheckins.filter(isRoomCheckinRecord);
-
-  return {
-    carsToday: roomToday.length,
-    carsThisWeek: roomWeek.length,
-    profitToday,
-    profitThisWeek,
-  };
+  const prevWeekStart = getMotelBusinessWeekStart(now, ZONE).minus({ days: 7 });
+  const startISO = prevWeekStart.toISODate() ?? '';
+  const checkins = await listCheckinsByDateRange(startISO, todayISO);
+  return deriveSummaryMetricsFromCheckins(checkins, now);
 }
 
 export async function get7DayTrends(): Promise<DashboardData> {
-  const endDate = DateTime.now().setZone(ZONE);
-  const startDate = endDate.minus({ days: 6 });
-  const startISO = startDate.toISODate() ?? '';
-  const endISO = endDate.toISODate() ?? '';
-
+  const now = DateTime.now().setZone(ZONE);
+  const prevWeekStart = getMotelBusinessWeekStart(now, ZONE).minus({ days: 7 });
+  const startISO = prevWeekStart.toISODate() ?? '';
+  const endISO = now.toISODate() ?? '';
   const checkins = await listCheckinsByDateRange(startISO, endISO);
-  const byDay = new Map<string, { count: number; revenue: number }>();
-
-  let current = startDate;
-  while (current <= endDate) {
-    const key = current.toISODate() ?? '';
-    byDay.set(key, { count: 0, revenue: 0 });
-    current = current.plus({ days: 1 });
-  }
-
-  for (const c of checkins) {
-    const key = c.date;
-    const cell = byDay.get(key);
-    if (cell) {
-      if (isRoomCheckinRecord(c)) {
-        cell.count += 1;
-      }
-      cell.revenue += c.cost;
-    }
-  }
-
-  const dates: string[] = [];
-  const checkinsArr: number[] = [];
-  const revenue: number[] = [];
-  current = startDate;
-  while (current <= endDate) {
-    dates.push(current.toFormat('MM/dd'));
-    const key = current.toISODate() ?? '';
-    const cell = byDay.get(key) ?? { count: 0, revenue: 0 };
-    checkinsArr.push(cell.count);
-    revenue.push(cell.revenue);
-    current = current.plus({ days: 1 });
-  }
-
-  return { dates, checkins: checkinsArr, revenue };
+  return deriveMotelWeekTrendComparisonFromCheckins(checkins, now, ZONE);
 }
 
 export async function getRoomUsageTop15(): Promise<RoomUsageData> {

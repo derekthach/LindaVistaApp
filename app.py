@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, send_file, session, jsonify
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
+from zoneinfo import ZoneInfo
 import csv
 import os
 
@@ -13,6 +14,21 @@ FLASK_ADMIN_USER = os.environ.get('FLASK_ADMIN_USER', 'admin')
 FLASK_ADMIN_PASS = os.environ.get('FLASK_ADMIN_PASS', 'password')
 FLASK_EMP_USER = os.environ.get('FLASK_EMP_USER', 'employee')
 FLASK_EMP_PASS = os.environ.get('FLASK_EMP_PASS', 'employee123')
+
+PR_TZ = ZoneInfo('America/Puerto_Rico')
+
+
+def _pr_today() -> date:
+    """Calendar date in Puerto Rico (business reporting day)."""
+    return datetime.now(PR_TZ).date()
+
+
+def _motel_week_start(today: date) -> date:
+    """Motel business week (Fri–Thu): most recent Friday (Mon=0 … Fri=4)."""
+    wd = today.weekday()
+    days_since_fri = (wd - 4) % 7
+    return today - timedelta(days=days_since_fri)
+
 
 # Selectable rooms — keep in sync with src/lib/checkins/rooms.ts ROOM_OPTIONS
 ROOM_SELECT_OPTIONS = (
@@ -218,7 +234,7 @@ def export_checkins():
 def get_cars_today():
     conn = sqlite3.connect('motel.db')
     c = conn.cursor()
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = _pr_today().isoformat()
     c.execute('SELECT COUNT(*) FROM CheckIns WHERE date = ?', (today,))
     cars_today = c.fetchone()[0]
     conn.close()
@@ -228,9 +244,9 @@ def get_cars_today():
 def get_cars_this_week():
     conn = sqlite3.connect('motel.db')
     c = conn.cursor()
-    today = datetime.now()
-    start_of_week = today - timedelta(days=today.weekday())
-    c.execute('SELECT COUNT(*) FROM CheckIns WHERE date BETWEEN ? AND ?', (start_of_week.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d')))
+    today = _pr_today()
+    start_of_week = _motel_week_start(today)
+    c.execute('SELECT COUNT(*) FROM CheckIns WHERE date BETWEEN ? AND ?', (start_of_week.isoformat(), today.isoformat()))
     cars_this_week = c.fetchone()[0]
     conn.close()
     return cars_this_week
@@ -239,7 +255,7 @@ def get_cars_this_week():
 def get_profit_today():
     conn = sqlite3.connect('motel.db')
     c = conn.cursor()
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = _pr_today().isoformat()
     c.execute('SELECT SUM(cost) FROM CheckIns WHERE date = ?', (today,))
     profit_today = c.fetchone()[0] or 0
     conn.close()
@@ -249,9 +265,9 @@ def get_profit_today():
 def get_profit_this_week():
     conn = sqlite3.connect('motel.db')
     c = conn.cursor()
-    today = datetime.now()
-    start_of_week = today - timedelta(days=today.weekday())
-    c.execute('SELECT SUM(cost) FROM CheckIns WHERE date BETWEEN ? AND ?', (start_of_week.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d')))
+    today = _pr_today()
+    start_of_week = _motel_week_start(today)
+    c.execute('SELECT SUM(cost) FROM CheckIns WHERE date BETWEEN ? AND ?', (start_of_week.isoformat(), today.isoformat()))
     profit_this_week = c.fetchone()[0] or 0
     conn.close()
     return profit_this_week
@@ -377,19 +393,18 @@ def dashboard_data():
     if session.get('role') != 'admin':
         return jsonify({'error': 'Not authorized'}), 403
     
-    # Generate data for the last 7 days
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=6)  # Last 7 days including today
-    
+    # Rolling last 7 calendar days in Puerto Rico (same semantics as Next.js get7DayTrends).
+    end_d = _pr_today()
+    start_d = end_d - timedelta(days=6)
+
     dates = []
     checkins_data = []
     revenue_data = []
-    
-    # Generate dates in the format YYYY-MM-DD
-    current_date = start_date
-    while current_date <= end_date:
-        dates.append(current_date.strftime('%Y-%m-%d'))
-        current_date += timedelta(days=1)
+
+    current_d = start_d
+    while current_d <= end_d:
+        dates.append(current_d.isoformat())
+        current_d += timedelta(days=1)
     
     # Fetch data for each date
     conn = sqlite3.connect('motel.db')
@@ -408,7 +423,6 @@ def dashboard_data():
     
     conn.close()
     
-    # Format dates for display (MM/DD)
     display_dates = [datetime.strptime(date, '%Y-%m-%d').strftime('%m/%d') for date in dates]
     
     return jsonify({

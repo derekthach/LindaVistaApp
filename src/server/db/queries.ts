@@ -1,4 +1,7 @@
 import { DateTime } from 'luxon';
+import { deriveMotelWeekTrendComparisonFromCheckins } from '@/lib/dashboard/motelWeekTrendData';
+import { deriveSummaryMetricsFromCheckins } from '@/lib/dashboard/summaryMetrics';
+import { getMotelBusinessWeekStart } from '@/lib/dates/motelBusinessWeek';
 import type {
   CheckIn,
   SummaryMetrics,
@@ -58,62 +61,23 @@ export function insertCheckin(data: Omit<CheckIn, 'checkin_id'>) {
 }
 
 export function getSummaryMetrics(): SummaryMetrics {
-  const db = getDb();
-  const today = DateTime.now().setZone('America/Puerto_Rico').toISODate();
-  const startOfWeek = DateTime.now()
-    .setZone('America/Puerto_Rico')
-    .startOf('week')
-    .toISODate();
-
-  const carsToday = db
-    .prepare('SELECT COUNT(*) as count FROM CheckIns WHERE date = ?')
-    .get(today) as { count: number };
-  const carsThisWeek = db
-    .prepare('SELECT COUNT(*) as count FROM CheckIns WHERE date BETWEEN ? AND ?')
-    .get(startOfWeek, today) as { count: number };
-  const profitToday = db
-    .prepare('SELECT SUM(cost) as total FROM CheckIns WHERE date = ?')
-    .get(today) as { total: number | null };
-  const profitThisWeek = db
-    .prepare('SELECT SUM(cost) as total FROM CheckIns WHERE date BETWEEN ? AND ?')
-    .get(startOfWeek, today) as { total: number | null };
-
-  return {
-    carsToday: carsToday.count,
-    carsThisWeek: carsThisWeek.count,
-    profitToday: profitToday.total || 0,
-    profitThisWeek: profitThisWeek.total || 0,
-  };
+  const zone = 'America/Puerto_Rico';
+  const nowPr = DateTime.now().setZone(zone);
+  const prevWeekStart = getMotelBusinessWeekStart(nowPr, zone).minus({ days: 7 });
+  const startISO = prevWeekStart.toISODate() ?? '';
+  const todayISO = nowPr.toISODate() ?? '';
+  const rows = listCheckins(startISO, todayISO);
+  return deriveSummaryMetricsFromCheckins(rows, nowPr);
 }
 
 export function get7DayTrends(): DashboardData {
-  const db = getDb();
-  const endDate = DateTime.now().setZone('America/Puerto_Rico');
-  const startDate = endDate.minus({ days: 6 });
-
-  const dates: string[] = [];
-  const checkins: number[] = [];
-  const revenue: number[] = [];
-
-  let currentDate = startDate;
-  while (currentDate <= endDate) {
-    const dateStr = currentDate.toISODate();
-    dates.push(currentDate.toFormat('MM/dd'));
-
-    const checkinsCount = db
-      .prepare('SELECT COUNT(*) as count FROM CheckIns WHERE date = ?')
-      .get(dateStr) as { count: number };
-    const revenueSum = db
-      .prepare('SELECT SUM(cost) as total FROM CheckIns WHERE date = ?')
-      .get(dateStr) as { total: number | null };
-
-    checkins.push(checkinsCount.count);
-    revenue.push(revenueSum.total || 0);
-
-    currentDate = currentDate.plus({ days: 1 });
-  }
-
-  return { dates, checkins, revenue };
+  const zone = 'America/Puerto_Rico';
+  const now = DateTime.now().setZone(zone);
+  const prevStart = getMotelBusinessWeekStart(now, zone).minus({ days: 7 });
+  const startISO = prevStart.toISODate() ?? '';
+  const endISO = now.toISODate() ?? '';
+  const rows = listCheckins(startISO, endISO);
+  return deriveMotelWeekTrendComparisonFromCheckins(rows, now, zone);
 }
 
 export function getRoomUsageTop15(): RoomUsageData {

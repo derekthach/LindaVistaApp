@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { DateTime } from 'luxon';
 import LineChart from './charts/LineChart';
 import BarChart from './charts/BarChart';
@@ -37,8 +37,11 @@ function roomUsageYearOptions(): number[] {
 
 const EMPTY_DASHBOARD: DashboardData = {
   dates: [],
+  trendAxisIsos: [],
   checkins: [],
   revenue: [],
+  checkinsPrevWeek: [],
+  revenuePrevWeek: [],
 };
 const EMPTY_ROOM_USAGE: RoomUsageData = { room_numbers: [], usage_counts: [] };
 const EMPTY_EMPLOYEE_ACTIVITY: EmployeeRoomActivityData = {
@@ -51,6 +54,10 @@ const DEFAULT_METRICS: SummaryMetrics = {
   carsThisWeek: 0,
   profitToday: 0,
   profitThisWeek: 0,
+  todayCarsDeltaVsYesterday: 0,
+  todayRevenueDeltaVsYesterday: 0,
+  weekCarsDeltaVsPrior: 0,
+  weekRevenueDeltaVsPrior: 0,
 };
 
 function emptyMonthly(month: number, year: number, monthName: string, prevMonthName: string): MonthlyComparisonData {
@@ -63,8 +70,23 @@ function emptyMonthly(month: number, year: number, monthName: string, prevMonthN
   };
 }
 
+function trendChartXLabels(
+  data: DashboardData | null,
+  language: 'en' | 'es'
+): string[] {
+  if (!data) return [];
+  const isos = data.trendAxisIsos;
+  if (isos && isos.length > 0) {
+    const loc = language === 'es' ? 'es' : 'en';
+    return isos.map((iso) =>
+      DateTime.fromISO(iso, { zone: ZONE }).setLocale(loc).toFormat('EEE MM/dd')
+    );
+  }
+  return data.dates;
+}
+
 export default function DashboardCharts() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const monthLabel = (m: number) => t(`month_short_${MONTH_KEY_SUFFIXES[m - 1]}` as 'month_short_jan');
   const [metrics, setMetrics] = useState<SummaryMetrics>(DEFAULT_METRICS);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
@@ -134,6 +156,13 @@ export default function DashboardCharts() {
   const localizeRoomChartLabel = (label: string) =>
     label.replace(/^Room\s+/i, `${t('room')} `);
 
+  const trendLabels = useMemo(
+    () => trendChartXLabels(dashboard, language === 'es' ? 'es' : 'en'),
+    [dashboard, language]
+  );
+
+  const showTrendCharts = dashboard && dashboard.dates.length > 0;
+
   return (
     <>
       <DashboardSummaryCards metrics={metrics} />
@@ -142,13 +171,20 @@ export default function DashboardCharts() {
         <h2 style={{ marginBottom: 12 }}>{t('trend_analytics')}</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
           <div className="card" style={{ height: 320 }}>
-            <h3>{t('chart_room_checkins_7d')}</h3>
-            <div style={{ height: 240 }}>
-              {dashboard && dashboard.dates.length > 0 ? (
+            <div>
+              <h3 style={{ marginBottom: 4 }}>{t('chart_room_checkins_7d')}</h3>
+              <div style={{ fontSize: 12, color: '#9ca3af' }}>{t('metric_motel_week_subcaption')}</div>
+            </div>
+            <div style={{ height: 220, marginTop: 8 }}>
+              {showTrendCharts ? (
                 <LineChart
-                  labels={dashboard.dates}
-                  data={dashboard.checkins}
-                  label={t('chart_label_room_checkins')}
+                  labels={trendLabels}
+                  data={dashboard!.checkins}
+                  label={t('chart_compare_this_week')}
+                  comparisonData={dashboard!.checkinsPrevWeek}
+                  comparisonLabel={t('chart_compare_previous_week')}
+                  color="rgba(22, 163, 74, 1)"
+                  comparisonColor="rgba(21, 128, 61, 0.65)"
                 />
               ) : (
                 <p style={{ color: '#6b7280', padding: 24 }}>{t('chart_no_checkins_7d')}</p>
@@ -156,13 +192,22 @@ export default function DashboardCharts() {
             </div>
           </div>
           <div className="card" style={{ height: 320 }}>
-            <h3>{t('chart_revenue_7d')}</h3>
-            <div style={{ height: 240 }}>
-              {dashboard && dashboard.dates.length > 0 ? (
-                <BarChart
-                  labels={dashboard.dates}
-                  data={dashboard.revenue}
-                  label={t('chart_revenue_axis')}
+            <div>
+              <h3 style={{ marginBottom: 4 }}>{t('chart_revenue_7d')}</h3>
+              <div style={{ fontSize: 12, color: '#9ca3af' }}>{t('metric_motel_week_subcaption')}</div>
+            </div>
+            <div style={{ height: 220, marginTop: 8 }}>
+              {showTrendCharts ? (
+                <LineChart
+                  labels={trendLabels}
+                  data={dashboard!.revenue}
+                  label={t('chart_compare_this_week')}
+                  comparisonData={dashboard!.revenuePrevWeek}
+                  comparisonLabel={t('chart_compare_previous_week')}
+                  color="rgba(234, 179, 8, 1)"
+                  comparisonColor="rgba(202, 138, 4, 0.75)"
+                  yAxisIntegersOnly={false}
+                  tooltipValueFormat={(v) => `$${v.toFixed(2)}`}
                 />
               ) : (
                 <p style={{ color: '#6b7280', padding: 24 }}>{t('chart_no_revenue_7d')}</p>
