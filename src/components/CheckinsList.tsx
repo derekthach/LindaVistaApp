@@ -318,9 +318,11 @@ export default function CheckinsList({
   initialDate?: string;
   role?: UserRole;
 }) {
+  const RECORDS_PER_PAGE = 10;
   const router = useRouter();
   const { t } = useLanguage();
   const [selectedDate, setSelectedDate] = useState(initialDate ?? '');
+  const [currentPage, setCurrentPage] = useState(1);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingCheckin, setEditingCheckin] = useState<CheckIn | null>(null);
   const [pendingUpdate, setPendingUpdate] = useState<{ checkin: CheckIn; draft: EditCheckinDraft } | null>(null);
@@ -342,6 +344,10 @@ export default function CheckinsList({
   useEffect(() => {
     setSelectedDate(initialDate ?? '');
   }, [initialDate]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedDate, initialCheckins]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -586,6 +592,15 @@ export default function CheckinsList({
   }, [successMessage]);
 
   const dateFilterActive = Boolean(initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate));
+  const isSpecificDateSelected = dateFilterActive;
+
+  const totalPages = Math.max(1, Math.ceil(initialCheckins.length / RECORDS_PER_PAGE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const pageStart = (safeCurrentPage - 1) * RECORDS_PER_PAGE;
+  const visibleCheckins = isSpecificDateSelected
+    ? initialCheckins
+    : initialCheckins.slice(pageStart, pageStart + RECORDS_PER_PAGE);
+  const showPagination = !isSpecificDateSelected && totalPages > 1;
 
   const sectioned = useMemo(() => {
     if (!dateFilterActive || initialCheckins.length === 0) return null;
@@ -695,7 +710,7 @@ export default function CheckinsList({
         </>
       );
     }
-    return initialCheckins.map((checkin) => (
+    return visibleCheckins.map((checkin) => (
       <Fragment key={stableCheckinRowId(checkin)}>
         <tr>
           <td style={{ padding: 8 }}>{receiptCell(checkin)}</td>
@@ -795,6 +810,30 @@ export default function CheckinsList({
         </table>
         {initialCheckins.length === 0 && <div style={{ padding: 16 }}>{t('list_no_checkins')}</div>}
       </div>
+      {showPagination && (
+        <div
+          className="card"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}
+        >
+          <Button
+            variant="ghost"
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            disabled={safeCurrentPage <= 1}
+          >
+            Previous
+          </Button>
+          <div style={{ fontSize: 14, color: '#374151' }}>
+            Page {safeCurrentPage} of {totalPages}
+          </div>
+          <Button
+            variant="ghost"
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            disabled={safeCurrentPage >= totalPages}
+          >
+            Next
+          </Button>
+        </div>
+      )}
 
       <EditCheckinModal
         open={!!editingCheckin}
