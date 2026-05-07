@@ -11,7 +11,6 @@ import {
   validateEmployeeOperationalFoodBeer,
   validateEmployeeOperationalRoom,
 } from '@/lib/checkins/validation/updateCheckin';
-import { normalizeReceipt } from '@/lib/checkins/validation/room';
 import { isEmployeeRoomNumberLockedForCompletedStayDoc } from '@/lib/checkins/roomOccupancy';
 import { Timestamp } from 'firebase-admin/firestore';
 import { HttpError } from '@/lib/server/httpError';
@@ -117,12 +116,6 @@ export async function PATCH(
         );
       }
 
-      const receiptRaw = String(raw.receiptNumber ?? raw.receiptNo ?? '');
-      const padded = normalizeReceipt(receiptRaw);
-      if (padded === null) {
-        return NextResponse.json({ error: 'Invalid receipt on record' }, { status: 400 });
-      }
-
       const staffName = String(raw.staffName ?? '').trim();
       const itemId = String(body.itemId ?? '').trim();
       const itemLabel =
@@ -133,7 +126,6 @@ export async function PATCH(
       await updateCheckinFoodBeer(
         id,
         {
-          receipt_number: padded,
           staff_name: staffName,
           itemId,
           itemLabel,

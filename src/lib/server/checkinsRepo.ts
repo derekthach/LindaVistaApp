@@ -233,60 +233,37 @@ export interface CreateSimpleCheckinInput {
   created_by_role?: 'admin' | 'employee';
 }
 
-/** Create a food or beer check-in (same collection, checkInType set, lineItems + summarizedItems + notes). Uses settings/receipts for next number. */
+/** Create a food or beer check-in (same collection, checkInType set, lineItems + summarizedItems + notes). */
 export async function createSimpleCheckin(
   checkInType: 'food' | 'beer',
   data: CreateSimpleCheckinInput
-): Promise<string> {
+): Promise<void> {
   const db = getAdminDb();
-  const settingsRef = db.collection(SETTINGS_COLLECTION).doc(RECEIPTS_DOC_ID);
-  const counterRef = db.collection(COUNTERS_COLLECTION).doc(RECEIPT_COUNTER_ID);
   const checkinsRef = db.collection(CHECKINS_COLLECTION);
 
-  const result = await db.runTransaction(async (tx) => {
-    let nextNum: number;
-    const settingsSnap = await tx.get(settingsRef);
-    if (settingsSnap.exists) {
-      nextNum = (settingsSnap.data()?.nextReceiptNumber as number) ?? 0;
-    } else {
-      const counterSnap = await tx.get(counterRef);
-      nextNum = counterSnap.exists
-        ? (counterSnap.data()?.nextReceiptNumber as number) ?? 1
-        : 1;
-    }
-    const receiptNumber = formatReceiptNumber(nextNum);
-    const nextReceiptNumber = nextNum + 1;
+  const dt = DateTime.fromFormat(
+    `${data.date} ${data.time}`,
+    'yyyy-MM-dd HH:mm',
+    { zone: 'America/Puerto_Rico' }
+  );
+  const checkInAt = dt.isValid ? Timestamp.fromDate(dt.toJSDate()) : Timestamp.now();
 
-    const dt = DateTime.fromFormat(
-      `${data.date} ${data.time}`,
-      'yyyy-MM-dd HH:mm',
-      { zone: 'America/Puerto_Rico' }
-    );
-    const checkInAt = dt.isValid ? Timestamp.fromDate(dt.toJSDate()) : Timestamp.now();
+  const doc: Record<string, unknown> = {
+    checkInAt,
+    createdAt: Timestamp.now(),
+    checkInType,
+    staffName: data.staff_name,
+    lineItems: data.lineItems,
+    summarizedItems: data.summarizedItems,
+    note: data.notes ?? '',
+  };
 
-    const doc: Record<string, unknown> = {
-      receiptNumber,
-      checkInAt,
-      createdAt: Timestamp.now(),
-      checkInType,
-      staffName: data.staff_name,
-      lineItems: data.lineItems,
-      summarizedItems: data.summarizedItems,
-      note: data.notes ?? '',
-    };
+  if (data.employee_id) doc.employeeId = data.employee_id;
+  if (data.created_by_username) doc.createdByUsername = data.created_by_username;
+  if (data.employee_name_snapshot) doc.employeeNameSnapshot = data.employee_name_snapshot;
+  if (data.created_by_role) doc.createdByRole = data.created_by_role;
 
-    if (data.employee_id) doc.employeeId = data.employee_id;
-    if (data.created_by_username) doc.createdByUsername = data.created_by_username;
-    if (data.employee_name_snapshot) doc.employeeNameSnapshot = data.employee_name_snapshot;
-    if (data.created_by_role) doc.createdByRole = data.created_by_role;
-
-    tx.set(settingsRef, { nextReceiptNumber }, { merge: true });
-    const newRef = checkinsRef.doc();
-    tx.set(newRef, doc);
-    return { id: newRef.id, receiptNumber };
-  });
-
-  return result.receiptNumber;
+  await checkinsRef.add(doc);
 }
 
 /**
@@ -617,7 +594,6 @@ export async function updateCheckin(
 }
 
 export interface UpdateCheckinFoodBeerInput {
-  receipt_number: string;
   staff_name: string;
   itemId: string;
   itemLabel: string;
@@ -648,7 +624,6 @@ export async function updateCheckinFoodBeer(
     throw new Error('Check-in is not food or beer');
   }
 
-  const receiptNumber = formatReceiptNumber(payload.receipt_number);
   const itemId = payload.itemId.trim();
   const itemLabel = payload.itemLabel.trim() || itemId;
   const lineItems: LineItem[] = [
@@ -673,21 +648,18 @@ export async function updateCheckinFoodBeer(
   const firstLine = existingLineItems[0];
   const firstSum = existingSummarized[0];
   const before: Record<string, unknown> = {
-    receiptNumber: data.receiptNumber ?? '',
     staffName: data.staffName ?? '',
     item: firstLine?.itemLabel ?? firstSum?.itemLabel ?? '',
     quantity: firstLine?.quantitySold ?? firstSum?.totalQuantitySold ?? 0,
     amountCollected: firstLine?.amountCollected ?? firstSum?.totalAmountCollected ?? 0,
   };
   const after: Record<string, unknown> = {
-    receiptNumber,
     staffName: payload.staff_name,
     item: itemLabel,
     quantity: payload.quantity,
     amountCollected: payload.amountCollected,
   };
   const changedFields: string[] = [];
-  if (String(before.receiptNumber) !== String(after.receiptNumber)) changedFields.push('receiptNumber');
   if (String(before.staffName) !== String(after.staffName)) changedFields.push('staffName');
   if (String(before.item) !== String(after.item)) changedFields.push('item');
   if (Number(before.quantity) !== Number(after.quantity)) changedFields.push('quantity');
@@ -698,7 +670,6 @@ export async function updateCheckinFoodBeer(
   }
 
   const updateData: Record<string, unknown> = {
-    receiptNumber,
     staffName: payload.staff_name,
     lineItems,
     summarizedItems,

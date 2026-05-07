@@ -46,9 +46,8 @@ export async function DELETE(
 }
 
 /**
- * Admin update check-in. Room: receipt, staff, cost, room. Food/Beer: receipt, staff, item, quantity, amountCollected.
- * Manual QA: Edit FOOD: change item, quantity, amountCollected; confirm diff; save; dashboard totals update.
- * Edit BEER: same. Audit history created. checkInAt unchanged. Receipt duplicates allowed. CSV uses latest values.
+ * Admin update check-in. Room: receipt, staff, payment, room. Food/Beer: staff, item, quantity, amountCollected.
+ * Manual QA: Edit FOOD/BEER item, quantity, amountCollected; confirm diff; save; dashboard totals update.
  */
 export async function PATCH(
   request: NextRequest,
@@ -121,7 +120,6 @@ export async function PATCH(
       await updateCheckin(id, payload, payload.staff_name);
     } else {
       const raw = {
-        receipt_number: body.receipt_number,
         staff_name: body.staff_name,
         itemId: body.itemId,
         itemLabel: body.itemLabel,
@@ -135,9 +133,7 @@ export async function PATCH(
           { status: 400 }
         );
       }
-      const receiptPadded = normalizeReceipt(String(raw.receipt_number ?? ''))!;
       const payload = {
-        receipt_number: receiptPadded,
         staff_name: String(raw.staff_name).trim(),
         itemId: String(raw.itemId).trim(),
         itemLabel: raw.itemLabel != null ? String(raw.itemLabel).trim() : String(raw.itemId).trim(),

@@ -87,6 +87,11 @@ function roomCell(checkin: CheckIn, t: (key: TranslationKey) => string): string 
   return formatRoomDisplay(checkin.room_id, t('room'));
 }
 
+function receiptCell(checkin: CheckIn): string {
+  if (checkin.checkInType === 'food' || checkin.checkInType === 'beer') return '—';
+  return formatReceiptNumber(checkin.receipt_number ?? '');
+}
+
 function typeCell(checkin: CheckIn, t: (key: TranslationKey) => string): string {
   if (checkin.checkInType === 'food') return t('table_type_food');
   if (checkin.checkInType === 'beer') return t('table_type_beer');
@@ -431,14 +436,14 @@ export default function CheckinsList({
 
   function buildDiffLines(checkin: CheckIn, draft: EditCheckinDraft): DiffLine[] {
     const lines: DiffLine[] = [];
+    const isRoom = checkin.checkInType !== 'food' && checkin.checkInType !== 'beer';
     const receiptFrom = formatReceiptNumber(checkin.receipt_number ?? '');
-    if (draft.receipt_number !== receiptFrom) {
+    if (isRoom && draft.receipt_number != null && draft.receipt_number !== receiptFrom) {
       lines.push({ label: t('diff_label_receipt'), from: receiptFrom, to: draft.receipt_number });
     }
     if (draft.staff_name !== (checkin.staff_name ?? '')) {
       lines.push({ label: t('diff_label_staff'), from: checkin.staff_name ?? '', to: draft.staff_name });
     }
-    const isRoom = checkin.checkInType !== 'food' && checkin.checkInType !== 'beer';
     if (isRoom) {
       if (checkin.is_past_entry === true) {
         const fromDt = `${checkin.date ?? ''} ${checkin.time ?? ''}`.trim();
@@ -545,7 +550,6 @@ export default function CheckinsList({
                   : {}),
               }
             : {
-                receipt_number: pendingUpdate.draft.receipt_number,
                 staff_name: pendingUpdate.draft.staff_name,
                 itemId: pendingUpdate.draft.itemId,
                 itemLabel: pendingUpdate.draft.itemLabel,
@@ -647,7 +651,7 @@ export default function CheckinsList({
               {sectioned.buckets[idx].map((checkin) => (
                 <Fragment key={stableCheckinRowId(checkin)}>
                   <tr>
-                    <td style={{ padding: 8 }}>{formatReceiptNumber(checkin.receipt_number ?? '')}</td>
+                    <td style={{ padding: 8 }}>{receiptCell(checkin)}</td>
                     <td style={{ padding: 8 }}>{checkin.date}</td>
                     <td style={{ padding: 8 }}>{checkin.time}</td>
                     <td style={{ padding: 8 }}>{typeCell(checkin, t)}</td>
@@ -694,7 +698,7 @@ export default function CheckinsList({
     return initialCheckins.map((checkin) => (
       <Fragment key={stableCheckinRowId(checkin)}>
         <tr>
-          <td style={{ padding: 8 }}>{formatReceiptNumber(checkin.receipt_number ?? '')}</td>
+          <td style={{ padding: 8 }}>{receiptCell(checkin)}</td>
           <td style={{ padding: 8 }}>{checkin.date}</td>
           <td style={{ padding: 8 }}>{checkin.time}</td>
           <td style={{ padding: 8 }}>{typeCell(checkin, t)}</td>

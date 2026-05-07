@@ -26,7 +26,7 @@ const QUANTITY_MIN = 1;
 const QUANTITY_MAX = 999;
 
 export interface EditCheckinDraft {
-  receipt_number: string;
+  receipt_number?: string;
   staff_name: string;
   room_id?: number | string;
   /** Room check-in: split payments (replaces single cost field). */
@@ -172,7 +172,7 @@ export default function EditCheckinModal({
     return baseStaffList;
   }, [baseStaffList, checkin?.staff_name]);
 
-  const receiptNormalized = normalizeReceipt(receipt_number);
+  const receiptNormalized = isRoom ? normalizeReceipt(receipt_number) : null;
   const staffValid = Boolean(staff_name.trim()) && effectiveStaffOptions.includes(staff_name);
   const qtyNum = quantity.trim() === '' ? NaN : Math.floor(Number(quantity));
   const qtyValid = !Number.isNaN(qtyNum) && Number.isInteger(qtyNum) && qtyNum >= QUANTITY_MIN && qtyNum <= QUANTITY_MAX;
@@ -225,7 +225,6 @@ export default function EditCheckinModal({
     (isPastEntry &&
       (pastCheckinDate !== (checkin?.date ?? '') || pastCheckinTime !== (checkin?.time ?? '')));
   const hasChangesFoodBeer =
-    receiptNormalized !== formatReceiptNumber(checkin?.receipt_number ?? '') ||
     staff_name !== (checkin?.staff_name ?? '') ||
     itemId !== getFirstItemId(checkin ?? ({} as CheckIn)) ||
     qtyNum !== getFirstQuantity(checkin ?? ({} as CheckIn)) ||
@@ -238,19 +237,15 @@ export default function EditCheckinModal({
       /^\d{2}:\d{2}/.test(pastCheckinTime.trim()));
   const formValidRoom =
     receiptNormalized !== null && staffValid && splitsValid && isValidRoomId(room_id) && pastDateTimeOk;
-  const formValidFoodBeer =
-    receiptNormalized !== null &&
-    staffValid &&
-    itemId !== '' &&
-    qtyValid &&
-    amountValid;
+  const formValidFoodBeer = staffValid && itemId !== '' && qtyValid && amountValid;
   const formValid = isRoom ? formValidRoom : formValidFoodBeer;
   const canSave = formValid && hasChanges && !saveDisabled;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSave || !receiptNormalized) return;
+    if (!canSave) return;
     if (isRoom && splitValidation.splits) {
+      if (!receiptNormalized) return;
       onSave({
         receipt_number: receiptNormalized,
         staff_name,
@@ -265,7 +260,6 @@ export default function EditCheckinModal({
       const itemLabel =
         selected != null ? (language === 'es' ? selected.label.es : selected.label.en) : itemId;
       onSave({
-        receipt_number: receiptNormalized,
         staff_name,
         itemId,
         itemLabel,
@@ -377,17 +371,19 @@ export default function EditCheckinModal({
             </label>
           )}
 
-          <label>
-            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('label_receipt')}</div>
-            <input
-              value={receipt_number}
-              onChange={(e) => setReceiptNumber(e.target.value)}
-              onBlur={handleReceiptBlur}
-              style={inputStyle}
-              maxLength={5}
-              inputMode="numeric"
-            />
-          </label>
+          {isRoom && (
+            <label>
+              <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('label_receipt')}</div>
+              <input
+                value={receipt_number}
+                onChange={(e) => setReceiptNumber(e.target.value)}
+                onBlur={handleReceiptBlur}
+                style={inputStyle}
+                maxLength={5}
+                inputMode="numeric"
+              />
+            </label>
+          )}
           <label>
             <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('table_staff')}</div>
             <select

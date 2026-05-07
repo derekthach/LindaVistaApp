@@ -88,7 +88,6 @@ const QUANTITY_MIN = 1;
 const QUANTITY_MAX = 999;
 
 export interface UpdateFoodBeerPayload {
-  receipt_number: string;
   staff_name: string;
   itemId: string;
   itemLabel?: string;
@@ -178,16 +177,6 @@ export function validateUpdateFoodBeerCheckin(
   raw: Record<string, unknown>
 ): UpdateFoodBeerValidationResult {
   const errors: UpdateFoodBeerValidationResult['errors'] = {};
-
-  const receiptRaw = raw.receipt_number != null ? String(raw.receipt_number).trim() : '';
-  if (!receiptRaw) {
-    errors.receipt_number = 'Receipt number is required';
-  } else {
-    const normalized = normalizeReceipt(receiptRaw);
-    if (normalized === null) {
-      errors.receipt_number = 'Receipt must be 5 digits (00000-99999)';
-    }
-  }
 
   const staff = raw.staff_name != null ? String(raw.staff_name).trim() : '';
   if (!staff) {
