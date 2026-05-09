@@ -19,6 +19,7 @@ import {
   formatStaffDisplayForCheckinsTable,
 } from '@/lib/checkins/staffDisplay';
 import EmployeeOperationalEditModal from '@/components/checkins/EmployeeOperationalEditModal';
+import { formatTime } from '@/lib/utils/formatTime';
 
 function stableCheckinRowId(c: CheckIn): string {
   if (c.id) return c.id;
@@ -27,6 +28,11 @@ function stableCheckinRowId(c: CheckIn): string {
 
 function orDash(value: string | undefined): string {
   return value?.trim() ? value.trim() : '—';
+}
+
+function displayTime(value: string | undefined): string {
+  const formatted = formatTime(value);
+  return formatted || orDash(value);
 }
 
 function typeCell(checkin: CheckIn, t: (key: TranslationKey) => string): string {
@@ -97,7 +103,7 @@ function RecentCheckinDetails({
               <dt style={labelStyle}>{t('date')}</dt>
               <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.date)}</dd>
               <dt style={labelStyle}>{t('time')}</dt>
-              <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.time)}</dd>
+              <dd style={{ margin: 0, ...valueStyle }}>{displayTime(checkin.time)}</dd>
               <dt style={labelStyle}>{t('label_staff_checkin')}</dt>
               <dd style={{ margin: 0, ...valueStyle }}>{formatStaffDisplayForCheckinsTable(checkin)}</dd>
               <dt style={labelStyle}>{t('car_plate')}</dt>
@@ -321,7 +327,7 @@ export default function EmployeeRecentCheckinsSection({
                 {checkins.map((c) => {
                   const rowId = stableCheckinRowId(c);
                   const expanded = expandedId === rowId;
-                  const timeShown = `${c.date ?? ''} ${c.time ?? ''}`.trim();
+                  const timeShown = `${c.date ?? ''} ${displayTime(c.time)}`.trim();
                   return (
                     <Fragment key={rowId}>
                       <tr style={{ borderBottom: '1px solid #f3f4f6' }}>

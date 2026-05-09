@@ -14,6 +14,7 @@ import {
 } from '@/lib/checkins/roomPaymentSplits';
 import { isValidRoomSubmissionKey } from '@/lib/checkins/roomSubmissionKey';
 import { ROOM_CHECKIN_SESSION_STORAGE_KEY } from '@/lib/checkins/roomDraft';
+import { formatTime } from '@/lib/utils/formatTime';
 
 export default function VerifyCheckinForm() {
   const router = useRouter();
@@ -93,7 +94,7 @@ export default function VerifyCheckinForm() {
     { labelKey: 'room_number' as const, value: formatRoomDisplay(formData.room_id, t('room')) },
     { labelKey: 'receipt_number' as const, value: formData.receipt_number },
     { labelKey: 'date' as const, value: formData.date },
-    { labelKey: 'time' as const, value: formData.time },
+    { labelKey: 'time' as const, value: formatTime(formData.time) || formData.time },
     { labelKey: 'car_plate' as const, value: formData.car_plate },
     { labelKey: 'car_make' as const, value: formData.car_make },
     {

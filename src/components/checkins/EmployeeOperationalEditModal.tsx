@@ -31,6 +31,7 @@ import {
   occupiedRoomKeysFromOtherActiveStays,
   roomOptionsForEmployeeRecentEdit,
 } from '@/lib/checkins/roomOccupancy';
+import { formatTime } from '@/lib/utils/formatTime';
 
 const COST_MAX = 1000;
 const AMOUNT_COLLECTED_MAX = 1000;
@@ -420,7 +421,12 @@ export default function EmployeeOperationalEditModal({
           </label>
           <label>
             <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('edit_field_time_readonly')}</div>
-            <input type="text" readOnly value={checkin.time ?? ''} style={{ ...inputStyle, background: '#f9fafb' }} />
+            <input
+              type="text"
+              readOnly
+              value={formatTime(checkin.time) || checkin.time || ''}
+              style={{ ...inputStyle, background: '#f9fafb' }}
+            />
           </label>
           <label>
             <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('edit_field_type_readonly')}</div>

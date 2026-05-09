@@ -4,6 +4,7 @@ import {
   buildSectionedData,
 } from './sectioning';
 import { formatPaymentBreakdownPipe, getRoomPaymentBreakdownDisplay } from '@/lib/checkins/roomPaymentSplits';
+import { formatTime } from '@/lib/utils/formatTime';
 
 export type ExportRow = Record<string, string | number | null>;
 
@@ -76,7 +77,7 @@ export function buildCheckinsExportRows(options: {
         rowType: ROW_TYPE_DATA,
         receipt_number: c.receipt_number,
         date: c.date,
-        time: c.time,
+        time: formatTime(c.time) || c.time,
         type: c.checkInType ?? 'room',
         room: roomCell(c),
         staff: c.staff_name ?? '',
@@ -104,7 +105,7 @@ export function buildCheckinsExportRows(options: {
         rowType: ROW_TYPE_DATA,
         receipt_number: c.receipt_number,
         date: c.date,
-        time: c.time,
+        time: formatTime(c.time) || c.time,
         type: c.checkInType ?? 'room',
         room: roomCell(c),
         staff: c.staff_name ?? '',

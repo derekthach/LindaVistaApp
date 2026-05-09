@@ -2,6 +2,7 @@ import { DateTime } from 'luxon';
 import type { Timestamp } from 'firebase-admin/firestore';
 import type { CheckIn, CheckInType, LineItem, RoomPaymentSplit, SummarizedItem, UserRole } from '@/types';
 import { normalizePaymentMethod } from '@/lib/checkins/paymentMethods';
+import { formatTime } from '@/lib/utils/formatTime';
 import {
   calculatePaymentSplitTotal,
   parsePaymentSplitsFromFirestore,
@@ -105,13 +106,16 @@ export function normalizeCheckin(id: string, data: Record<string, unknown>): Che
   const formatCheckoutTs = (raw: unknown): string | undefined => {
     if (raw == null) return undefined;
     try {
-      const d =
+      const ts =
         typeof (raw as { toDate?: () => Date }).toDate === 'function'
           ? (raw as { toDate: () => Date }).toDate()
           : null;
-      if (!d) return undefined;
-      const t = DateTime.fromJSDate(d, { zone: 'America/Puerto_Rico' });
-      return t.toFormat('MMM d, yyyy h:mm a');
+      if (!ts) return undefined;
+      const dt = DateTime.fromJSDate(ts, { zone: 'America/Puerto_Rico' });
+      if (!dt.isValid) return undefined;
+      const datePart = dt.toFormat('MMM d, yyyy');
+      const timePart = formatTime(ts);
+      return `${datePart} ${timePart}`.trim();
     } catch {
       return undefined;
     }

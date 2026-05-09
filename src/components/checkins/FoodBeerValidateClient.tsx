@@ -7,6 +7,7 @@ import type { TranslationKey } from '@/components/LanguageToggle';
 import { getDraft, clearDraft } from '@/lib/checkins/draft';
 import type { FoodBeerDraft } from '@/lib/checkins/draft';
 import { confirmFoodBeerCheckinAction } from '@/app/actions/checkin';
+import { formatTime } from '@/lib/utils/formatTime';
 
 function centsToCurrency(cents: number, locale: string): string {
   return new Intl.NumberFormat(locale === 'es' ? 'es-PR' : 'en-US', {
@@ -84,7 +85,7 @@ function ValidateContent({
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <strong>{t('time')}:</strong>
-          <span>{draft.time}</span>
+          <span>{formatTime(draft.time) || draft.time}</span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <strong>{t('staff_name')}:</strong>

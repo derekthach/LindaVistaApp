@@ -10,6 +10,7 @@ import {
 } from '@/lib/checkins/staffDisplay';
 import { useTranslation } from '@/lib/i18n/useTranslation';
 import type { TranslationKey } from '@/lib/i18n/translations';
+import { formatTime } from '@/lib/utils/formatTime';
 
 export interface CheckinEditRecord {
   id: string;
@@ -99,13 +100,15 @@ export default function EditHistoryPanel({
   const createdByRaw = formatStaffDisplayForCheckinsTable(checkin);
   const createdBy = createdByRaw.trim() ? createdByRaw : t('unknown');
   const createdAt =
-    checkin.date && checkin.time ? `${checkin.date} ${checkin.time}` : t('unknown');
+    checkin.date && checkin.time ? `${checkin.date} ${formatTime(checkin.time) || checkin.time}` : t('unknown');
 
   const formatEditedAt = (iso: string): string => {
     if (!iso) return t('unknown');
     const dt = DateTime.fromISO(iso, { zone: ZONE });
     if (!dt.isValid) return iso;
-    return language === 'es' ? dt.setLocale('es').toFormat('dd/MM/yyyy HH:mm') : dt.toFormat('yyyy-MM-dd HH:mm');
+    const datePart = language === 'es' ? dt.setLocale('es').toFormat('dd/MM/yyyy') : dt.toFormat('yyyy-MM-dd');
+    const timePart = formatTime(dt.toJSDate());
+    return `${datePart} ${timePart}`.trim();
   };
 
   const panelStyle: React.CSSProperties = {

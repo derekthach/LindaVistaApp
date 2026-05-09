@@ -11,6 +11,7 @@ import type { TranslationKey } from '@/lib/i18n/translations';
 import { getStaffOptionsForCheckout } from '@/lib/checkins/constants';
 import Button from '@/components/Button';
 import ManualStaffNameField from '@/components/checkins/ManualStaffNameField';
+import { formatTime } from '@/lib/utils/formatTime';
 
 const inputStyle = {
   width: '100%',
@@ -187,7 +188,7 @@ export default function RoomCheckoutModal({
             <strong>{t('label_room')}</strong> {formatRoomDisplay(checkin.room_id, t('room'))}
           </div>
           <div>
-            <strong>{t('label_date_time')}</strong> {checkin.date} {checkin.time}
+            <strong>{t('label_date_time')}</strong> {checkin.date} {formatTime(checkin.time) || checkin.time}
           </div>
           <div>
             <strong>{t('label_checked_in_by')}</strong> {checkin.staff_name || '—'}

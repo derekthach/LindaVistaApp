@@ -19,6 +19,7 @@ import { useTranslation } from '@/lib/i18n/useTranslation';
 import type { TranslationKey } from '@/lib/i18n/translations';
 import { formatRoomDisplay } from '@/lib/checkins/rooms';
 import { QuantitySoldInput } from '@/components/checkins/QuantitySoldInput';
+import { formatTime } from '@/lib/utils/formatTime';
 
 const COST_MAX = 1000;
 const AMOUNT_COLLECTED_MAX = 1000;
@@ -351,7 +352,7 @@ export default function EditCheckinModal({
               </label>
               <label>
                 <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('edit_field_time_readonly')}</div>
-                <input type="text" readOnly value={checkin?.time ?? ''} style={inputStyle} />
+                <input type="text" readOnly value={formatTime(checkin?.time) || checkin?.time || ''} style={inputStyle} />
               </label>
             </>
           )}

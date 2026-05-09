@@ -22,6 +22,7 @@ import {
   formatGuestAwarePersonDisplay,
   formatStaffDisplayForCheckinsTable,
 } from '@/lib/checkins/staffDisplay';
+import { formatTime } from '@/lib/utils/formatTime';
 
 function TrashIcon() {
   return (
@@ -100,6 +101,11 @@ function typeCell(checkin: CheckIn, t: (key: TranslationKey) => string): string 
 
 function orDash(value: string | undefined): string {
   return value?.trim() ? value.trim() : '—';
+}
+
+function displayTime(value: string | undefined): string {
+  const formatted = formatTime(value);
+  return formatted || orDash(value);
 }
 
 /** Firestore-backed rows always have `id`; avoid receipt-only keys so duplicate receipts stay distinct in the UI. */
@@ -206,7 +212,7 @@ function DetailsPanel({ checkin, t }: { checkin: CheckIn; t: (key: TranslationKe
                   </dd>
                   <dt style={labelStyle}>{t('detail_checkin_at_label')}</dt>
                   <dd style={{ margin: 0, ...valueStyle }}>
-                    {orDash(checkin.date)} {orDash(checkin.time)}
+                    {orDash(checkin.date)} {displayTime(checkin.time)}
                   </dd>
                   <dt style={labelStyle}>{t('detail_added_to_system')}</dt>
                   <dd style={{ margin: 0, ...valueStyle }}>
@@ -218,7 +224,7 @@ function DetailsPanel({ checkin, t }: { checkin: CheckIn; t: (key: TranslationKe
                   <dt style={labelStyle}>{t('date')}</dt>
                   <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.date)}</dd>
                   <dt style={labelStyle}>{t('time')}</dt>
-                  <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.time)}</dd>
+                  <dd style={{ margin: 0, ...valueStyle }}>{displayTime(checkin.time)}</dd>
                   <dt style={labelStyle}>{t('label_staff_checkin')}</dt>
                   <dd style={{ margin: 0, ...valueStyle }}>{formatStaffDisplayForCheckinsTable(checkin)}</dd>
                 </>
@@ -668,7 +674,7 @@ export default function CheckinsList({
                   <tr>
                     <td style={{ padding: 8 }}>{receiptCell(checkin)}</td>
                     <td style={{ padding: 8 }}>{checkin.date}</td>
-                    <td style={{ padding: 8 }}>{checkin.time}</td>
+                    <td style={{ padding: 8 }}>{displayTime(checkin.time)}</td>
                     <td style={{ padding: 8 }}>{typeCell(checkin, t)}</td>
                     <td style={{ padding: 8 }}>{roomCell(checkin, t)}</td>
                     <td style={{ padding: 8 }}>{formatStaffDisplayForCheckinsTable(checkin)}</td>
@@ -715,7 +721,7 @@ export default function CheckinsList({
         <tr>
           <td style={{ padding: 8 }}>{receiptCell(checkin)}</td>
           <td style={{ padding: 8 }}>{checkin.date}</td>
-          <td style={{ padding: 8 }}>{checkin.time}</td>
+          <td style={{ padding: 8 }}>{displayTime(checkin.time)}</td>
           <td style={{ padding: 8 }}>{typeCell(checkin, t)}</td>
           <td style={{ padding: 8 }}>{roomCell(checkin, t)}</td>
           <td style={{ padding: 8 }}>{formatStaffDisplayForCheckinsTable(checkin)}</td>
@@ -886,7 +892,7 @@ export default function CheckinsList({
               </div>
               <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
                 <dt style={{ fontWeight: 500 }}>{t('time')}</dt>
-                <dd style={{ margin: 0 }}>{pendingDelete.time}</dd>
+                <dd style={{ margin: 0 }}>{displayTime(pendingDelete.time)}</dd>
               </div>
               <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
                 <dt style={{ fontWeight: 500 }}>{t('label_room')}</dt>
