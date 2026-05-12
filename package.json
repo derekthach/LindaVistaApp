@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "generate:pwa-icons": "node scripts/generate-pwa-icons.mjs",
@@ -32,6 +32,7 @@
     "react-dom": "^19"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.5",
     "@types/better-sqlite3": "^7.6.13",
     "@types/luxon": "^3.7.1",
     "@types/node": "^22",

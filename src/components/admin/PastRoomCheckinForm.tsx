@@ -98,7 +98,7 @@ export default function PastRoomCheckinForm({ staffNames }: { staffNames: string
           <Button
             variant="ghost"
             onClick={() => {
-              window.location.assign('/admin/past-room-check-in');
+              window.location.assign('/admin/add-past-entry?tab=room');
             }}
           >
             {t('past_room_add_another')}
@@ -117,10 +117,6 @@ export default function PastRoomCheckinForm({ staffNames }: { staffNames: string
 
   return (
     <div className="card" style={cardStyle}>
-      <p style={{ margin: 0, fontSize: 14, color: '#374151', lineHeight: 1.5, textAlign: 'center' }}>
-        {t('past_room_checkin_intro')}
-      </p>
-
       {state?.error && (
         <div style={{ padding: 12, backgroundColor: '#fef2f2', color: '#991b1b', borderRadius: 8, fontSize: 14 }}>
           {state.error}

@@ -150,7 +150,8 @@ export default function EditCheckinModal({
       setItemId(resolved?.id ?? '');
       setQuantity(String(getFirstQuantity(checkin)));
       setAmountCollected(String(getFirstAmountCollected(checkin)));
-      if (checkin.is_past_entry === true) {
+      const isRoomCheckin = checkin.checkInType !== 'food' && checkin.checkInType !== 'beer';
+      if (checkin.is_past_entry === true && isRoomCheckin) {
         setPastCheckinDate(checkin.date ?? '');
         setPastCheckinTime(checkin.time ?? '');
       } else {
@@ -317,7 +318,7 @@ export default function EditCheckinModal({
           {t('aria_edit_checkin')}
         </h2>
         <form onSubmit={handleSubmit} style={{ display: 'grid', gap: 12 }}>
-          {isPastEntry ? (
+          {isPastEntry && isRoom ? (
             <>
               <label>
                 <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>

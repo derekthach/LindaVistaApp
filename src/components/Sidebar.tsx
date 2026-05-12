@@ -146,8 +146,8 @@ export default function Sidebar({
           </Link>
         )}
         {role === 'admin' && (
-          <Link href="/admin/past-room-check-in" style={linkStyle('/admin/past-room-check-in', true)}>
-            {t('nav_past_room_checkin')}
+          <Link href="/admin/add-past-entry" style={linkStyle('/admin/add-past-entry', true)}>
+            {t('nav_add_past_entry')}
           </Link>
         )}
       </nav>

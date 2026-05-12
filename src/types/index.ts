@@ -92,7 +92,7 @@ export interface CheckIn {
   cleaned_by?: string;
   /** Admin-added historical room stay: counts in reports but excluded from occupancy/checkout/cleaning. */
   is_past_entry?: boolean;
-  /** Firestore `source` when set (e.g. admin_past_room_checkin). */
+  /** Firestore `source` when set (e.g. admin_past_room_checkin, admin_past_entry). */
   past_entry_source?: string;
   /** When the admin saved this record (America/Puerto_Rico display string). */
   past_entry_system_created_at?: string;

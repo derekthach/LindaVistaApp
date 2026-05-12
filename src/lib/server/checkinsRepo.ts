@@ -29,6 +29,7 @@ import {
   isTargetRoomAvailableForEmployeeCorrection,
   sortRoomsForDisplay,
 } from '@/lib/checkins/roomOccupancy';
+import { normalizePaymentMethod } from '@/lib/checkins/paymentMethods';
 import { HttpError } from '@/lib/server/httpError';
 import { dedupeActiveRoomStaySnapshots } from '@/lib/server/activeRoomStayDedupe';
 import { logInfo } from '@/lib/server/log';
@@ -264,6 +265,98 @@ export async function createSimpleCheckin(
   if (data.created_by_role) doc.createdByRole = data.created_by_role;
 
   await checkinsRef.add(doc);
+}
+
+export interface CreatePastFoodBeverageCheckinInput {
+  date: string;
+  time: string;
+  staff_name: string;
+  item_id: string;
+  item_label: string;
+  quantity_sold: number;
+  amount_collected: number;
+  payment_method: string;
+  notes?: string;
+  adminUsername: string;
+  adminUserId?: string;
+}
+
+export type CreatePastBeerCheckinInput = CreatePastFoodBeverageCheckinInput;
+
+/**
+ * Admin-only historical food or beer sale. Same shape as `createSimpleCheckin` for that type,
+ * plus `isPastEntry`, `source`, and `paymentMethod`. No receipt number field.
+ */
+async function createPastFoodOrBeerCheckin(
+  checkInType: 'food' | 'beer',
+  data: CreatePastFoodBeverageCheckinInput
+): Promise<string> {
+  const db = getAdminDb();
+  const checkinsRef = db.collection(CHECKINS_COLLECTION);
+
+  const timeHm = String(data.time).trim().slice(0, 5);
+  const dt = DateTime.fromFormat(
+    `${data.date} ${timeHm}`,
+    'yyyy-MM-dd HH:mm',
+    { zone: 'America/Puerto_Rico' }
+  );
+  const checkInAt = dt.isValid ? Timestamp.fromDate(dt.toJSDate()) : Timestamp.now();
+
+  const lineItems: LineItem[] = [
+    {
+      itemId: data.item_id,
+      itemLabel: data.item_label,
+      quantitySold: data.quantity_sold,
+      amountCollected: data.amount_collected,
+    },
+  ];
+  const summarizedItems: SummarizedItem[] = [
+    {
+      itemId: data.item_id,
+      itemLabel: data.item_label,
+      totalQuantitySold: data.quantity_sold,
+      totalAmountCollected: data.amount_collected,
+    },
+  ];
+
+  const noteTrim = (data.notes ?? '').trim().slice(0, 250);
+  const paymentMethod = normalizePaymentMethod(data.payment_method);
+
+  const doc: Record<string, unknown> = {
+    checkInAt,
+    createdAt: Timestamp.now(),
+    checkInType,
+    staffName: data.staff_name,
+    employeeNameSnapshot: data.staff_name,
+    lineItems,
+    summarizedItems,
+    note: noteTrim,
+    paymentMethod,
+    isPastEntry: true,
+    source: 'admin_past_entry',
+    createdByRole: 'admin',
+    createdByUsername: data.adminUsername,
+  };
+  if (data.adminUserId?.trim()) {
+    doc.createdByUid = data.adminUserId.trim();
+  }
+
+  const ref = await checkinsRef.add(doc);
+  return ref.id;
+}
+
+/**
+ * Admin-only historical food & beverage sale.
+ */
+export async function createPastFoodBeverageCheckin(data: CreatePastFoodBeverageCheckinInput): Promise<string> {
+  return createPastFoodOrBeerCheckin('food', data);
+}
+
+/**
+ * Admin-only historical beer sale.
+ */
+export async function createPastBeerCheckin(data: CreatePastBeerCheckinInput): Promise<string> {
+  return createPastFoodOrBeerCheckin('beer', data);
 }
 
 /**

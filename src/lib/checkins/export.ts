@@ -3,7 +3,11 @@ import {
   SECTION_LABELS,
   buildSectionedData,
 } from './sectioning';
-import { formatPaymentBreakdownPipe, getRoomPaymentBreakdownDisplay } from '@/lib/checkins/roomPaymentSplits';
+import {
+  formatPaymentBreakdownPipe,
+  getRoomPaymentBreakdownDisplay,
+  getRoomPaymentMethodEnglishLabel,
+} from '@/lib/checkins/roomPaymentSplits';
 import { formatTime } from '@/lib/utils/formatTime';
 
 export type ExportRow = Record<string, string | number | null>;
@@ -24,7 +28,13 @@ function plateCell(checkin: CheckIn): string {
 }
 
 function roomPaymentBreakdownCsv(checkin: CheckIn): string {
-  if (checkin.checkInType === 'food' || checkin.checkInType === 'beer') return '—';
+  if (checkin.checkInType === 'food' || checkin.checkInType === 'beer') {
+    if (checkin.is_past_entry === true) {
+      const pm = getRoomPaymentMethodEnglishLabel(checkin.payment_method ?? '');
+      return `${pm} $${Number(checkin.cost).toFixed(2)}`;
+    }
+    return '—';
+  }
   const d = getRoomPaymentBreakdownDisplay(checkin);
   if (checkin.payment_splits && checkin.payment_splits.length > 0) {
     return formatPaymentBreakdownPipe(checkin.payment_splits);

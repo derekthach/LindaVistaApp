@@ -114,26 +114,11 @@ function stableCheckinRowId(c: CheckIn): string {
   return `legacy:${c.receipt_number}:${c.date}:${c.time}:${String(c.room_id)}:${c.cost}`;
 }
 
-function PastEntryTypeChip({ t }: { t: (key: TranslationKey) => string }) {
-  return (
-    <span
-      style={{
-        display: 'inline-block',
-        fontSize: 11,
-        fontWeight: 600,
-        padding: '4px 10px',
-        borderRadius: 9999,
-        background: '#fef3c7',
-        color: '#92400e',
-        border: '1px solid #fcd34d',
-        lineHeight: 1.2,
-        verticalAlign: 'middle',
-      }}
-    >
-      {t('past_entry_badge')}
-    </span>
-  );
-}
+const pastEntryMetaStyle: React.CSSProperties = {
+  fontSize: 11,
+  color: '#78716c',
+  fontWeight: 600,
+};
 
 function DetailsPanel({ checkin, t }: { checkin: CheckIn; t: (key: TranslationKey) => string }) {
   const isRoom = checkin.checkInType !== 'food' && checkin.checkInType !== 'beer';
@@ -173,29 +158,13 @@ function DetailsPanel({ checkin, t }: { checkin: CheckIn; t: (key: TranslationKe
           }}
         >
           <div style={columnStyle}>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                marginBottom: 8,
-              }}
-            >
-              {isPastEntry ? (
-                <span
-                  title={t('past_entry_badge')}
-                  aria-hidden
-                  style={{
-                    width: 4,
-                    alignSelf: 'stretch',
-                    minHeight: 14,
-                    borderRadius: 2,
-                    background: '#f59e0b',
-                    flexShrink: 0,
-                  }}
-                />
-              ) : null}
-              <span style={{ ...sectionHeaderStyle, marginBottom: 0 }}>{t('details_checkin_info')}</span>
+            <div style={{ marginBottom: 8 }}>
+              <span style={{ ...sectionHeaderStyle, marginBottom: 0 }}>
+                {t('details_checkin_info')}
+                {isPastEntry ? (
+                  <span style={{ ...pastEntryMetaStyle, marginLeft: 6 }}>({t('past_entry_badge')})</span>
+                ) : null}
+              </span>
             </div>
             <dl style={{ margin: 0, ...gridStyle } as React.CSSProperties}>
               <dt style={labelStyle}>{t('label_receipt')}</dt>
@@ -206,10 +175,6 @@ function DetailsPanel({ checkin, t }: { checkin: CheckIn; t: (key: TranslationKe
                 <>
                   <dt style={labelStyle}>{t('detail_employee_label')}</dt>
                   <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.staff_name)}</dd>
-                  <dt style={labelStyle}>{t('detail_entry_type')}</dt>
-                  <dd style={{ margin: 0, ...valueStyle }}>
-                    <PastEntryTypeChip t={t} />
-                  </dd>
                   <dt style={labelStyle}>{t('detail_checkin_at_label')}</dt>
                   <dd style={{ margin: 0, ...valueStyle }}>
                     {orDash(checkin.date)} {displayTime(checkin.time)}
@@ -296,20 +261,45 @@ function DetailsPanel({ checkin, t }: { checkin: CheckIn; t: (key: TranslationKe
           .join('; ')
       : '—';
 
+  const isPastFoodOrBeer = checkin.is_past_entry === true;
+
   return (
     <div style={{ padding: '12px 16px', backgroundColor: '#f9fafb', borderRadius: 8, margin: 4 }}>
       <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8, fontWeight: 600 }}>
         {checkin.checkInType === 'food' ? t('food_beverage_details') : t('beer_details')}
+        {isPastFoodOrBeer ? (
+          <span style={{ ...pastEntryMetaStyle, marginLeft: 6 }}>({t('past_entry_badge')})</span>
+        ) : null}
       </div>
       <dl style={{ margin: 0, ...gridStyle } as React.CSSProperties}>
         <dt style={labelStyle}>{t('table_staff')}</dt>
         <dd style={{ margin: 0, ...valueStyle }}>{formatStaffDisplayForCheckinsTable(checkin)}</dd>
+        {isPastFoodOrBeer ? (
+          <>
+            <dt style={labelStyle}>{t('date')}</dt>
+            <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.date)}</dd>
+            <dt style={labelStyle}>{t('time')}</dt>
+            <dd style={{ margin: 0, ...valueStyle }}>{displayTime(checkin.time)}</dd>
+            <dt style={labelStyle}>{t('payment_method')}</dt>
+            <dd style={{ margin: 0, ...valueStyle }}>
+              {t(getPaymentMethodTranslationKey(checkin.payment_method) as TranslationKey)}
+            </dd>
+          </>
+        ) : null}
         <dt style={labelStyle}>{t('items')}</dt>
         <dd style={{ margin: 0, ...valueStyle }}>{itemsSummary}</dd>
         <dt style={labelStyle}>{t('total')}</dt>
         <dd style={{ margin: 0, ...valueStyle }}>${Number(checkin.cost).toFixed(2)}</dd>
         <dt style={labelStyle}>{t('notes')}</dt>
         <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.note)}</dd>
+        {isPastFoodOrBeer ? (
+          <>
+            <dt style={labelStyle}>{t('detail_added_to_system')}</dt>
+            <dd style={{ margin: 0, ...valueStyle }}>
+              {orDash(checkin.past_entry_system_created_at)} {t('detail_added_by_admin')}
+            </dd>
+          </>
+        ) : null}
       </dl>
     </div>
   );
