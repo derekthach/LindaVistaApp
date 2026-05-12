@@ -23,9 +23,19 @@ export interface FirestoreUserDoc {
   createdAt: Timestamp;
   updatedAt: Timestamp;
   lastLoginAt: Timestamp | null;
+  /**
+   * When true, row is excluded from the Admin Employees table (soft remove).
+   * Historical check-ins keep `employee_name_snapshot` / ids as stored at check-in time.
+   */
+  hiddenFromEmployeeList?: boolean;
+  /** Set when the account is soft-deleted / removed from the employee list. */
+  deactivatedAt?: Timestamp | null;
 }
 
-export type PublicUserRow = Omit<FirestoreUserDoc, 'passwordHash'>;
+export type PublicUserRow = Omit<FirestoreUserDoc, 'passwordHash'> & {
+  /** Row is backed by a real `users/{id}` Firestore document (vs legacy JSON-only virtual row). */
+  firestoreBacked: boolean;
+};
 
 function db(): Firestore {
   return getAdminDb();
@@ -112,7 +122,7 @@ export async function listUsersPublic(): Promise<PublicUserRow[]> {
     const data = d.data() as FirestoreUserDoc;
     const { passwordHash: _ph, ...rest } = data;
     void _ph;
-    let row: PublicUserRow = { ...rest, id: d.id } as PublicUserRow;
+    let row: PublicUserRow = { ...rest, id: d.id, firestoreBacked: true };
 
     const jsonU = jsonById.get(d.id);
     if (jsonU && jsonU.role === 'employee') {
@@ -124,6 +134,7 @@ export async function listUsersPublic(): Promise<PublicUserRow[]> {
         username: docIdForUsername(jsonU.username),
         /** Firestore is auth source when present; merge JSON so missing/stale flags still match `users.json`. */
         mustChangePassword: fsMust || jsonMust,
+        firestoreBacked: true,
       };
     }
 
@@ -147,11 +158,16 @@ export async function listUsersPublic(): Promise<PublicUserRow[]> {
       createdAt: now,
       updatedAt: now,
       lastLoginAt: null,
+      hiddenFromEmployeeList: false,
+      deactivatedAt: null,
+      firestoreBacked: false,
     });
   }
 
   rows.sort((a, b) => a.username.localeCompare(b.username, 'en', { sensitivity: 'base' }));
-  return rows;
+  return rows.filter(
+    (r) => r.role === 'employee' && r.hiddenFromEmployeeList !== true
+  );
 }
 
 export async function countPendingPasswordResets(): Promise<number> {
@@ -165,7 +181,89 @@ export async function getUserPublicById(id: string): Promise<PublicUserRow | nul
   const data = snap.data() as FirestoreUserDoc;
   const { passwordHash: _ph, ...rest } = data;
   void _ph;
-  return { ...rest, id: snap.id } as PublicUserRow;
+  return { ...rest, id: snap.id, firestoreBacked: true };
+}
+
+const RESERVED_EMPLOYEE_USERNAMES = new Set(['admin', 'guest']);
+
+export function isReservedEmployeeUsername(username: string): boolean {
+  const id = docIdForUsername(username);
+  return !id || RESERVED_EMPLOYEE_USERNAMES.has(id);
+}
+
+export async function createEmployeeUserDoc(input: {
+  fullName: string;
+  username: string;
+  status: UserStatus;
+  passwordHash: string;
+}): Promise<void> {
+  if (isReservedEmployeeUsername(input.username)) {
+    throw new Error('RESERVED_USERNAME');
+  }
+  const id = docIdForUsername(input.username);
+  const ref = db().collection(USERS_COLLECTION).doc(id);
+  const snap = await ref.get();
+  if (snap.exists) {
+    throw new Error('DUPLICATE_USERNAME');
+  }
+  const now = Timestamp.now();
+  const fullName = input.fullName.trim() || id;
+  await ref.set({
+    id,
+    fullName,
+    nickname: null,
+    username: id,
+    passwordHash: input.passwordHash,
+    role: 'employee',
+    status: input.status,
+    mustChangePassword: true,
+    passwordResetRequested: false,
+    passwordResetRequestedAt: null,
+    createdAt: now,
+    updatedAt: now,
+    lastLoginAt: null,
+    hiddenFromEmployeeList: false,
+    deactivatedAt: null,
+  });
+}
+
+export async function updateEmployeeProfileAdmin(
+  userId: string,
+  updates: { fullName: string; status: UserStatus }
+): Promise<void> {
+  const ref = db().collection(USERS_COLLECTION).doc(userId.trim());
+  const snap = await ref.get();
+  if (!snap.exists) throw new Error('NOT_FOUND');
+  const data = snap.data() as FirestoreUserDoc;
+  if (data.role !== 'employee') throw new Error('NOT_EMPLOYEE');
+  const fullName = updates.fullName.trim();
+  if (!fullName) throw new Error('EMPTY_NAME');
+  const now = Timestamp.now();
+  await ref.update({
+    fullName,
+    status: updates.status,
+    updatedAt: now,
+  });
+}
+
+export async function softDeleteEmployeeFromAdminList(userId: string): Promise<void> {
+  const ref = db().collection(USERS_COLLECTION).doc(userId.trim());
+  const snap = await ref.get();
+  if (!snap.exists) throw new Error('NOT_FOUND');
+  const data = snap.data() as FirestoreUserDoc;
+  if (data.role !== 'employee') throw new Error('NOT_EMPLOYEE');
+  if (isGuestEmployeeUsername(data.username)) {
+    throw new Error('GUEST');
+  }
+  const now = Timestamp.now();
+  await ref.update({
+    status: 'inactive',
+    hiddenFromEmployeeList: true,
+    deactivatedAt: now,
+    updatedAt: now,
+    passwordResetRequested: false,
+    passwordResetRequestedAt: null,
+  });
 }
 
 export async function updatePasswordAndFlags(
@@ -230,6 +328,8 @@ export async function upsertEmployeeAdminPasswordReset(
     createdAt: now,
     updatedAt: now,
     lastLoginAt: null,
+    hiddenFromEmployeeList: false,
+    deactivatedAt: null,
   });
 }
 
@@ -272,6 +372,8 @@ export async function upsertEmployeePasswordAfterChange(
     createdAt: now,
     updatedAt: now,
     lastLoginAt: now,
+    hiddenFromEmployeeList: false,
+    deactivatedAt: null,
   });
 }
 

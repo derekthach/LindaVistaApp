@@ -25,6 +25,7 @@ function toTableRow(u: PublicUserRow): EmployeeTableRow {
     mustChangePassword: u.mustChangePassword === true,
     passwordResetRequested: u.passwordResetRequested === true,
     lastLoginAt,
+    firestoreBacked: u.firestoreBacked === true,
   };
 }
 

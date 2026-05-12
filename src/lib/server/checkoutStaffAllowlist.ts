@@ -20,6 +20,7 @@ export async function getMergedCheckoutStaffDisplayNames(): Promise<string[]> {
   for (const doc of snap.docs) {
     const data = doc.data() as Omit<FirestoreUserDoc, 'id'>;
     if (data.role !== 'employee') continue;
+    if (data.hiddenFromEmployeeList === true) continue;
     names.add(formatEmployeeNameSnapshot(data.fullName, data.nickname));
   }
   try {
