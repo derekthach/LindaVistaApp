@@ -156,10 +156,21 @@ export interface MonthlyComparisonData {
   years_available: string[];
 }
 
+/** Calendar month (America/Puerto_Rico): one point per day for the month containing bundle `now`. */
+export interface CalendarMonthRoomTrendData {
+  trendAxisIsos: string[];
+  roomCheckins: number[];
+  roomRevenue: number[];
+  /** Same length as `roomCheckins`; day *k* of prior calendar month vs day *k* of current month (0 if no such day). */
+  roomCheckinsPrevMonth: number[];
+  roomRevenuePrevMonth: number[];
+}
+
 /** Single-response dashboard payload (one check-in read range + optional cleanups query). */
 export interface DashboardBundleResponse {
   summaryMetrics: SummaryMetrics;
   sevenDayTrend: DashboardData;
+  calendarMonthRoomTrend: CalendarMonthRoomTrendData;
   monthlyRevenue: MonthlyComparisonData;
   roomUsage: RoomUsageData;
   employeeRoomActivity: EmployeeRoomActivityData;

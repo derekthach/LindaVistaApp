@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { DateTime } from 'luxon';
 import { requireAuth } from '@/server/auth/session';
+import { deriveCalendarMonthRoomTrendFromCheckins } from '@/lib/dashboard/calendarMonthTrendData';
 import { getDashboardBundle } from '@/lib/server/dashboardBundle';
 import { logError, logInfo } from '@/lib/server/log';
 import { HttpError, toErrorResponse } from '@/lib/server/httpError';
@@ -73,6 +74,7 @@ export async function GET(request: Request) {
           checkinsPrevWeek: [],
           revenuePrevWeek: [],
         },
+        calendarMonthRoomTrend: deriveCalendarMonthRoomTrendFromCheckins([], nowPr, ZONE),
         monthlyRevenue: {
           current_month: { name: '', year: nowPr.year, total: 0, car_count: 0 },
           prev_month: { name: '', year: nowPr.year, total: 0, car_count: 0 },

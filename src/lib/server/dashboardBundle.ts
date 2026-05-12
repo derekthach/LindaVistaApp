@@ -1,5 +1,6 @@
 import { DateTime } from 'luxon';
 import type {
+  CalendarMonthRoomTrendData,
   CheckIn,
   DashboardBundleResponse,
   DashboardData,
@@ -10,6 +11,7 @@ import type {
   SummaryMetrics,
 } from '@/types';
 import { isRoomCheckinRecord } from '@/lib/checkins/roomCheckinRecord';
+import { deriveCalendarMonthRoomTrendFromCheckins } from '@/lib/dashboard/calendarMonthTrendData';
 import { deriveMotelWeekTrendComparisonFromCheckins } from '@/lib/dashboard/motelWeekTrendData';
 import { deriveSummaryMetricsFromCheckins } from '@/lib/dashboard/summaryMetrics';
 import { getMotelBusinessWeekStart } from '@/lib/dates/motelBusinessWeek';
@@ -169,8 +171,17 @@ export async function getDashboardBundle(params: {
     params.revenueYear
   );
 
+  /** Ensures the in-memory list includes the full PR calendar month for “this month” charts even when other widgets use narrower ranges. */
+  const calendarMonthStart = now.startOf('month').toISODate() ?? '';
+  /** Prior calendar month (PR) for monthly trend comparison vs revenue widget’s `prevMonthStart`. */
+  const calendarPrevMonthStart = now.startOf('month').minus({ months: 1 }).toISODate() ?? '';
+  const calendarPrevMonthEnd =
+    now.startOf('month').minus({ days: 1 }).toISODate() ?? calendarPrevMonthStart;
+
   const starts = [
     prevWeekStart.toISODate() ?? '',
+    calendarMonthStart,
+    calendarPrevMonthStart,
     roomStart.toISODate() ?? '',
     currentMonthStart,
     prevMonthStart,
@@ -180,6 +191,7 @@ export async function getDashboardBundle(params: {
     roomEnd.toISODate() ?? '',
     currentMonthEnd,
     prevMonthEnd,
+    calendarPrevMonthEnd,
   ];
 
   const unionStart = minIso(...starts);
@@ -210,6 +222,11 @@ export async function getDashboardBundle(params: {
     checkinsPrevWeek: [],
     revenuePrevWeek: [],
   };
+  let calendarMonthRoomTrend: CalendarMonthRoomTrendData = deriveCalendarMonthRoomTrendFromCheckins(
+    [],
+    now,
+    ZONE
+  );
   let monthlyRevenue: MonthlyComparisonData;
   let roomUsage: RoomUsageData = { room_numbers: [], usage_counts: [] };
   let employeeRoomActivity: EmployeeRoomActivityData = {
@@ -227,6 +244,13 @@ export async function getDashboardBundle(params: {
     sevenDayTrend = deriveMotelWeekTrendComparisonFromCheckins(checkins, now, ZONE);
   } catch (e) {
     console.warn('[dashboard-bundle] seven-day trend derivation failed', e);
+  }
+
+  try {
+    calendarMonthRoomTrend = deriveCalendarMonthRoomTrendFromCheckins(checkins, now, ZONE);
+  } catch (e) {
+    console.warn('[dashboard-bundle] calendar month room trend derivation failed', e);
+    calendarMonthRoomTrend = deriveCalendarMonthRoomTrendFromCheckins([], now, ZONE);
   }
 
   try {
@@ -281,6 +305,7 @@ export async function getDashboardBundle(params: {
   return {
     summaryMetrics,
     sevenDayTrend,
+    calendarMonthRoomTrend,
     monthlyRevenue,
     roomUsage,
     employeeRoomActivity,

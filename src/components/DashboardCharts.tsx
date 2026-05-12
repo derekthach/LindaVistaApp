@@ -5,13 +5,15 @@ import { DateTime } from 'luxon';
 import LineChart from './charts/LineChart';
 import BarChart from './charts/BarChart';
 import DashboardSummaryCards from '@/components/DashboardSummaryCards';
+import { deriveCalendarMonthRoomTrendFromCheckins } from '@/lib/dashboard/calendarMonthTrendData';
 import { useTranslation } from '@/lib/i18n/useTranslation';
 import type {
+  CalendarMonthRoomTrendData,
   DashboardBundleResponse,
   DashboardData,
-  RoomUsageData,
-  MonthlyComparisonData,
   EmployeeRoomActivityData,
+  MonthlyComparisonData,
+  RoomUsageData,
   SummaryMetrics,
 } from '@/types';
 
@@ -60,6 +62,18 @@ const DEFAULT_METRICS: SummaryMetrics = {
   weekRevenueDeltaVsPrior: 0,
 };
 
+function fullMonthZerosCalendarTrend(): CalendarMonthRoomTrendData {
+  return deriveCalendarMonthRoomTrendFromCheckins([], DateTime.now().setZone(ZONE), ZONE);
+}
+
+const EMPTY_CALENDAR_MONTH_PENDING: CalendarMonthRoomTrendData = {
+  trendAxisIsos: [],
+  roomCheckins: [],
+  roomRevenue: [],
+  roomCheckinsPrevMonth: [],
+  roomRevenuePrevMonth: [],
+};
+
 function emptyMonthly(month: number, year: number, monthName: string, prevMonthName: string): MonthlyComparisonData {
   const prevMonth = month === 1 ? 12 : month - 1;
   const prevYear = month === 1 ? year - 1 : year;
@@ -90,6 +104,8 @@ export default function DashboardCharts() {
   const monthLabel = (m: number) => t(`month_short_${MONTH_KEY_SUFFIXES[m - 1]}` as 'month_short_jan');
   const [metrics, setMetrics] = useState<SummaryMetrics>(DEFAULT_METRICS);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [calendarMonthTrend, setCalendarMonthTrend] =
+    useState<CalendarMonthRoomTrendData>(EMPTY_CALENDAR_MONTH_PENDING);
   const [roomUsage, setRoomUsage] = useState<RoomUsageData | null>(null);
   const [bundleLoading, setBundleLoading] = useState(true);
   const [roomUsageMonth, setRoomUsageMonth] = useState(() =>
@@ -105,6 +121,7 @@ export default function DashboardCharts() {
 
   useEffect(() => {
     setBundleLoading(true);
+    setCalendarMonthTrend(EMPTY_CALENDAR_MONTH_PENDING);
     const params = new URLSearchParams({
       roomMonth: String(roomUsageMonth),
       roomYear: String(roomUsageYear),
@@ -120,6 +137,7 @@ export default function DashboardCharts() {
         if (!data) {
           setMetrics(DEFAULT_METRICS);
           setDashboard(EMPTY_DASHBOARD);
+          setCalendarMonthTrend(fullMonthZerosCalendarTrend());
           setRoomUsage(EMPTY_ROOM_USAGE);
           setMonthly(fallback);
           setEmployeeActivity(EMPTY_EMPLOYEE_ACTIVITY);
@@ -128,6 +146,7 @@ export default function DashboardCharts() {
         }
         setMetrics(data.summaryMetrics);
         setDashboard(data.sevenDayTrend);
+        setCalendarMonthTrend(data.calendarMonthRoomTrend ?? fullMonthZerosCalendarTrend());
         setRoomUsage(data.roomUsage);
         setMonthly({
           ...data.monthlyRevenue,
@@ -146,6 +165,7 @@ export default function DashboardCharts() {
       .catch(() => {
         setMetrics(DEFAULT_METRICS);
         setDashboard(EMPTY_DASHBOARD);
+        setCalendarMonthTrend(fullMonthZerosCalendarTrend());
         setRoomUsage(EMPTY_ROOM_USAGE);
         setMonthly(fallback);
         setEmployeeActivity(EMPTY_EMPLOYEE_ACTIVITY);
@@ -161,7 +181,17 @@ export default function DashboardCharts() {
     [dashboard, language]
   );
 
+  const calendarMonthLabels = useMemo(() => {
+    const isos = calendarMonthTrend.trendAxisIsos;
+    if (!isos.length) return [];
+    const loc = language === 'es' ? 'es' : 'en';
+    return isos.map((iso) =>
+      DateTime.fromISO(iso, { zone: ZONE }).setLocale(loc).toFormat('LLL d')
+    );
+  }, [calendarMonthTrend.trendAxisIsos, language]);
+
   const showTrendCharts = dashboard && dashboard.dates.length > 0;
+  const showCalendarMonthCharts = calendarMonthLabels.length > 0;
 
   return (
     <>
@@ -209,6 +239,59 @@ export default function DashboardCharts() {
                   yAxisIntegersOnly={false}
                   tooltipValueFormat={(v) => `$${v.toFixed(2)}`}
                 />
+              ) : (
+                <p style={{ color: '#6b7280', padding: 24 }}>{t('chart_no_revenue_7d')}</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, marginTop: 16 }}>
+          <div className="card" style={{ height: 320 }}>
+            <div>
+              <h3 style={{ marginBottom: 4 }}>{t('chart_room_checkins_calendar_month')}</h3>
+              <div style={{ fontSize: 12, color: '#9ca3af' }}>{t('chart_room_checkins_calendar_month_sub')}</div>
+            </div>
+            <div style={{ height: 220, marginTop: 8 }}>
+              {showCalendarMonthCharts ? (
+                <LineChart
+                  labels={calendarMonthLabels}
+                  data={calendarMonthTrend.roomCheckins}
+                  label={t('chart_compare_this_month')}
+                  comparisonData={calendarMonthTrend.roomCheckinsPrevMonth}
+                  comparisonLabel={t('chart_compare_previous_month')}
+                  comparisonColor="rgba(21, 128, 61, 0.65)"
+                  color="rgba(22, 163, 74, 1)"
+                  denseCategoryAxis
+                />
+              ) : bundleLoading ? (
+                <p style={{ color: '#6b7280', padding: 24 }}>{t('loading')}</p>
+              ) : (
+                <p style={{ color: '#6b7280', padding: 24 }}>{t('chart_no_checkins_7d')}</p>
+              )}
+            </div>
+          </div>
+          <div className="card" style={{ height: 320 }}>
+            <div>
+              <h3 style={{ marginBottom: 4 }}>{t('chart_revenue_calendar_month')}</h3>
+              <div style={{ fontSize: 12, color: '#9ca3af' }}>{t('chart_revenue_calendar_month_sub')}</div>
+            </div>
+            <div style={{ height: 220, marginTop: 8 }}>
+              {showCalendarMonthCharts ? (
+                <LineChart
+                  labels={calendarMonthLabels}
+                  data={calendarMonthTrend.roomRevenue}
+                  label={t('chart_compare_this_month')}
+                  comparisonData={calendarMonthTrend.roomRevenuePrevMonth}
+                  comparisonLabel={t('chart_compare_previous_month')}
+                  comparisonColor="rgba(202, 138, 4, 0.75)"
+                  color="rgba(234, 179, 8, 1)"
+                  yAxisIntegersOnly={false}
+                  tooltipValueFormat={(v) => `$${v.toFixed(2)}`}
+                  denseCategoryAxis
+                />
+              ) : bundleLoading ? (
+                <p style={{ color: '#6b7280', padding: 24 }}>{t('loading')}</p>
               ) : (
                 <p style={{ color: '#6b7280', padding: 24 }}>{t('chart_no_revenue_7d')}</p>
               )}

@@ -25,6 +25,7 @@ export default function LineChart({
   comparisonColor,
   yAxisIntegersOnly = true,
   tooltipValueFormat,
+  denseCategoryAxis = false,
 }: {
   labels: string[];
   data: number[];
@@ -37,6 +38,8 @@ export default function LineChart({
   yAxisIntegersOnly?: boolean;
   /** If set, tooltip shows this string per point (e.g. currency) */
   tooltipValueFormat?: (value: number) => string;
+  /** Rotate/skip x labels when many category ticks (e.g. full calendar month). */
+  denseCategoryAxis?: boolean;
 }) {
   const comparisonStroke = comparisonColor ?? color;
 
@@ -85,6 +88,17 @@ export default function LineChart({
         maintainAspectRatio: false,
         interaction: { mode: 'index', intersect: false },
         scales: {
+          ...(denseCategoryAxis
+            ? {
+                x: {
+                  ticks: {
+                    maxRotation: 45,
+                    autoSkip: true,
+                    maxTicksLimit: 16,
+                  },
+                },
+              }
+            : {}),
           y: {
             beginAtZero: true,
             ticks: yAxisIntegersOnly ? { precision: 0 } : {},
