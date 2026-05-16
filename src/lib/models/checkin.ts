@@ -1,7 +1,7 @@
 import { DateTime } from 'luxon';
 import type { Timestamp } from 'firebase-admin/firestore';
 import type { CheckIn, CheckInType, LineItem, RoomPaymentSplit, SummarizedItem, UserRole } from '@/types';
-import { normalizePaymentMethod } from '@/lib/checkins/paymentMethods';
+import { hasStoredPaymentMethodSingle, normalizePaymentMethod } from '@/lib/checkins/paymentMethods';
 import { formatTime } from '@/lib/utils/formatTime';
 import {
   calculatePaymentSplitTotal,
@@ -97,9 +97,16 @@ export function normalizeCheckin(id: string, data: Record<string, unknown>): Che
   }
 
   const paymentRaw = (data.paymentMethod ?? data.payment) as string | undefined;
-  const paymentMethod = isRoom && paymentSplitsParsed?.length
-    ? paymentSplitsParsed[0].method
-    : normalizePaymentMethod(paymentRaw);
+  let paymentMethod: string;
+  if (isRoom && paymentSplitsParsed?.length) {
+    paymentMethod = paymentSplitsParsed[0].method;
+  } else if (isRoom) {
+    paymentMethod = normalizePaymentMethod(paymentRaw);
+  } else {
+    paymentMethod = hasStoredPaymentMethodSingle(paymentRaw)
+      ? normalizePaymentMethod(String(paymentRaw).trim())
+      : '';
+  }
   const noteRaw = (data.note ?? data.notes) as string | undefined;
   const note = typeof noteRaw === 'string' && noteRaw.trim() ? noteRaw.trim() : undefined;
 

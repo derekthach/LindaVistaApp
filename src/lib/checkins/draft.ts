@@ -7,6 +7,7 @@ export interface FoodBeerDraft {
   staff_name: string;
   lineItems: LineItem[];
   notes?: string;
+  payment_method: string;
 }
 
 const DRAFT_KEY_FOOD = 'lv_checkin_draft_food';
@@ -23,7 +24,10 @@ export function getDraft(type: 'food' | 'beer'): FoodBeerDraft | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as FoodBeerDraft;
     if (parsed?.checkInType !== type || !Array.isArray(parsed.lineItems)) return null;
-    return parsed;
+    return {
+      ...parsed,
+      payment_method: typeof parsed.payment_method === 'string' ? parsed.payment_method : '',
+    };
   } catch {
     return null;
   }

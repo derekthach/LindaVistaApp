@@ -13,6 +13,7 @@ import {
 } from '@/lib/checkins/validation/updateCheckin';
 import { isEmployeeRoomNumberLockedForCompletedStayDoc } from '@/lib/checkins/roomOccupancy';
 import { Timestamp } from 'firebase-admin/firestore';
+import { hasStoredPaymentMethodSingle } from '@/lib/checkins/paymentMethods';
 import { HttpError } from '@/lib/server/httpError';
 import { logError } from '@/lib/server/log';
 
@@ -122,6 +123,12 @@ export async function PATCH(
         body.itemLabel != null ? String(body.itemLabel).trim() : itemId;
       const quantity = Math.floor(Number(body.quantity));
       const amountCollected = Number(body.amountCollected);
+      const docPaymentRaw = raw.paymentMethod ?? raw.payment;
+      const payment_method = hasStoredPaymentMethodSingle(
+        docPaymentRaw != null ? String(docPaymentRaw) : ''
+      )
+        ? String(docPaymentRaw).trim()
+        : '';
 
       await updateCheckinFoodBeer(
         id,
@@ -131,6 +138,7 @@ export async function PATCH(
           itemLabel,
           quantity,
           amountCollected,
+          payment_method,
         },
         editedBy
       );

@@ -29,7 +29,7 @@ import {
   isTargetRoomAvailableForEmployeeCorrection,
   sortRoomsForDisplay,
 } from '@/lib/checkins/roomOccupancy';
-import { normalizePaymentMethod } from '@/lib/checkins/paymentMethods';
+import { normalizePaymentMethod, hasStoredPaymentMethodSingle } from '@/lib/checkins/paymentMethods';
 import { HttpError } from '@/lib/server/httpError';
 import { dedupeActiveRoomStaySnapshots } from '@/lib/server/activeRoomStayDedupe';
 import { logInfo } from '@/lib/server/log';
@@ -228,6 +228,7 @@ export interface CreateSimpleCheckinInput {
   lineItems: LineItem[];
   summarizedItems: SummarizedItem[];
   notes?: string;
+  payment_method: string;
   employee_id?: string;
   created_by_username?: string;
   employee_name_snapshot?: string;
@@ -257,6 +258,7 @@ export async function createSimpleCheckin(
     lineItems: data.lineItems,
     summarizedItems: data.summarizedItems,
     note: data.notes ?? '',
+    paymentMethod: normalizePaymentMethod(data.payment_method),
   };
 
   if (data.employee_id) doc.employeeId = data.employee_id;
@@ -692,6 +694,7 @@ export interface UpdateCheckinFoodBeerInput {
   itemLabel: string;
   quantity: number;
   amountCollected: number;
+  payment_method: string;
 }
 
 /**
@@ -740,23 +743,36 @@ export async function updateCheckinFoodBeer(
   const existingSummarized = (data.summarizedItems as SummarizedItem[] | undefined) ?? [];
   const firstLine = existingLineItems[0];
   const firstSum = existingSummarized[0];
+  const beforePaymentRaw = data.paymentMethod ?? data.payment;
+  const beforePaymentStored = hasStoredPaymentMethodSingle(
+    beforePaymentRaw != null ? String(beforePaymentRaw) : ''
+  )
+    ? normalizePaymentMethod(String(beforePaymentRaw).trim())
+    : '';
+  const afterPmRaw = String(payload.payment_method ?? '').trim();
+  const afterPaymentStored = hasStoredPaymentMethodSingle(afterPmRaw)
+    ? normalizePaymentMethod(afterPmRaw)
+    : '';
   const before: Record<string, unknown> = {
     staffName: data.staffName ?? '',
     item: firstLine?.itemLabel ?? firstSum?.itemLabel ?? '',
     quantity: firstLine?.quantitySold ?? firstSum?.totalQuantitySold ?? 0,
     amountCollected: firstLine?.amountCollected ?? firstSum?.totalAmountCollected ?? 0,
+    paymentMethod: beforePaymentStored,
   };
   const after: Record<string, unknown> = {
     staffName: payload.staff_name,
     item: itemLabel,
     quantity: payload.quantity,
     amountCollected: payload.amountCollected,
+    paymentMethod: afterPaymentStored,
   };
   const changedFields: string[] = [];
   if (String(before.staffName) !== String(after.staffName)) changedFields.push('staffName');
   if (String(before.item) !== String(after.item)) changedFields.push('item');
   if (Number(before.quantity) !== Number(after.quantity)) changedFields.push('quantity');
   if (Number(before.amountCollected) !== Number(after.amountCollected)) changedFields.push('amountCollected');
+  if (String(before.paymentMethod) !== String(after.paymentMethod)) changedFields.push('paymentMethod');
 
   if (changedFields.length === 0) {
     return;
@@ -766,6 +782,7 @@ export async function updateCheckinFoodBeer(
     staffName: payload.staff_name,
     lineItems,
     summarizedItems,
+    paymentMethod: afterPaymentStored,
     updatedAt: Timestamp.now(),
     updatedBy: editedBy,
   };

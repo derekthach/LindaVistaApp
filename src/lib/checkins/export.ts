@@ -8,6 +8,7 @@ import {
   getRoomPaymentBreakdownDisplay,
   getRoomPaymentMethodEnglishLabel,
 } from '@/lib/checkins/roomPaymentSplits';
+import { hasStoredPaymentMethodSingle } from '@/lib/checkins/paymentMethods';
 import { formatTime } from '@/lib/utils/formatTime';
 
 export type ExportRow = Record<string, string | number | null>;
@@ -27,13 +28,15 @@ function plateCell(checkin: CheckIn): string {
   return checkin.car_plate ?? '';
 }
 
+function foodBeerPaymentCsv(checkin: CheckIn): string {
+  if (!hasStoredPaymentMethodSingle(checkin.payment_method)) return 'Not recorded';
+  const pm = getRoomPaymentMethodEnglishLabel(checkin.payment_method);
+  return `${pm} $${Number(checkin.cost).toFixed(2)}`;
+}
+
 function roomPaymentBreakdownCsv(checkin: CheckIn): string {
   if (checkin.checkInType === 'food' || checkin.checkInType === 'beer') {
-    if (checkin.is_past_entry === true) {
-      const pm = getRoomPaymentMethodEnglishLabel(checkin.payment_method ?? '');
-      return `${pm} $${Number(checkin.cost).toFixed(2)}`;
-    }
-    return '—';
+    return foodBeerPaymentCsv(checkin);
   }
   const d = getRoomPaymentBreakdownDisplay(checkin);
   if (checkin.payment_splits && checkin.payment_splits.length > 0) {

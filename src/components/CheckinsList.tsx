@@ -17,7 +17,7 @@ import {
   calculatePaymentSplitTotal,
   getRoomPaymentBreakdownDisplayLocalized,
 } from '@/lib/checkins/roomPaymentSplits';
-import { getPaymentMethodTranslationKey } from '@/lib/checkins/paymentMethods';
+import { getPaymentMethodTranslationKey, hasStoredPaymentMethodSingle } from '@/lib/checkins/paymentMethods';
 import {
   formatGuestAwarePersonDisplay,
   formatStaffDisplayForCheckinsTable,
@@ -280,12 +280,14 @@ function DetailsPanel({ checkin, t }: { checkin: CheckIn; t: (key: TranslationKe
             <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.date)}</dd>
             <dt style={labelStyle}>{t('time')}</dt>
             <dd style={{ margin: 0, ...valueStyle }}>{displayTime(checkin.time)}</dd>
-            <dt style={labelStyle}>{t('payment_method')}</dt>
-            <dd style={{ margin: 0, ...valueStyle }}>
-              {t(getPaymentMethodTranslationKey(checkin.payment_method) as TranslationKey)}
-            </dd>
           </>
         ) : null}
+        <dt style={labelStyle}>{t('payment_method')}</dt>
+        <dd style={{ margin: 0, ...valueStyle }}>
+          {hasStoredPaymentMethodSingle(checkin.payment_method)
+            ? t(getPaymentMethodTranslationKey(checkin.payment_method) as TranslationKey)
+            : t('payment_method_not_recorded')}
+        </dd>
         <dt style={labelStyle}>{t('items')}</dt>
         <dd style={{ margin: 0, ...valueStyle }}>{itemsSummary}</dd>
         <dt style={labelStyle}>{t('total')}</dt>
@@ -514,6 +516,21 @@ export default function CheckinsList({
           to: `$${Number(draft.amountCollected).toFixed(2)}`,
         });
       }
+      const fromPm = hasStoredPaymentMethodSingle(checkin.payment_method) ? String(checkin.payment_method).trim() : '';
+      const toPm = draft.payment_method?.trim() ?? '';
+      if (toPm !== fromPm) {
+        const fromLabel = fromPm
+          ? t(getPaymentMethodTranslationKey(fromPm) as TranslationKey)
+          : t('payment_method_not_recorded');
+        const toLabel = toPm
+          ? t(getPaymentMethodTranslationKey(toPm) as TranslationKey)
+          : t('payment_method_not_recorded');
+        lines.push({
+          label: t('diff_label_payment_method'),
+          from: fromLabel,
+          to: toLabel,
+        });
+      }
     }
     return lines;
   }
@@ -557,6 +574,7 @@ export default function CheckinsList({
                 itemLabel: pendingUpdate.draft.itemLabel,
                 quantity: pendingUpdate.draft.quantity,
                 amountCollected: pendingUpdate.draft.amountCollected,
+                payment_method: pendingUpdate.draft.payment_method,
               }
         ),
       });

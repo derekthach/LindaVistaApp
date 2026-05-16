@@ -35,3 +35,9 @@ export function getPaymentMethodTranslationKey(value: string): PaymentMethodValu
   const normalized = normalizePaymentMethod(value);
   return normalized;
 }
+
+/** True when a single stored method is present and canonical (food/beer or room single-method reads). */
+export function hasStoredPaymentMethodSingle(value: string | undefined | null): boolean {
+  const s = value != null ? String(value).trim().toLowerCase() : '';
+  return s !== '' && (PAYMENT_METHODS as readonly string[]).includes(s);
+}

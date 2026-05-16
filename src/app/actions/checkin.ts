@@ -156,6 +156,7 @@ export async function submitSimpleCheckinAction(
         : (session.displayName ?? session.username).trim()
       : ((formData.get('staff_name') as string) ?? '').trim();
   const notes = (formData.get('notes') as string)?.trim() || undefined;
+  const payment_method = (formData.get('payment_method') as string)?.trim() ?? '';
   let lineItems: LineItem[] = [];
   let summarizedItems: SummarizedItem[] = [];
   try {
@@ -178,6 +179,7 @@ export async function submitSimpleCheckinAction(
     checkInType,
     lineItems,
     notes,
+    payment_method,
   });
   if (!validation.valid) {
     const firstError = Object.values(validation.errors).find(Boolean)
@@ -195,6 +197,7 @@ export async function submitSimpleCheckinAction(
     lineItems,
     summarizedItems,
     notes,
+    payment_method,
     ...(session.role === 'employee'
       ? {
           employee_id: session.userId?.trim() || (guestEmployee ? 'guest' : undefined),
@@ -228,6 +231,7 @@ export async function confirmFoodBeerCheckinAction(
     checkInType: draft.checkInType,
     lineItems: draft.lineItems,
     notes: draft.notes,
+    payment_method: draft.payment_method,
   });
   if (!validation.valid) {
     const firstError = Object.values(validation.errors).find(Boolean)
@@ -245,6 +249,7 @@ export async function confirmFoodBeerCheckinAction(
     lineItems: draft.lineItems,
     summarizedItems,
     notes: draft.notes,
+    payment_method: draft.payment_method,
     ...(session.role === 'employee'
       ? {
           employee_id: session.userId?.trim() || (guestEmployee ? 'guest' : undefined),

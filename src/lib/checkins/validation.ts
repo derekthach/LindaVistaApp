@@ -1,5 +1,6 @@
 import type { CheckInType } from './types';
 import type { LineItem } from '@/types';
+import { hasStoredPaymentMethodSingle } from '@/lib/checkins/paymentMethods';
 
 /** Error codes returned by validation; map to bilingual messages in UI. */
 export const VALIDATION_CODES = {
@@ -17,6 +18,7 @@ export const VALIDATION_CODES = {
   requiredDate: 'requiredDate',
   requiredTime: 'requiredTime',
   invalidCheckInType: 'invalidCheckInType',
+  requiredPaymentMethod: 'requiredPaymentMethod',
 } as const;
 
 export type ValidationCode = (typeof VALIDATION_CODES)[keyof typeof VALIDATION_CODES];
@@ -34,6 +36,8 @@ export interface SimpleCheckinFormValues {
   checkInType: CheckInType;
   lineItems: LineItem[];
   notes?: string;
+  /** Required for food and beer normal check-ins. */
+  payment_method?: string;
 }
 
 export interface ValidationResult {
@@ -64,6 +68,13 @@ export function validateSimpleCheckin(values: SimpleCheckinFormValues): Validati
   }
   if (!values.checkInType || !['room', 'food', 'beer'].includes(values.checkInType)) {
     errors.checkInType = VALIDATION_CODES.invalidCheckInType;
+  }
+
+  if (values.checkInType === 'food' || values.checkInType === 'beer') {
+    const pm = values.payment_method?.trim() ?? '';
+    if (!hasStoredPaymentMethodSingle(pm)) {
+      errors.payment_method = VALIDATION_CODES.requiredPaymentMethod;
+    }
   }
 
   if (values.notes != null && values.notes.length > NOTES_MAX_LENGTH) {

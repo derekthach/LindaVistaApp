@@ -125,6 +125,7 @@ export async function PATCH(
         itemLabel: body.itemLabel,
         quantity: body.quantity,
         amountCollected: body.amountCollected,
+        payment_method: body.payment_method,
       };
       const validation = validateUpdateFoodBeerCheckin(raw as Record<string, unknown>);
       if (!validation.valid) {
@@ -139,6 +140,7 @@ export async function PATCH(
         itemLabel: raw.itemLabel != null ? String(raw.itemLabel).trim() : String(raw.itemId).trim(),
         quantity: Math.floor(Number(raw.quantity)),
         amountCollected: Number(raw.amountCollected),
+        payment_method: String(raw.payment_method ?? '').trim(),
       };
       await updateCheckinFoodBeer(id, payload, payload.staff_name);
     }

@@ -13,6 +13,7 @@ import { getDraft, setDraft } from '@/lib/checkins/draft';
 import { validateSimpleCheckin } from '@/lib/checkins/validation';
 import type { TranslationKey } from '@/components/LanguageToggle';
 import { QuantitySoldInput } from '@/components/checkins/QuantitySoldInput';
+import { PAYMENT_METHODS, getPaymentMethodTranslationKey } from '@/lib/checkins/paymentMethods';
 
 const SIMPLE_TYPES: ('food' | 'beer')[] = ['food', 'beer'];
 const QUANTITY_MAX = 50;
@@ -45,6 +46,7 @@ function SimpleCheckinFormContent({
   const [time, setTime] = useState(defaultTime);
   const [staffName, setStaffName] = useState('');
   const [notes, setNotes] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('');
   const [lineRows, setLineRows] = useState<LineItem[]>([initialRow()]);
   const [submitting, setSubmitting] = useState(false);
   const [hasAttemptedReview, setHasAttemptedReview] = useState(false);
@@ -69,8 +71,9 @@ function SimpleCheckinFormContent({
         checkInType: type,
         lineItems: lineItemsForValidation,
         notes: notes || undefined,
+        payment_method: paymentMethod,
       }),
-    [date, time, staffName, type, lineItemsForValidation, notes]
+    [date, time, staffName, type, lineItemsForValidation, notes, paymentMethod]
   );
 
   const displayErrors = validation.errors;
@@ -101,6 +104,7 @@ function SimpleCheckinFormContent({
             : draft.staff_name
       );
       setNotes(draft.notes ?? '');
+      setPaymentMethod(draft.payment_method ?? '');
       setLineRows(
         draft.lineItems.length > 0
           ? draft.lineItems.map((item) => ({
@@ -192,6 +196,7 @@ function SimpleCheckinFormContent({
       staff_name,
       lineItems,
       notes: notes?.trim() ? notes.trim().slice(0, 250) : undefined,
+      payment_method: paymentMethod,
     });
     router.push(`/checkins/new/${type}/validate`);
   };
@@ -417,6 +422,33 @@ function SimpleCheckinFormContent({
             <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 4 }}>{msg(displayErrors.itemsTotal)}</div>
           )}
         </section>
+
+        <label>
+          <div>{t('payment_method')}</div>
+          <select
+            value={paymentMethod}
+            onChange={(e) => setPaymentMethod(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              borderRadius: 8,
+              border: '1px solid #d1d5db',
+            }}
+            required
+          >
+            <option value="">{t('payment_method_select_placeholder')}</option>
+            {PAYMENT_METHODS.map((method) => (
+              <option key={method} value={method}>
+                {t(getPaymentMethodTranslationKey(method) as TranslationKey)}
+              </option>
+            ))}
+          </select>
+          {hasAttemptedReview && displayErrors.payment_method && (
+            <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 4 }}>
+              {msg(displayErrors.payment_method)}
+            </div>
+          )}
+        </label>
 
         <label>
           <div>

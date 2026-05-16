@@ -2,6 +2,8 @@ import { normalizeReceipt } from './room';
 import { isValidRoomId, isValidEmployeeRoomCorrection, parseEmployeeRoomPatchValue } from '../rooms';
 import { validatePaymentSplits } from '../roomPaymentSplits';
 import type { RoomPaymentSplit } from '@/types';
+import { hasStoredPaymentMethodSingle } from '@/lib/checkins/paymentMethods';
+import { VALIDATION_CODES } from '@/lib/checkins/validation';
 
 const ALLOWED_STAFF = ['Keith Thach', 'Duyen Thach', 'Derek Thach'] as const;
 
@@ -93,6 +95,7 @@ export interface UpdateFoodBeerPayload {
   itemLabel?: string;
   quantity: number;
   amountCollected: number;
+  payment_method: string;
 }
 
 export interface UpdateFoodBeerValidationResult {
@@ -212,6 +215,11 @@ export function validateUpdateFoodBeerCheckin(
     } else if (amount > AMOUNT_COLLECTED_MAX) {
       errors.amountCollected = `Amount cannot exceed $${AMOUNT_COLLECTED_MAX}`;
     }
+  }
+
+  const pm = raw.payment_method != null ? String(raw.payment_method).trim() : '';
+  if (!hasStoredPaymentMethodSingle(pm)) {
+    errors.payment_method = VALIDATION_CODES.requiredPaymentMethod;
   }
 
   return {

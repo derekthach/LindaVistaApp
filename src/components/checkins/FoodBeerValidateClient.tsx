@@ -8,6 +8,7 @@ import { getDraft, clearDraft } from '@/lib/checkins/draft';
 import type { FoodBeerDraft } from '@/lib/checkins/draft';
 import { confirmFoodBeerCheckinAction } from '@/app/actions/checkin';
 import { formatTime } from '@/lib/utils/formatTime';
+import { getPaymentMethodTranslationKey, hasStoredPaymentMethodSingle } from '@/lib/checkins/paymentMethods';
 
 function centsToCurrency(cents: number, locale: string): string {
   return new Intl.NumberFormat(locale === 'es' ? 'es-PR' : 'en-US', {
@@ -119,6 +120,15 @@ function ValidateContent({
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
           <strong>{t('total_amount_collected')}:</strong>
           <span>{centsToCurrency(totalCents, language)}</span>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <strong>{t('payment_method')}:</strong>
+          <span>
+            {hasStoredPaymentMethodSingle(draft.payment_method)
+              ? t(getPaymentMethodTranslationKey(draft.payment_method) as TranslationKey)
+              : t('payment_method_not_recorded')}
+          </span>
         </div>
 
         {draft.notes && (

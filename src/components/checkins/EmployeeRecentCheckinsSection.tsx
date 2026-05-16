@@ -12,7 +12,7 @@ import {
   calculatePaymentSplitTotal,
   getRoomPaymentBreakdownDisplayLocalized,
 } from '@/lib/checkins/roomPaymentSplits';
-import { getPaymentMethodTranslationKey } from '@/lib/checkins/paymentMethods';
+import { getPaymentMethodTranslationKey, hasStoredPaymentMethodSingle } from '@/lib/checkins/paymentMethods';
 import { carColorLabel } from '@/lib/checkins/colors';
 import {
   formatGuestAwarePersonDisplay,
@@ -182,6 +182,12 @@ function RecentCheckinDetails({
         <dd style={{ margin: 0, ...valueStyle }}>{formatReceiptNumber(checkin.receipt_number ?? '')}</dd>
         <dt style={labelStyle}>{t('table_staff')}</dt>
         <dd style={{ margin: 0, ...valueStyle }}>{formatStaffDisplayForCheckinsTable(checkin)}</dd>
+        <dt style={labelStyle}>{t('payment_method')}</dt>
+        <dd style={{ margin: 0, ...valueStyle }}>
+          {hasStoredPaymentMethodSingle(checkin.payment_method)
+            ? t(getPaymentMethodTranslationKey(checkin.payment_method) as TranslationKey)
+            : t('payment_method_not_recorded')}
+        </dd>
         <dt style={labelStyle}>{t('items')}</dt>
         <dd style={{ margin: 0, ...valueStyle }}>{itemsSummary}</dd>
         <dt style={labelStyle}>{t('total')}</dt>

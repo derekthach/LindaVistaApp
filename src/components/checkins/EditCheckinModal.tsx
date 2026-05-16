@@ -9,17 +9,16 @@ import { normalizeReceipt } from '@/lib/checkins/validation/room';
 import { formatReceiptNumber } from '@/lib/checkins/receipt';
 import { ALLOWED_STAFF } from '@/lib/checkins/validation/updateCheckin';
 import { parseRoomOptionValue, isValidRoomId, roomOptionsForEmployeeEdit } from '@/lib/checkins/rooms';
-import { PAYMENT_METHODS } from '@/lib/checkins/paymentMethods';
-import {
-  calculatePaymentSplitTotal,
-  validatePaymentSplits,
-} from '@/lib/checkins/roomPaymentSplits';
-import { getPaymentMethodTranslationKey } from '@/lib/checkins/paymentMethods';
+import { PAYMENT_METHODS, getPaymentMethodTranslationKey, hasStoredPaymentMethodSingle } from '@/lib/checkins/paymentMethods';
 import { useTranslation } from '@/lib/i18n/useTranslation';
 import type { TranslationKey } from '@/lib/i18n/translations';
 import { formatRoomDisplay } from '@/lib/checkins/rooms';
 import { QuantitySoldInput } from '@/components/checkins/QuantitySoldInput';
 import { formatTime } from '@/lib/utils/formatTime';
+import {
+  calculatePaymentSplitTotal,
+  validatePaymentSplits,
+} from '@/lib/checkins/roomPaymentSplits';
 
 const COST_MAX = 1000;
 const AMOUNT_COLLECTED_MAX = 1000;
@@ -39,6 +38,8 @@ export interface EditCheckinDraft {
   itemLabel?: string;
   quantity?: number;
   amountCollected?: number;
+  /** Food/beer single payment method (Firestore paymentMethod). */
+  payment_method?: string;
 }
 
 interface EditCheckinModalProps {
@@ -113,6 +114,7 @@ export default function EditCheckinModal({
   const [itemId, setItemId] = useState('');
   const [quantity, setQuantity] = useState('');
   const [amountCollected, setAmountCollected] = useState('');
+  const [foodPaymentMethod, setFoodPaymentMethod] = useState('');
   const [pastCheckinDate, setPastCheckinDate] = useState('');
   const [pastCheckinTime, setPastCheckinTime] = useState('');
 
@@ -150,6 +152,9 @@ export default function EditCheckinModal({
       setItemId(resolved?.id ?? '');
       setQuantity(String(getFirstQuantity(checkin)));
       setAmountCollected(String(getFirstAmountCollected(checkin)));
+      setFoodPaymentMethod(
+        hasStoredPaymentMethodSingle(checkin.payment_method) ? String(checkin.payment_method).trim() : ''
+      );
       const isRoomCheckin = checkin.checkInType !== 'food' && checkin.checkInType !== 'beer';
       if (checkin.is_past_entry === true && isRoomCheckin) {
         setPastCheckinDate(checkin.date ?? '');
@@ -230,7 +235,11 @@ export default function EditCheckinModal({
     staff_name !== (checkin?.staff_name ?? '') ||
     itemId !== getFirstItemId(checkin ?? ({} as CheckIn)) ||
     qtyNum !== getFirstQuantity(checkin ?? ({} as CheckIn)) ||
-    String(amountNum) !== String(getFirstAmountCollected(checkin ?? ({} as CheckIn)));
+    String(amountNum) !== String(getFirstAmountCollected(checkin ?? ({} as CheckIn))) ||
+    foodPaymentMethod !==
+      (checkin && hasStoredPaymentMethodSingle(checkin.payment_method)
+        ? String(checkin.payment_method).trim()
+        : '');
   const hasChanges = isRoom ? hasChangesRoom : hasChangesFoodBeer;
 
   const pastDateTimeOk =
@@ -239,7 +248,12 @@ export default function EditCheckinModal({
       /^\d{2}:\d{2}/.test(pastCheckinTime.trim()));
   const formValidRoom =
     receiptNormalized !== null && staffValid && splitsValid && isValidRoomId(room_id) && pastDateTimeOk;
-  const formValidFoodBeer = staffValid && itemId !== '' && qtyValid && amountValid;
+  const formValidFoodBeer =
+    staffValid &&
+    itemId !== '' &&
+    qtyValid &&
+    amountValid &&
+    hasStoredPaymentMethodSingle(foodPaymentMethod);
   const formValid = isRoom ? formValidRoom : formValidFoodBeer;
   const canSave = formValid && hasChanges && !saveDisabled;
 
@@ -267,6 +281,7 @@ export default function EditCheckinModal({
         itemLabel,
         quantity: qtyNum,
         amountCollected: amountNum,
+        payment_method: foodPaymentMethod,
       });
     }
   };
@@ -511,6 +526,22 @@ export default function EditCheckinModal({
             </>
           ) : (
             <>
+              <label>
+                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('payment_method')}</div>
+                <select
+                  value={foodPaymentMethod}
+                  onChange={(e) => setFoodPaymentMethod(e.target.value)}
+                  style={inputStyle}
+                  required
+                >
+                  <option value="">{t('payment_method_select_placeholder')}</option>
+                  {PAYMENT_METHODS.map((method) => (
+                    <option key={method} value={method}>
+                      {t(getPaymentMethodTranslationKey(method) as TranslationKey)}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label>
                 <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('diff_label_item')}</div>
                 <select
