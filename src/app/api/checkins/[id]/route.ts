@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/server/firebaseAdmin';
 import { requireAuth } from '@/server/auth/session';
 import { requireAdmin } from '@/lib/server/requireAdmin';
-import { deleteCheckinById, updateCheckin, updateCheckinFoodBeer } from '@/lib/server/checkinsRepo';
-import { validateUpdateCheckin, validateUpdateFoodBeerCheckin } from '@/lib/checkins/validation/updateCheckin';
-import { normalizeReceipt } from '@/lib/checkins/validation/room';
+import { adminApplyCheckinPatch, deleteCheckinById } from '@/lib/server/checkinsRepo';
 import { getMergedCheckoutStaffDisplayNames } from '@/lib/server/checkoutStaffAllowlist';
 import { logError, logInfo } from '@/lib/server/log';
 import { HttpError, toErrorResponse } from '@/lib/server/httpError';
@@ -45,14 +43,17 @@ export async function DELETE(
   }
 }
 
+function isLikelyValidationOrClientMessage(message: string): boolean {
+  return /validation|must|invalid|required|allowed list|digits|whole number|cannot be changed/i.test(
+    message
+  );
+}
+
 /**
- * Admin update check-in. Room: receipt, staff, payment, room. Food/Beer: staff, item, quantity, amountCollected.
- * Manual QA: Edit FOOD/BEER item, quantity, amountCollected; confirm diff; save; dashboard totals update.
+ * Admin PATCH: editable fields only; check-in type is fixed from the Firestore document.
+ * Persists Puerto Rico wall time + notes + type-specific totals.
  */
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const requestId = crypto.randomUUID();
   logInfo('api.checkins.patch.start', { requestId });
 
@@ -62,91 +63,30 @@ export async function PATCH(
     if (!id || typeof id !== 'string') {
       return NextResponse.json({ error: 'Missing or invalid id' }, { status: 400 });
     }
-    const body = await request.json().catch(() => ({}));
+    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
     const db = getAdminDb();
     const docSnap = await db.collection(CHECKINS_COLLECTION).doc(id).get();
     if (!docSnap.exists) {
       return NextResponse.json({ error: 'Check-in not found' }, { status: 404 });
     }
-    const checkInType = (docSnap.data()?.checkInType as string) ?? 'room';
-    const isRoom = checkInType === 'room';
 
-    if (isRoom) {
-      const raw = {
-        receipt_number: body.receipt_number,
-        staff_name: body.staff_name,
-        room_id: body.room_id,
-        payment_splits: body.payment_splits,
-      };
-      const isPastEntry = docSnap.data()?.isPastEntry === true;
-      let staffAllowlist: string[] | undefined;
-      try {
-        staffAllowlist = await getMergedCheckoutStaffDisplayNames();
-      } catch {
-        staffAllowlist = undefined;
-      }
-      const validation = validateUpdateCheckin(raw as Record<string, unknown>, true, {
-        ...(staffAllowlist && staffAllowlist.length > 0 ? { staffAllowlist } : {}),
-      });
-      if (!validation.valid || !validation.payment_splits) {
-        return NextResponse.json(
-          { error: Object.values(validation.errors).find(Boolean) ?? 'Validation failed', fieldErrors: validation.errors },
-          { status: 400 }
-        );
-      }
-      const receiptPadded = normalizeReceipt(String(raw.receipt_number ?? ''))!;
-      const checkInDate =
-        typeof body.check_in_date === 'string' ? body.check_in_date.trim() : '';
-      const checkInTime =
-        typeof body.check_in_time === 'string' ? body.check_in_time.trim() : '';
-      if (isPastEntry && (checkInDate || checkInTime)) {
-        const timeOk = /^\d{2}:\d{2}(:\d{2})?$/.test(checkInTime);
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(checkInDate) || !timeOk) {
-          return NextResponse.json(
-            { error: 'Invalid check-in date or time for past entry' },
-            { status: 400 }
-          );
-        }
-      }
-      const payload = {
-        receipt_number: receiptPadded,
-        staff_name: String(raw.staff_name).trim(),
-        room_id: raw.room_id as number | string,
-        payment_splits: validation.payment_splits,
-        ...(isPastEntry && checkInDate && checkInTime
-          ? { check_in_date: checkInDate, check_in_time: checkInTime }
-          : {}),
-      };
-      await updateCheckin(id, payload, payload.staff_name);
-    } else {
-      const raw = {
-        staff_name: body.staff_name,
-        itemId: body.itemId,
-        itemLabel: body.itemLabel,
-        quantity: body.quantity,
-        amountCollected: body.amountCollected,
-        payment_method: body.payment_method,
-      };
-      const validation = validateUpdateFoodBeerCheckin(raw as Record<string, unknown>);
-      if (!validation.valid) {
-        return NextResponse.json(
-          { error: Object.values(validation.errors).find(Boolean) ?? 'Validation failed', fieldErrors: validation.errors },
-          { status: 400 }
-        );
-      }
-      const payload = {
-        staff_name: String(raw.staff_name).trim(),
-        itemId: String(raw.itemId).trim(),
-        itemLabel: raw.itemLabel != null ? String(raw.itemLabel).trim() : String(raw.itemId).trim(),
-        quantity: Math.floor(Number(raw.quantity)),
-        amountCollected: Number(raw.amountCollected),
-        payment_method: String(raw.payment_method ?? '').trim(),
-      };
-      await updateCheckinFoodBeer(id, payload, payload.staff_name);
+    let staffAllowlist: string[] | undefined;
+    try {
+      staffAllowlist = await getMergedCheckoutStaffDisplayNames();
+    } catch {
+      staffAllowlist = undefined;
     }
+
+    const editedBy = typeof body.staff_name === 'string' ? body.staff_name.trim() : '';
+
+    await adminApplyCheckinPatch(id, body, editedBy, staffAllowlist);
+
     logInfo('api.checkins.patch.success', { requestId, id });
     return NextResponse.json({ ok: true });
   } catch (err) {
+    if (err instanceof Error && err.message && isLikelyValidationOrClientMessage(err.message)) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
     const httpErr =
       err instanceof HttpError
         ? err
@@ -154,7 +94,9 @@ export async function PATCH(
           ? new HttpError(401, 'UNAUTHORIZED')
           : err instanceof Error && err.message === 'Insufficient permissions'
             ? new HttpError(403, 'FORBIDDEN')
-            : new HttpError(500, 'UPDATE_FAILED', { message: err instanceof Error ? err.message : String(err) });
+            : new HttpError(500, 'UPDATE_FAILED', {
+                message: err instanceof Error ? err.message : String(err),
+              });
     logError('api.checkins.patch.error', { requestId, message: String(err) });
     const { status, body } = toErrorResponse(httpErr, requestId);
     const responseBody = status === 500 && err instanceof Error ? { ...body, error: err.message } : body;

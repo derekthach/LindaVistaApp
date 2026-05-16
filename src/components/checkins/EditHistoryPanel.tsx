@@ -11,6 +11,11 @@ import {
 import { useTranslation } from '@/lib/i18n/useTranslation';
 import type { TranslationKey } from '@/lib/i18n/translations';
 import { formatTime } from '@/lib/utils/formatTime';
+import {
+  getPaymentMethodTranslationKey,
+  hasStoredPaymentMethodSingle,
+  type PaymentMethodValue,
+} from '@/lib/checkins/paymentMethods';
 
 export interface CheckinEditRecord {
   id: string;
@@ -24,6 +29,10 @@ export interface CheckinEditRecord {
 const ZONE = 'America/Puerto_Rico';
 
 const FIELD_LABEL_KEYS: Record<string, TranslationKey> = {
+  checkInType: 'diff_label_checkin_type',
+  checkInAt: 'diff_label_checkin_datetime',
+  note: 'diff_label_notes',
+  paymentMethod: 'diff_label_payment_method',
   receiptNumber: 'label_receipt',
   staffName: 'table_staff',
   cost: 'cost',
@@ -36,9 +45,36 @@ const FIELD_LABEL_KEYS: Record<string, TranslationKey> = {
   roomCheckout: 'edit_history_field_room_checkout',
 };
 
-function formatDiffValue(field: string, value: unknown, unknownLabel: string): string {
+function formatDiffValue(
+  field: string,
+  value: unknown,
+  unknownLabel: string,
+  t: (k: TranslationKey) => string
+): string {
   if (value === undefined || value === null) return unknownLabel;
   switch (field) {
+    case 'checkInType': {
+      const s = String(value ?? '').trim();
+      if (s === 'food') return t('table_type_food');
+      if (s === 'beer') return t('table_type_beer');
+      if (s === 'room') return t('table_type_room');
+      return s || unknownLabel;
+    }
+    case 'checkInAt': {
+      const s = String(value ?? '').trim();
+      if (!s) return unknownLabel;
+      const dt = DateTime.fromISO(s, { zone: ZONE });
+      if (dt.isValid) return `${dt.toFormat('yyyy-MM-dd')} ${dt.toFormat('HH:mm')}`;
+      return s;
+    }
+    case 'note':
+      return String(value).trim() || unknownLabel;
+    case 'paymentMethod': {
+      const s = String(value ?? '').trim();
+      if (!s) return t('payment_method_not_recorded');
+      if (!hasStoredPaymentMethodSingle(s)) return s;
+      return t(getPaymentMethodTranslationKey(s as PaymentMethodValue) as TranslationKey);
+    }
     case 'receiptNumber':
       return formatReceiptNumber(value == null ? '' : String(value));
     case 'cost':
@@ -185,8 +221,8 @@ export default function EditHistoryPanel({
                   {edit.changedFields.map((field) => {
                     const labelKey = FIELD_LABEL_KEYS[field];
                     const label = labelKey ? t(labelKey) : field;
-                    const oldVal = formatDiffValue(field, edit.before[field], unknownLabel);
-                    const newVal = formatDiffValue(field, edit.after[field], unknownLabel);
+                    const oldVal = formatDiffValue(field, edit.before[field], unknownLabel, t);
+                    const newVal = formatDiffValue(field, edit.after[field], unknownLabel, t);
                     return (
                       <Fragment key={field}>
                         <dt style={labelStyle}>{label}</dt>

@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { CheckIn, UserRole, LineItem, SummarizedItem } from '@/types';
+import type { CheckIn, CheckInType, UserRole, LineItem, SummarizedItem } from '@/types';
 import Button from '@/components/Button';
 import { buildSectionedData, type SectionTotals } from '@/lib/checkins/sectioning';
 import { carColorLabel } from '@/lib/checkins/colors';
@@ -438,28 +438,47 @@ export default function CheckinsList({
     return Number(c.cost) || 0;
   }
 
+  function storedCheckInKind(c: CheckIn): CheckInType {
+    return c.checkInType === 'food' || c.checkInType === 'beer' ? c.checkInType : 'room';
+  }
+
   function buildDiffLines(checkin: CheckIn, draft: EditCheckinDraft): DiffLine[] {
     const lines: DiffLine[] = [];
-    const isRoom = checkin.checkInType !== 'food' && checkin.checkInType !== 'beer';
-    const receiptFrom = formatReceiptNumber(checkin.receipt_number ?? '');
-    if (isRoom && draft.receipt_number != null && draft.receipt_number !== receiptFrom) {
-      lines.push({ label: t('diff_label_receipt'), from: receiptFrom, to: draft.receipt_number });
+    const origKind = storedCheckInKind(checkin);
+
+    const fromDt = `${checkin.date ?? ''} ${checkin.time ?? ''}`.trim();
+    const toDt = `${draft.check_in_date ?? ''} ${draft.check_in_time ?? ''}`.trim();
+    if (fromDt !== toDt) {
+      lines.push({
+        label: t('diff_label_checkin_datetime'),
+        from: fromDt || '—',
+        to: toDt || '—',
+      });
     }
+
+    const noteFrom = (checkin.note ?? '').trim();
+    const noteTo = draft.note.trim();
+    if (noteFrom !== noteTo) {
+      lines.push({
+        label: t('diff_label_notes'),
+        from: noteFrom || '—',
+        to: noteTo || '—',
+      });
+    }
+
     if (draft.staff_name !== (checkin.staff_name ?? '')) {
       lines.push({ label: t('diff_label_staff'), from: checkin.staff_name ?? '', to: draft.staff_name });
     }
-    if (isRoom) {
-      if (checkin.is_past_entry === true) {
-        const fromDt = `${checkin.date ?? ''} ${checkin.time ?? ''}`.trim();
-        const toDt =
-          `${draft.check_in_date ?? checkin.date ?? ''} ${draft.check_in_time ?? checkin.time ?? ''}`.trim();
-        if (fromDt !== toDt) {
-          lines.push({
-            label: t('diff_label_checkin_datetime'),
-            from: fromDt || '—',
-            to: toDt || '—',
-          });
-        }
+
+    if (origKind === 'room') {
+      const receiptFrom = formatReceiptNumber(checkin.receipt_number ?? '');
+      const receiptTo = draft.receipt_number ?? '';
+      if (receiptTo !== receiptFrom) {
+        lines.push({
+          label: t('diff_label_receipt'),
+          from: receiptFrom,
+          to: receiptTo,
+        });
       }
       const fromPay = getRoomPaymentBreakdownDisplayLocalized(checkin, (k) => t(k as TranslationKey));
       const toSplits = draft.payment_splits;
@@ -493,44 +512,49 @@ export default function CheckinsList({
           to: String(draft.room_id),
         });
       }
-    } else {
-      const fromLabel = getFirstItemLabel(checkin);
-      if (draft.itemLabel != null && draft.itemLabel !== fromLabel) {
-        lines.push({
-          label: t('diff_label_item'),
-          from: fromLabel || t('diff_empty'),
-          to: draft.itemLabel,
-        });
-      }
-      if (draft.quantity != null && draft.quantity !== getFirstQuantity(checkin)) {
-        lines.push({
-          label: t('diff_label_quantity'),
-          from: String(getFirstQuantity(checkin)),
-          to: String(draft.quantity),
-        });
-      }
-      if (draft.amountCollected != null && Number(draft.amountCollected) !== getFirstAmountCollected(checkin)) {
-        lines.push({
-          label: t('diff_label_amount_collected'),
-          from: `$${getFirstAmountCollected(checkin).toFixed(2)}`,
-          to: `$${Number(draft.amountCollected).toFixed(2)}`,
-        });
-      }
-      const fromPm = hasStoredPaymentMethodSingle(checkin.payment_method) ? String(checkin.payment_method).trim() : '';
-      const toPm = draft.payment_method?.trim() ?? '';
-      if (toPm !== fromPm) {
-        const fromLabel = fromPm
-          ? t(getPaymentMethodTranslationKey(fromPm) as TranslationKey)
-          : t('payment_method_not_recorded');
-        const toLabel = toPm
-          ? t(getPaymentMethodTranslationKey(toPm) as TranslationKey)
-          : t('payment_method_not_recorded');
-        lines.push({
-          label: t('diff_label_payment_method'),
-          from: fromLabel,
-          to: toLabel,
-        });
-      }
+      return lines;
+    }
+
+    const fromLabel = getFirstItemLabel(checkin);
+    if (draft.itemLabel != null && draft.itemLabel !== fromLabel) {
+      lines.push({
+        label: t('diff_label_item'),
+        from: fromLabel || '—',
+        to: draft.itemLabel,
+      });
+    }
+    const fromQty = getFirstQuantity(checkin);
+    if (draft.quantity != null && draft.quantity !== fromQty) {
+      lines.push({
+        label: t('diff_label_quantity'),
+        from: String(fromQty),
+        to: String(draft.quantity),
+      });
+    }
+    const fromAmt = getFirstAmountCollected(checkin);
+    if (draft.amountCollected != null && Number(draft.amountCollected) !== fromAmt) {
+      lines.push({
+        label: t('diff_label_amount_collected'),
+        from: `$${fromAmt.toFixed(2)}`,
+        to: `$${Number(draft.amountCollected).toFixed(2)}`,
+      });
+    }
+    const fromPm = hasStoredPaymentMethodSingle(checkin.payment_method)
+      ? String(checkin.payment_method).trim()
+      : '';
+    const toPm = draft.payment_method?.trim() ?? '';
+    if (toPm !== fromPm) {
+      const fromPmLabel = fromPm
+        ? t(getPaymentMethodTranslationKey(fromPm) as TranslationKey)
+        : t('payment_method_not_recorded');
+      const toPmLabel = toPm
+        ? t(getPaymentMethodTranslationKey(toPm) as TranslationKey)
+        : t('payment_method_not_recorded');
+      lines.push({
+        label: t('diff_label_payment_method'),
+        from: fromPmLabel,
+        to: toPmLabel,
+      });
     }
     return lines;
   }
@@ -552,31 +576,26 @@ export default function CheckinsList({
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(
-          pendingUpdate.checkin.checkInType === 'room'
+        body: JSON.stringify({
+          checkInType: storedCheckInKind(pendingUpdate.checkin),
+          check_in_date: pendingUpdate.draft.check_in_date,
+          check_in_time: pendingUpdate.draft.check_in_time,
+          note: pendingUpdate.draft.note,
+          staff_name: pendingUpdate.draft.staff_name,
+          ...(storedCheckInKind(pendingUpdate.checkin) === 'room'
             ? {
                 receipt_number: pendingUpdate.draft.receipt_number,
-                staff_name: pendingUpdate.draft.staff_name,
                 room_id: pendingUpdate.draft.room_id,
                 payment_splits: pendingUpdate.draft.payment_splits,
-                ...(pendingUpdate.checkin.is_past_entry === true
-                  ? {
-                      check_in_date:
-                        pendingUpdate.draft.check_in_date ?? pendingUpdate.checkin.date ?? '',
-                      check_in_time:
-                        pendingUpdate.draft.check_in_time ?? pendingUpdate.checkin.time ?? '',
-                    }
-                  : {}),
               }
             : {
-                staff_name: pendingUpdate.draft.staff_name,
                 itemId: pendingUpdate.draft.itemId,
                 itemLabel: pendingUpdate.draft.itemLabel,
                 quantity: pendingUpdate.draft.quantity,
                 amountCollected: pendingUpdate.draft.amountCollected,
                 payment_method: pendingUpdate.draft.payment_method,
-              }
-        ),
+              }),
+        }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));

@@ -37,6 +37,11 @@ import { isRoomCheckinRecord } from '@/lib/checkins/roomCheckinRecord';
 import { deriveMotelWeekTrendComparisonFromCheckins } from '@/lib/dashboard/motelWeekTrendData';
 import { deriveSummaryMetricsFromCheckins } from '@/lib/dashboard/summaryMetrics';
 import { getMotelBusinessWeekStart } from '@/lib/dates/motelBusinessWeek';
+import {
+  validateUpdateCheckin,
+  validateUpdateFoodBeerCheckin,
+} from '@/lib/checkins/validation/updateCheckin';
+import { normalizeReceipt } from '@/lib/checkins/validation/room';
 
 const CHECKINS_COLLECTION = 'checkins';
 /** Idempotency ledger: one doc per room check-in confirmation (client submission_key). */
@@ -554,20 +559,137 @@ export async function checkoutRoomCheckin(id: string, payload: CheckoutRoomInput
 
 const EDITS_SUBCOLLECTION = 'edits';
 
+const ZONE = 'America/Puerto_Rico';
+
+/** Normalize persisted classification (Firestore: checkInType; legacy docs → room). */
+function normalizeFirestoreCheckInKind(data: Record<string, unknown>): CheckInType {
+  const raw = data.checkInType as string | undefined;
+  if (raw === 'food') return 'food';
+  if (raw === 'beer') return 'beer';
+  return 'room';
+}
+
+function timestampFromPuertoRicoWallDateTime(dateStr: string, timeHm: string): Timestamp | undefined {
+  const datePart = String(dateStr ?? '').trim();
+  const hm = String(timeHm ?? '').trim().slice(0, 5);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(datePart)) return undefined;
+  if (!/^\d{2}:\d{2}$/.test(hm)) return undefined;
+  const dt = DateTime.fromFormat(`${datePart} ${hm}`, 'yyyy-MM-dd HH:mm', { zone: ZONE });
+  if (!dt.isValid) return undefined;
+  return Timestamp.fromDate(dt.toJSDate());
+}
+
+function normalizeStoredDocNote(noteRaw: unknown): string {
+  if (noteRaw == null) return '';
+  return String(noteRaw).trim();
+}
+
+/**
+ * Admin PATCH: merge staff allowlist validation, wall-time `checkInAt`, and notes. Check-in type is fixed from the document.
+ */
+export async function adminApplyCheckinPatch(
+  id: string,
+  body: Record<string, unknown>,
+  editedBy: string,
+  staffAllowlist?: readonly string[]
+): Promise<void> {
+  const snapshot = await getAdminDb().collection(CHECKINS_COLLECTION).doc(id).get();
+  if (!snapshot.exists) throw new Error('Check-in not found');
+  const data = snapshot.data()!;
+
+  const staffOpts =
+    staffAllowlist && staffAllowlist.length > 0 ? ({ staffAllowlist } as const) : undefined;
+
+  const checkInDate = typeof body.check_in_date === 'string' ? body.check_in_date.trim() : '';
+  const checkInTime = typeof body.check_in_time === 'string' ? body.check_in_time.trim() : '';
+  if (!checkInDate || !checkInTime) {
+    throw new Error('Invalid check-in date or time');
+  }
+  if (!timestampFromPuertoRicoWallDateTime(checkInDate, checkInTime)) {
+    throw new Error('Invalid check-in date or time');
+  }
+
+  const docKind = normalizeFirestoreCheckInKind(data);
+  const reqTypeRaw = body.checkInType;
+  if (reqTypeRaw === 'room' || reqTypeRaw === 'food' || reqTypeRaw === 'beer') {
+    if (reqTypeRaw !== docKind) {
+      throw new Error('Check-in type cannot be changed');
+    }
+  }
+
+  if (docKind === 'room') {
+    const rawRoom = {
+      receipt_number: body.receipt_number,
+      staff_name: body.staff_name,
+      room_id: body.room_id,
+      payment_splits: body.payment_splits,
+    };
+    const validation = validateUpdateCheckin(rawRoom as Record<string, unknown>, true, staffOpts);
+    if (!validation.valid || !validation.payment_splits) {
+      throw new Error(Object.values(validation.errors).find(Boolean) ?? 'Validation failed');
+    }
+    const padded = normalizeReceipt(String(rawRoom.receipt_number ?? ''));
+    if (padded === null) throw new Error('Invalid receipt number');
+    await updateCheckin(
+      id,
+      {
+        receipt_number: padded,
+        staff_name: String(rawRoom.staff_name).trim(),
+        room_id: rawRoom.room_id as number | string,
+        payment_splits: validation.payment_splits,
+        check_in_date: checkInDate,
+        check_in_time: checkInTime,
+        note: typeof body.note === 'string' ? String(body.note).trim() : undefined,
+      },
+      editedBy
+    );
+    return;
+  }
+
+  const rawFb = {
+    staff_name: body.staff_name,
+    itemId: body.itemId,
+    itemLabel: body.itemLabel,
+    quantity: body.quantity,
+    amountCollected: body.amountCollected,
+    payment_method: body.payment_method,
+  };
+  const validation = validateUpdateFoodBeerCheckin(rawFb as Record<string, unknown>, staffOpts);
+  if (!validation.valid) {
+    throw new Error(Object.values(validation.errors).find(Boolean) ?? 'Validation failed');
+  }
+  await updateCheckinFoodBeer(
+    id,
+    {
+      staff_name: String(rawFb.staff_name).trim(),
+      itemId: String(rawFb.itemId).trim(),
+      itemLabel:
+        rawFb.itemLabel != null ? String(rawFb.itemLabel).trim() : String(rawFb.itemId).trim(),
+      quantity: Math.floor(Number(rawFb.quantity)),
+      amountCollected: Number(rawFb.amountCollected),
+      payment_method: String(rawFb.payment_method ?? '').trim(),
+      check_in_date: checkInDate,
+      check_in_time: checkInTime,
+      ...(typeof body.note === 'string' ? { note: String(body.note).trim() } : {}),
+    },
+    editedBy
+  );
+}
+
 export interface UpdateCheckinInput {
   receipt_number: string;
   staff_name: string;
   room_id?: number | string;
   payment_splits: RoomPaymentSplit[];
-  /** Only applied when the doc has `isPastEntry === true`. */
+  /** When valid, updates Firestore checkInAt in America/Puerto_Rico wall time. */
   check_in_date?: string;
   check_in_time?: string;
+  /** When defined — including `''` — persists trimmed note. Omit for legacy callers (no note change). */
+  note?: string;
 }
 
-const ZONE = 'America/Puerto_Rico';
-
 /**
- * Update check-in editable fields. For past-entry docs, optional check_in_date/time updates `checkInAt`.
+ * Update editable fields on a room check-in doc. Applies checkInAt from wall date/time when provided.
  * Writes audit snapshot to checkins/{id}/edits. Editing receipt does not affect next receipt counter.
  */
 export async function updateCheckin(
@@ -584,23 +706,22 @@ export async function updateCheckin(
     throw new Error('Check-in not found');
   }
   const data = snapshot.data()!;
-  const checkInType = (data.checkInType as string) ?? 'room';
-  if (checkInType !== 'room') {
+  if (normalizeFirestoreCheckInKind(data) !== 'room') {
     throw new Error('Check-in is not a room record');
   }
 
   const isPastEntry = data.isPastEntry === true;
+
   let newCheckInAt: Timestamp | undefined;
-  if (isPastEntry && payload.check_in_date && payload.check_in_time) {
-    const timeHm = String(payload.check_in_time).trim().slice(0, 5);
-    const dt = DateTime.fromFormat(
-      `${payload.check_in_date} ${timeHm}`,
-      'yyyy-MM-dd HH:mm',
-      { zone: ZONE }
-    );
-    if (dt.isValid) {
-      newCheckInAt = Timestamp.fromDate(dt.toJSDate());
+  if (typeof payload.check_in_date === 'string' && payload.check_in_date.trim()) {
+    if (typeof payload.check_in_time !== 'string' || !payload.check_in_time.trim()) {
+      throw new Error('Check-in date and time are required together');
     }
+    newCheckInAt = timestampFromPuertoRicoWallDateTime(
+      payload.check_in_date.trim(),
+      payload.check_in_time.trim()
+    );
+    if (!newCheckInAt) throw new Error('Invalid check-in date or time');
   }
 
   const receiptNumber = formatReceiptNumber(payload.receipt_number);
@@ -614,26 +735,32 @@ export async function updateCheckin(
       ? DateTime.fromJSDate(beforeTs.toDate(), { zone: ZONE }).toISO() ?? ''
       : '';
 
+  const noteBefore = normalizeStoredDocNote(data.note ?? data.notes);
+  const noteAfter =
+    payload.note !== undefined ? String(payload.note).trim() : noteBefore;
+
   const before: Record<string, unknown> = {
     receiptNumber: data.receiptNumber ?? '',
     staffName: data.staffName ?? '',
     roomId: data.roomId != null && data.roomId !== '' ? data.roomId : 0,
     paymentBreakdown: formatPaymentBreakdownForAuditDoc(data),
     totalCollected: getRoomCollectedTotalFromDoc(data),
-    ...(isPastEntry ? { checkInAt: beforeCheckInIso } : {}),
+    checkInAt: beforeCheckInIso,
+    note: noteBefore,
   };
+  let afterCheckInIso = beforeCheckInIso;
+  if (newCheckInAt && typeof newCheckInAt.toDate === 'function') {
+    afterCheckInIso =
+      DateTime.fromJSDate(newCheckInAt.toDate(), { zone: ZONE }).toISO() ?? beforeCheckInIso;
+  }
   const after: Record<string, unknown> = {
     receiptNumber,
     staffName: payload.staff_name,
     roomId: payload.room_id ?? 0,
     paymentBreakdown: breakdownAfter,
     totalCollected: totalAfter,
-    ...(isPastEntry && newCheckInAt
-      ? {
-          checkInAt:
-            DateTime.fromJSDate(newCheckInAt.toDate(), { zone: ZONE }).toISO() ?? beforeCheckInIso,
-        }
-      : {}),
+    checkInAt: afterCheckInIso,
+    note: noteAfter,
   };
 
   const changedFields: string[] = [];
@@ -646,10 +773,13 @@ export async function updateCheckin(
   if (Number(before.totalCollected) !== Number(after.totalCollected)) {
     changedFields.push('totalCollected');
   }
-  if (isPastEntry && newCheckInAt && beforeTs && typeof beforeTs.toMillis === 'function') {
+  if (newCheckInAt && typeof beforeTs?.toMillis === 'function') {
     if (beforeTs.toMillis() !== newCheckInAt.toMillis()) {
       changedFields.push('checkInAt');
     }
+  }
+  if (String(before.note) !== String(after.note)) {
+    changedFields.push('note');
   }
 
   if (changedFields.length === 0) {
@@ -664,10 +794,11 @@ export async function updateCheckin(
     totalCollected: totalAfter,
     paymentSplits: splits,
     paymentMethod: splits[0]?.method,
+    note: noteAfter,
     updatedAt: Timestamp.now(),
     updatedBy: editedBy,
   };
-  if (isPastEntry && newCheckInAt && changedFields.includes('checkInAt')) {
+  if (changedFields.includes('checkInAt') && newCheckInAt) {
     updateData.checkInAt = newCheckInAt;
   }
   if (isPastEntry && changedFields.includes('staffName')) {
@@ -695,11 +826,15 @@ export interface UpdateCheckinFoodBeerInput {
   quantity: number;
   amountCollected: number;
   payment_method: string;
+  check_in_date?: string;
+  check_in_time?: string;
+  /** When defined (including ''); omit to preserve existing note unchanged. */
+  note?: string;
 }
 
 /**
  * Update food/beer check-in. Persists lineItems and summarizedItems (single item).
- * Cost is derived on read via totalAmountCollected; dashboard will reflect new totals after refresh.
+ * Cost is derived on read via totalAmountCollected; dashboard reflects new totals after refresh.
  */
 export async function updateCheckinFoodBeer(
   id: string,
@@ -715,9 +850,21 @@ export async function updateCheckinFoodBeer(
     throw new Error('Check-in not found');
   }
   const data = snapshot.data()!;
-  const checkInType = (data.checkInType as string) ?? 'room';
-  if (checkInType !== 'food' && checkInType !== 'beer') {
+  const docKind = normalizeFirestoreCheckInKind(data);
+  if (docKind !== 'food' && docKind !== 'beer') {
     throw new Error('Check-in is not food or beer');
+  }
+
+  let newCheckInAt: Timestamp | undefined;
+  if (typeof payload.check_in_date === 'string' && payload.check_in_date.trim()) {
+    if (typeof payload.check_in_time !== 'string' || !payload.check_in_time.trim()) {
+      throw new Error('Check-in date and time are required together');
+    }
+    newCheckInAt = timestampFromPuertoRicoWallDateTime(
+      payload.check_in_date.trim(),
+      payload.check_in_time.trim()
+    );
+    if (!newCheckInAt) throw new Error('Invalid check-in date or time');
   }
 
   const itemId = payload.itemId.trim();
@@ -753,7 +900,25 @@ export async function updateCheckinFoodBeer(
   const afterPaymentStored = hasStoredPaymentMethodSingle(afterPmRaw)
     ? normalizePaymentMethod(afterPmRaw)
     : '';
+
+  const beforeTs = data.checkInAt as Timestamp | undefined;
+  const noteBefore = normalizeStoredDocNote(data.note ?? data.notes);
+  const noteAfter =
+    payload.note !== undefined ? String(payload.note).trim() : noteBefore;
+
+  const beforeCheckInIso =
+    beforeTs && typeof beforeTs.toDate === 'function'
+      ? DateTime.fromJSDate(beforeTs.toDate(), { zone: ZONE }).toISO() ?? ''
+      : '';
+  let afterCheckInIso = beforeCheckInIso;
+  if (newCheckInAt && typeof newCheckInAt.toDate === 'function') {
+    afterCheckInIso =
+      DateTime.fromJSDate(newCheckInAt.toDate(), { zone: ZONE }).toISO() ?? beforeCheckInIso;
+  }
+
   const before: Record<string, unknown> = {
+    checkInAt: beforeCheckInIso,
+    note: noteBefore,
     staffName: data.staffName ?? '',
     item: firstLine?.itemLabel ?? firstSum?.itemLabel ?? '',
     quantity: firstLine?.quantitySold ?? firstSum?.totalQuantitySold ?? 0,
@@ -761,6 +926,8 @@ export async function updateCheckinFoodBeer(
     paymentMethod: beforePaymentStored,
   };
   const after: Record<string, unknown> = {
+    checkInAt: afterCheckInIso,
+    note: noteAfter,
     staffName: payload.staff_name,
     item: itemLabel,
     quantity: payload.quantity,
@@ -768,6 +935,14 @@ export async function updateCheckinFoodBeer(
     paymentMethod: afterPaymentStored,
   };
   const changedFields: string[] = [];
+  if (newCheckInAt && typeof beforeTs?.toMillis === 'function') {
+    if (beforeTs.toMillis() !== newCheckInAt.toMillis()) {
+      changedFields.push('checkInAt');
+    }
+  }
+  if (String(before.note) !== String(after.note)) {
+    changedFields.push('note');
+  }
   if (String(before.staffName) !== String(after.staffName)) changedFields.push('staffName');
   if (String(before.item) !== String(after.item)) changedFields.push('item');
   if (Number(before.quantity) !== Number(after.quantity)) changedFields.push('quantity');
@@ -783,9 +958,13 @@ export async function updateCheckinFoodBeer(
     lineItems,
     summarizedItems,
     paymentMethod: afterPaymentStored,
+    note: noteAfter,
     updatedAt: Timestamp.now(),
     updatedBy: editedBy,
   };
+  if (changedFields.includes('checkInAt') && newCheckInAt) {
+    updateData.checkInAt = newCheckInAt;
+  }
 
   await ref.update(updateData);
   try {

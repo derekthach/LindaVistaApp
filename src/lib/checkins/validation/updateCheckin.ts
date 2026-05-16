@@ -177,13 +177,19 @@ export function validateEmployeeOperationalRoom(
 }
 
 export function validateUpdateFoodBeerCheckin(
-  raw: Record<string, unknown>
+  raw: Record<string, unknown>,
+  options?: ValidateUpdateCheckinOptions
 ): UpdateFoodBeerValidationResult {
   const errors: UpdateFoodBeerValidationResult['errors'] = {};
 
   const staff = raw.staff_name != null ? String(raw.staff_name).trim() : '';
+  const allowlist = options?.staffAllowlist;
   if (!staff) {
     errors.staff_name = 'Staff is required';
+  } else if (allowlist && allowlist.length > 0) {
+    if (!allowlist.includes(staff)) {
+      errors.staff_name = 'Staff must be selected from the allowed list';
+    }
   } else if (!ALLOWED_STAFF.includes(staff as (typeof ALLOWED_STAFF)[number])) {
     errors.staff_name = 'Staff must be one of: ' + ALLOWED_STAFF.join(', ');
   }
