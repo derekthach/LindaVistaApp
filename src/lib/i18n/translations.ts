@@ -147,6 +147,7 @@ export const translations = {
     employee_recent_room_locked_help:
       'Room number is locked because this stay has already been checked out and cleaned.',
     employee_recent_page_link: 'View my recent check-ins',
+    employee_recent_totals_heading: 'Your recent totals',
     loading: 'Loading…',
     error_failed_to_load: 'Failed to load',
     no_rooms_checked_in: 'No rooms are currently checked in.',
@@ -609,6 +610,7 @@ export const translations = {
     employee_recent_room_locked_help:
       'La habitación está bloqueada porque esta estadía ya fue finalizada y limpiada.',
     employee_recent_page_link: 'Ver mis registros recientes',
+    employee_recent_totals_heading: 'Tus totales recientes',
     loading: 'Cargando…',
     error_failed_to_load: 'No se pudo cargar',
     no_rooms_checked_in: 'No hay habitaciones registradas en este momento.',

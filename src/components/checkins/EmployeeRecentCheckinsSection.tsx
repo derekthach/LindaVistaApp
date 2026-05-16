@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { CheckIn, LineItem, SummarizedItem } from '@/types';
 import Button from '@/components/Button';
@@ -20,6 +20,13 @@ import {
 } from '@/lib/checkins/staffDisplay';
 import EmployeeOperationalEditModal from '@/components/checkins/EmployeeOperationalEditModal';
 import { formatTime } from '@/lib/utils/formatTime';
+import { totalsToCents } from '@/lib/checkins/sectioning';
+
+function centsToCurrency(cents: number): string {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(
+    cents / 100
+  );
+}
 
 function stableCheckinRowId(c: CheckIn): string {
   if (c.id) return c.id;
@@ -252,6 +259,8 @@ export default function EmployeeRecentCheckinsSection({
     return () => clearTimeout(tid);
   }, [successMessage]);
 
+  const recentTotals = useMemo(() => totalsToCents(checkins), [checkins]);
+
   if (guestManualStaffEntry) return null;
 
   const toggleExpanded = (c: CheckIn) => {
@@ -364,6 +373,30 @@ export default function EmployeeRecentCheckinsSection({
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+        {!loading && !error && (
+          <div
+            className="card"
+            style={{
+              marginTop: 16,
+              padding: 12,
+              backgroundColor: '#f3f4f6',
+              border: '1px solid #e5e7eb',
+            }}
+          >
+            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8, color: '#374151' }}>
+              {t('employee_recent_totals_heading')}
+            </div>
+            <p style={{ margin: 0, fontSize: 12, lineHeight: 1.65, color: '#1f2937', wordBreak: 'break-word' }}>
+              {t('list_totals_cars')}: {recentTotals.carCount} | {t('list_totals_room')}:{' '}
+              {centsToCurrency(recentTotals.roomCents)} | {t('list_totals_food')}:{' '}
+              {centsToCurrency(recentTotals.foodCents)} | {t('list_totals_beer')}:{' '}
+              {centsToCurrency(recentTotals.beerCents)} |{' '}
+              <strong>
+                {t('list_totals_label')}: {centsToCurrency(recentTotals.totalCents)}
+              </strong>
+            </p>
           </div>
         )}
       </section>
