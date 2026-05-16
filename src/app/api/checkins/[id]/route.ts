@@ -44,7 +44,7 @@ export async function DELETE(
 }
 
 function isLikelyValidationOrClientMessage(message: string): boolean {
-  return /validation|must|invalid|required|allowed list|digits|whole number|cannot be changed/i.test(
+  return /validation|must|invalid|required|allowed list|digits|whole number|cannot be changed|item row|exceeds the allowed maximum/i.test(
     message
   );
 }

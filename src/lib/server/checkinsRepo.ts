@@ -42,6 +42,8 @@ import {
   validateUpdateFoodBeerCheckin,
 } from '@/lib/checkins/validation/updateCheckin';
 import { normalizeReceipt } from '@/lib/checkins/validation/room';
+import { summarizeLineItems } from '@/lib/checkins/summarize';
+import { FOOD_ITEMS, BEER_ITEMS } from '@/lib/checkins/items';
 
 const CHECKINS_COLLECTION = 'checkins';
 /** Idempotency ledger: one doc per room check-in confirmation (client submission_key). */
@@ -278,10 +280,7 @@ export interface CreatePastFoodBeverageCheckinInput {
   date: string;
   time: string;
   staff_name: string;
-  item_id: string;
-  item_label: string;
-  quantity_sold: number;
-  amount_collected: number;
+  lineItems: LineItem[];
   payment_method: string;
   notes?: string;
   adminUsername: string;
@@ -309,22 +308,8 @@ async function createPastFoodOrBeerCheckin(
   );
   const checkInAt = dt.isValid ? Timestamp.fromDate(dt.toJSDate()) : Timestamp.now();
 
-  const lineItems: LineItem[] = [
-    {
-      itemId: data.item_id,
-      itemLabel: data.item_label,
-      quantitySold: data.quantity_sold,
-      amountCollected: data.amount_collected,
-    },
-  ];
-  const summarizedItems: SummarizedItem[] = [
-    {
-      itemId: data.item_id,
-      itemLabel: data.item_label,
-      totalQuantitySold: data.quantity_sold,
-      totalAmountCollected: data.amount_collected,
-    },
-  ];
+  const lineItems = data.lineItems;
+  const summarizedItems = summarizeLineItems(lineItems);
 
   const noteTrim = (data.notes ?? '').trim().slice(0, 250);
   const paymentMethod = normalizePaymentMethod(data.payment_method);
@@ -646,27 +631,28 @@ export async function adminApplyCheckinPatch(
     return;
   }
 
-  const rawFb = {
+  const catalog = docKind === 'beer' ? BEER_ITEMS : FOOD_ITEMS;
+  const rawFb: Record<string, unknown> = {
     staff_name: body.staff_name,
+    payment_method: body.payment_method,
+    lineItems: body.lineItems,
     itemId: body.itemId,
     itemLabel: body.itemLabel,
     quantity: body.quantity,
     amountCollected: body.amountCollected,
-    payment_method: body.payment_method,
   };
-  const validation = validateUpdateFoodBeerCheckin(rawFb as Record<string, unknown>, staffOpts);
-  if (!validation.valid) {
-    throw new Error(Object.values(validation.errors).find(Boolean) ?? 'Validation failed');
+  const validation = validateUpdateFoodBeerCheckin(rawFb, { ...staffOpts, catalog });
+  if (!validation.valid || !validation.normalizedLineItems?.length) {
+    const err =
+      Object.values(validation.errors).find((m) => typeof m === 'string' && m.trim()) ??
+      'Validation failed';
+    throw new Error(err);
   }
   await updateCheckinFoodBeer(
     id,
     {
       staff_name: String(rawFb.staff_name).trim(),
-      itemId: String(rawFb.itemId).trim(),
-      itemLabel:
-        rawFb.itemLabel != null ? String(rawFb.itemLabel).trim() : String(rawFb.itemId).trim(),
-      quantity: Math.floor(Number(rawFb.quantity)),
-      amountCollected: Number(rawFb.amountCollected),
+      lineItems: validation.normalizedLineItems,
       payment_method: String(rawFb.payment_method ?? '').trim(),
       check_in_date: checkInDate,
       check_in_time: checkInTime,
@@ -819,12 +805,43 @@ export async function updateCheckin(
   }
 }
 
+function lineItemsForAuditFromFirestore(data: Record<string, unknown>): LineItem[] {
+  const raw = (data.lineItems as LineItem[] | undefined) ?? [];
+  if (raw.length > 0) return raw;
+  const sums = (data.summarizedItems as SummarizedItem[] | undefined) ?? [];
+  return sums.map((s) => ({
+    itemId: s.itemId,
+    itemLabel: s.itemLabel,
+    quantitySold: s.totalQuantitySold,
+    amountCollected: s.totalAmountCollected,
+  }));
+}
+
+function auditLabelForFoodBeerLines(lines: LineItem[]): string {
+  return lines.map((r) => `${r.itemLabel} (${r.quantitySold})`).join('; ');
+}
+
+function auditQuantityTotal(lines: LineItem[]): number {
+  return lines.reduce((sum, r) => sum + (Number(r.quantitySold) || 0), 0);
+}
+
+function auditAmountTotal(lines: LineItem[]): number {
+  return lines.reduce((sum, r) => sum + (Number(r.amountCollected) || 0), 0);
+}
+
+function serializeFoodBeerLinesForAudit(lines: LineItem[]): string {
+  return JSON.stringify(
+    lines.map((r) => ({
+      itemId: r.itemId,
+      qty: r.quantitySold,
+      amt: r.amountCollected,
+    }))
+  );
+}
+
 export interface UpdateCheckinFoodBeerInput {
   staff_name: string;
-  itemId: string;
-  itemLabel: string;
-  quantity: number;
-  amountCollected: number;
+  lineItems: LineItem[];
   payment_method: string;
   check_in_date?: string;
   check_in_time?: string;
@@ -833,8 +850,7 @@ export interface UpdateCheckinFoodBeerInput {
 }
 
 /**
- * Update food/beer check-in. Persists lineItems and summarizedItems (single item).
- * Cost is derived on read via totalAmountCollected; dashboard reflects new totals after refresh.
+ * Update food/beer check-in. Persists lineItems and summarizedItems (multiple rows supported).
  */
 export async function updateCheckinFoodBeer(
   id: string,
@@ -867,29 +883,10 @@ export async function updateCheckinFoodBeer(
     if (!newCheckInAt) throw new Error('Invalid check-in date or time');
   }
 
-  const itemId = payload.itemId.trim();
-  const itemLabel = payload.itemLabel.trim() || itemId;
-  const lineItems: LineItem[] = [
-    {
-      itemId,
-      itemLabel,
-      quantitySold: payload.quantity,
-      amountCollected: payload.amountCollected,
-    },
-  ];
-  const summarizedItems: SummarizedItem[] = [
-    {
-      itemId,
-      itemLabel,
-      totalQuantitySold: payload.quantity,
-      totalAmountCollected: payload.amountCollected,
-    },
-  ];
+  const lineItems = payload.lineItems;
+  const summarizedItems = summarizeLineItems(lineItems);
 
-  const existingLineItems = (data.lineItems as LineItem[] | undefined) ?? [];
-  const existingSummarized = (data.summarizedItems as SummarizedItem[] | undefined) ?? [];
-  const firstLine = existingLineItems[0];
-  const firstSum = existingSummarized[0];
+  const auditBeforeLines = lineItemsForAuditFromFirestore(data);
   const beforePaymentRaw = data.paymentMethod ?? data.payment;
   const beforePaymentStored = hasStoredPaymentMethodSingle(
     beforePaymentRaw != null ? String(beforePaymentRaw) : ''
@@ -920,18 +917,18 @@ export async function updateCheckinFoodBeer(
     checkInAt: beforeCheckInIso,
     note: noteBefore,
     staffName: data.staffName ?? '',
-    item: firstLine?.itemLabel ?? firstSum?.itemLabel ?? '',
-    quantity: firstLine?.quantitySold ?? firstSum?.totalQuantitySold ?? 0,
-    amountCollected: firstLine?.amountCollected ?? firstSum?.totalAmountCollected ?? 0,
+    item: auditLabelForFoodBeerLines(auditBeforeLines),
+    quantity: auditQuantityTotal(auditBeforeLines),
+    amountCollected: auditAmountTotal(auditBeforeLines),
     paymentMethod: beforePaymentStored,
   };
   const after: Record<string, unknown> = {
     checkInAt: afterCheckInIso,
     note: noteAfter,
     staffName: payload.staff_name,
-    item: itemLabel,
-    quantity: payload.quantity,
-    amountCollected: payload.amountCollected,
+    item: auditLabelForFoodBeerLines(lineItems),
+    quantity: auditQuantityTotal(lineItems),
+    amountCollected: auditAmountTotal(lineItems),
     paymentMethod: afterPaymentStored,
   };
   const changedFields: string[] = [];
@@ -944,6 +941,9 @@ export async function updateCheckinFoodBeer(
     changedFields.push('note');
   }
   if (String(before.staffName) !== String(after.staffName)) changedFields.push('staffName');
+  if (serializeFoodBeerLinesForAudit(auditBeforeLines) !== serializeFoodBeerLinesForAudit(lineItems)) {
+    changedFields.push('lineItems');
+  }
   if (String(before.item) !== String(after.item)) changedFields.push('item');
   if (Number(before.quantity) !== Number(after.quantity)) changedFields.push('quantity');
   if (Number(before.amountCollected) !== Number(after.amountCollected)) changedFields.push('amountCollected');

@@ -5,7 +5,8 @@ import { requireAuth } from '@/server/auth/session';
 import { requireAdmin } from '@/lib/server/requireAdmin';
 import { createPastBeerCheckin } from '@/lib/server/checkinsRepo';
 import { getMergedCheckoutStaffDisplayNames } from '@/lib/server/checkoutStaffAllowlist';
-import { validatePastBeerAdmin } from '@/lib/checkins/validation/pastBeer';
+import { validateAdminPastFoodBeerMulti } from '@/lib/checkins/validation/adminPastFoodBeerMulti';
+import { BEER_ITEMS } from '@/lib/checkins/items';
 
 export async function submitPastBeerAction(
   _prev: unknown,
@@ -18,10 +19,7 @@ export async function submitPastBeerAction(
     date: formData.get('date'),
     time: formData.get('time'),
     staff_name: formData.get('staff_name'),
-    item_id: formData.get('item_id'),
-    item_label: formData.get('item_label'),
-    quantity_sold: formData.get('quantity_sold'),
-    amount_collected: formData.get('amount_collected'),
+    lineItems: formData.get('lineItems'),
     payment_method: formData.get('payment_method'),
     notes: formData.get('notes'),
   };
@@ -33,12 +31,9 @@ export async function submitPastBeerAction(
     return { error: 'Could not load staff list. Try again.' };
   }
 
-  const validation = validatePastBeerAdmin(raw, staffAllowlist);
-  if (!validation.valid || !validation.item_id || validation.quantity_sold == null || validation.amount_collected == null) {
-    const first =
-      Object.values(validation.errors).find((m) => typeof m === 'string' && m.trim()) ??
-      'Validation failed';
-    return { error: first };
+  const validation = validateAdminPastFoodBeerMulti(raw, staffAllowlist, BEER_ITEMS);
+  if (!validation.valid || !validation.lineItems?.length) {
+    return { error: validation.error ?? 'Validation failed' };
   }
 
   try {
@@ -46,10 +41,7 @@ export async function submitPastBeerAction(
       date: validation.date!,
       time: validation.time!,
       staff_name: validation.staff_name!,
-      item_id: validation.item_id,
-      item_label: validation.item_label!,
-      quantity_sold: validation.quantity_sold,
-      amount_collected: validation.amount_collected,
+      lineItems: validation.lineItems,
       payment_method: validation.payment_method!,
       notes: validation.notes,
       adminUsername: session.username?.trim() || 'admin',

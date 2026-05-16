@@ -4,6 +4,10 @@ import { validatePaymentSplits } from '../roomPaymentSplits';
 import type { RoomPaymentSplit } from '@/types';
 import { hasStoredPaymentMethodSingle } from '@/lib/checkins/paymentMethods';
 import { VALIDATION_CODES } from '@/lib/checkins/validation';
+import { validateFoodBeerLineItemsRows } from '@/lib/checkins/validation';
+import type { LineItem } from '@/types';
+import type { ItemOption } from '@/lib/checkins/items';
+import { parseLineItemsFromUnknown, normalizeSubmittedFoodBeerLineItems } from '@/lib/checkins/lineItemsPayload';
 
 const ALLOWED_STAFF = ['Keith Thach', 'Duyen Thach', 'Derek Thach'] as const;
 
@@ -87,7 +91,7 @@ export function validateUpdateCheckin(
 
 const AMOUNT_COLLECTED_MAX = 1000;
 const QUANTITY_MIN = 1;
-const QUANTITY_MAX = 999;
+const QUANTITY_MAX = 50;
 
 export interface UpdateFoodBeerPayload {
   staff_name: string;
@@ -100,7 +104,13 @@ export interface UpdateFoodBeerPayload {
 
 export interface UpdateFoodBeerValidationResult {
   valid: boolean;
-  errors: Partial<Record<keyof UpdateFoodBeerPayload, string>>;
+  errors: Partial<Record<keyof UpdateFoodBeerPayload | 'lineItems' | 'itemsTotal', string>>;
+  normalizedLineItems?: LineItem[];
+}
+
+export interface ValidateUpdateFoodBeerCheckinOptions extends ValidateUpdateCheckinOptions {
+  /** When set, each line itemId must exist in this catalog (admin updates). */
+  catalog?: readonly ItemOption[];
 }
 
 /** Employee self-edit: item / quantity / amount only (no receipt/staff validation). */
@@ -178,7 +188,7 @@ export function validateEmployeeOperationalRoom(
 
 export function validateUpdateFoodBeerCheckin(
   raw: Record<string, unknown>,
-  options?: ValidateUpdateCheckinOptions
+  options?: ValidateUpdateFoodBeerCheckinOptions
 ): UpdateFoodBeerValidationResult {
   const errors: UpdateFoodBeerValidationResult['errors'] = {};
 
@@ -192,6 +202,47 @@ export function validateUpdateFoodBeerCheckin(
     }
   } else if (!ALLOWED_STAFF.includes(staff as (typeof ALLOWED_STAFF)[number])) {
     errors.staff_name = 'Staff must be one of: ' + ALLOWED_STAFF.join(', ');
+  }
+
+  const pm = raw.payment_method != null ? String(raw.payment_method).trim() : '';
+  if (!hasStoredPaymentMethodSingle(pm)) {
+    errors.payment_method = VALIDATION_CODES.requiredPaymentMethod;
+  }
+
+  const parsedLines = parseLineItemsFromUnknown(raw.lineItems);
+  const useMulti =
+    parsedLines !== null &&
+    parsedLines.some((r) => String(r.itemId ?? '').trim().length > 0);
+
+  if (useMulti && parsedLines) {
+    const rowVal = validateFoodBeerLineItemsRows(parsedLines);
+    if (rowVal.errors.lineItems) {
+      errors.lineItems = 'At least one item row with item, quantity, and amount is required.';
+    }
+    if (rowVal.errors.itemsTotal) {
+      errors.itemsTotal = 'Total amount exceeds the allowed maximum for one check-in.';
+    }
+    if (Object.keys(rowVal.lineItemErrors).length > 0 && !errors.lineItems) {
+      errors.lineItems = 'Fix quantity and amount on each item row.';
+    }
+
+    const catalog = options?.catalog;
+    const normalizedLineItems = normalizeSubmittedFoodBeerLineItems(parsedLines);
+
+    if (catalog && catalog.length > 0) {
+      for (const row of normalizedLineItems) {
+        if (!catalog.some((o) => o.id === row.itemId)) {
+          errors.lineItems = 'Invalid item';
+          break;
+        }
+      }
+    }
+
+    const valid = Object.keys(errors).length === 0 && normalizedLineItems.length > 0;
+    if (!valid) {
+      return { valid: false, errors };
+    }
+    return { valid: true, errors: {}, normalizedLineItems };
   }
 
   const itemId = raw.itemId != null ? String(raw.itemId).trim() : '';
@@ -223,15 +274,33 @@ export function validateUpdateFoodBeerCheckin(
     }
   }
 
-  const pm = raw.payment_method != null ? String(raw.payment_method).trim() : '';
-  if (!hasStoredPaymentMethodSingle(pm)) {
-    errors.payment_method = VALIDATION_CODES.requiredPaymentMethod;
+  const valid = Object.keys(errors).length === 0;
+  if (!valid) {
+    return { valid: false, errors };
   }
 
-  return {
-    valid: Object.keys(errors).length === 0,
-    errors,
-  };
+  const normalizedLineItems: LineItem[] = [
+    {
+      itemId,
+      itemLabel:
+        raw.itemLabel != null && String(raw.itemLabel).trim()
+          ? String(raw.itemLabel).trim()
+          : itemId,
+      quantitySold: Math.floor(Number(raw.quantity)),
+      amountCollected: Number(raw.amountCollected),
+    },
+  ];
+
+  const catalog = options?.catalog;
+  if (catalog && catalog.length > 0) {
+    for (const row of normalizedLineItems) {
+      if (!catalog.some((o) => o.id === row.itemId)) {
+        return { valid: false, errors: { ...errors, itemId: 'Invalid item' } };
+      }
+    }
+  }
+
+  return { valid: true, errors: {}, normalizedLineItems };
 }
 
 export { ALLOWED_STAFF };

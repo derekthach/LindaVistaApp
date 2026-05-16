@@ -134,10 +134,14 @@ export async function PATCH(
         id,
         {
           staff_name: staffName,
-          itemId,
-          itemLabel,
-          quantity,
-          amountCollected,
+          lineItems: [
+            {
+              itemId,
+              itemLabel,
+              quantitySold: quantity,
+              amountCollected,
+            },
+          ],
           payment_method,
         },
         editedBy

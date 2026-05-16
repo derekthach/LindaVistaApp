@@ -23,6 +23,11 @@ import {
   formatStaffDisplayForCheckinsTable,
 } from '@/lib/checkins/staffDisplay';
 import { formatTime } from '@/lib/utils/formatTime';
+import {
+  lineItemsFromCheckinRecord,
+  foodBeerLineRowsSummary,
+  foodBeerLineRowsAmountTotal,
+} from '@/lib/checkins/lineItemsFromCheckin';
 
 function TrashIcon() {
   return (
@@ -416,30 +421,23 @@ export default function CheckinsList({
     }
   };
 
-  function getFirstItemLabel(c: CheckIn): string {
-    const line = c.lineItems?.[0];
-    if (line?.itemLabel) return line.itemLabel;
-    const sum = c.summarizedItems?.[0];
-    if (sum?.itemLabel) return sum.itemLabel;
-    return '';
-  }
-  function getFirstQuantity(c: CheckIn): number {
-    const line = c.lineItems?.[0];
-    if (line != null && typeof line.quantitySold === 'number') return line.quantitySold;
-    const sum = c.summarizedItems?.[0];
-    if (sum != null && typeof sum.totalQuantitySold === 'number') return sum.totalQuantitySold;
-    return 1;
-  }
-  function getFirstAmountCollected(c: CheckIn): number {
-    const line = c.lineItems?.[0];
-    if (line != null && typeof line.amountCollected === 'number') return line.amountCollected;
-    const sum = c.summarizedItems?.[0];
-    if (sum != null && typeof sum.totalAmountCollected === 'number') return sum.totalAmountCollected;
-    return Number(c.cost) || 0;
-  }
-
   function storedCheckInKind(c: CheckIn): CheckInType {
     return c.checkInType === 'food' || c.checkInType === 'beer' ? c.checkInType : 'room';
+  }
+
+  function draftFoodBeerLineItems(draft: EditCheckinDraft): LineItem[] {
+    if (draft.lineItems && draft.lineItems.length > 0) return draft.lineItems;
+    if (draft.itemId?.trim()) {
+      return [
+        {
+          itemId: draft.itemId,
+          itemLabel: (draft.itemLabel ?? draft.itemId).trim(),
+          quantitySold: draft.quantity ?? 0,
+          amountCollected: Number(draft.amountCollected) ?? 0,
+        },
+      ];
+    }
+    return [];
   }
 
   function buildDiffLines(checkin: CheckIn, draft: EditCheckinDraft): DiffLine[] {
@@ -515,30 +513,29 @@ export default function CheckinsList({
       return lines;
     }
 
-    const fromLabel = getFirstItemLabel(checkin);
-    if (draft.itemLabel != null && draft.itemLabel !== fromLabel) {
+    const fromLines = lineItemsFromCheckinRecord(checkin);
+    const toLines = draftFoodBeerLineItems(draft);
+
+    const fromItemsSummary = foodBeerLineRowsSummary(fromLines);
+    const toItemsSummary = foodBeerLineRowsSummary(toLines);
+    if (fromItemsSummary !== toItemsSummary) {
       lines.push({
-        label: t('diff_label_item'),
-        from: fromLabel || '—',
-        to: draft.itemLabel,
+        label: t('items'),
+        from: fromItemsSummary || '—',
+        to: toItemsSummary || '—',
       });
     }
-    const fromQty = getFirstQuantity(checkin);
-    if (draft.quantity != null && draft.quantity !== fromQty) {
+
+    const fromTot = foodBeerLineRowsAmountTotal(fromLines);
+    const toTot = foodBeerLineRowsAmountTotal(toLines);
+    if (fromTot !== toTot) {
       lines.push({
-        label: t('diff_label_quantity'),
-        from: String(fromQty),
-        to: String(draft.quantity),
+        label: t('total'),
+        from: `$${fromTot.toFixed(2)}`,
+        to: `$${toTot.toFixed(2)}`,
       });
     }
-    const fromAmt = getFirstAmountCollected(checkin);
-    if (draft.amountCollected != null && Number(draft.amountCollected) !== fromAmt) {
-      lines.push({
-        label: t('diff_label_amount_collected'),
-        from: `$${fromAmt.toFixed(2)}`,
-        to: `$${Number(draft.amountCollected).toFixed(2)}`,
-      });
-    }
+
     const fromPm = hasStoredPaymentMethodSingle(checkin.payment_method)
       ? String(checkin.payment_method).trim()
       : '';
@@ -589,10 +586,7 @@ export default function CheckinsList({
                 payment_splits: pendingUpdate.draft.payment_splits,
               }
             : {
-                itemId: pendingUpdate.draft.itemId,
-                itemLabel: pendingUpdate.draft.itemLabel,
-                quantity: pendingUpdate.draft.quantity,
-                amountCollected: pendingUpdate.draft.amountCollected,
+                lineItems: draftFoodBeerLineItems(pendingUpdate.draft),
                 payment_method: pendingUpdate.draft.payment_method,
               }),
         }),

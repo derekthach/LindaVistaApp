@@ -47,41 +47,15 @@ export interface ValidationResult {
   lineItemErrors?: Record<number, { quantitySold?: string; amountCollected?: string; itemId?: string }>;
 }
 
-/**
- * Validation for food/beer check-in form.
- * Returns error codes for bilingual display. Rules:
- * - Staff required; at least one valid item row (item selected, quantity 1-50 int, amount > 0 and <= 1000).
- * - Total amount across rows <= 2000. Notes optional, max 250 chars.
- */
-export function validateSimpleCheckin(values: SimpleCheckinFormValues): ValidationResult {
-  const errors: Record<string, string> = {};
+/** Food/beer item rows only (shared by simple check-in, past entry, admin updates). */
+export function validateFoodBeerLineItemsRows(lineItems: LineItem[] | undefined): {
+  errors: Partial<Pick<ValidationResult['errors'], 'lineItems' | 'itemsTotal'>>;
+  lineItemErrors: Record<number, { quantitySold?: string; amountCollected?: string; itemId?: string }>;
+} {
+  const errors: Partial<Pick<ValidationResult['errors'], 'lineItems' | 'itemsTotal'>> = {};
   const lineItemErrors: Record<number, { quantitySold?: string; amountCollected?: string; itemId?: string }> = {};
 
-  if (!values.date?.trim()) {
-    errors.date = VALIDATION_CODES.requiredDate;
-  }
-  if (!values.time?.trim()) {
-    errors.time = VALIDATION_CODES.requiredTime;
-  }
-  if (!values.staff_name?.trim()) {
-    errors.staff_name = VALIDATION_CODES.requiredStaff;
-  }
-  if (!values.checkInType || !['room', 'food', 'beer'].includes(values.checkInType)) {
-    errors.checkInType = VALIDATION_CODES.invalidCheckInType;
-  }
-
-  if (values.checkInType === 'food' || values.checkInType === 'beer') {
-    const pm = values.payment_method?.trim() ?? '';
-    if (!hasStoredPaymentMethodSingle(pm)) {
-      errors.payment_method = VALIDATION_CODES.requiredPaymentMethod;
-    }
-  }
-
-  if (values.notes != null && values.notes.length > NOTES_MAX_LENGTH) {
-    errors.notes = VALIDATION_CODES.notesMax;
-  }
-
-  const items = values.lineItems ?? [];
+  const items = lineItems ?? [];
   const validItems = items.filter((item) => item.itemId?.trim());
   if (validItems.length === 0) {
     errors.lineItems = VALIDATION_CODES.atLeastOneItem;
@@ -121,8 +95,57 @@ export function validateSimpleCheckin(values: SimpleCheckinFormValues): Validati
     }
   }
 
+  return { errors, lineItemErrors };
+}
+
+/**
+ * Validation for food/beer check-in form.
+ * Returns error codes for bilingual display. Rules:
+ * - Staff required; at least one valid item row (item selected, quantity 1-50 int, amount > 0 and <= 1000).
+ * - Total amount across rows <= 2000. Notes optional, max 250 chars.
+ */
+export function validateSimpleCheckin(values: SimpleCheckinFormValues): ValidationResult {
+  const errors: Record<string, string> = {};
+  const lineItemErrors: Record<number, { quantitySold?: string; amountCollected?: string; itemId?: string }> =
+    {};
+
+  if (!values.date?.trim()) {
+    errors.date = VALIDATION_CODES.requiredDate;
+  }
+  if (!values.time?.trim()) {
+    errors.time = VALIDATION_CODES.requiredTime;
+  }
+  if (!values.staff_name?.trim()) {
+    errors.staff_name = VALIDATION_CODES.requiredStaff;
+  }
+  if (!values.checkInType || !['room', 'food', 'beer'].includes(values.checkInType)) {
+    errors.checkInType = VALIDATION_CODES.invalidCheckInType;
+  }
+
+  if (values.checkInType === 'food' || values.checkInType === 'beer') {
+    const pm = values.payment_method?.trim() ?? '';
+    if (!hasStoredPaymentMethodSingle(pm)) {
+      errors.payment_method = VALIDATION_CODES.requiredPaymentMethod;
+    }
+  }
+
+  if (values.notes != null && values.notes.length > NOTES_MAX_LENGTH) {
+    errors.notes = VALIDATION_CODES.notesMax;
+  }
+
+  const lineRes = validateFoodBeerLineItemsRows(values.lineItems);
+  if (lineRes.errors.lineItems) {
+    errors.lineItems = lineRes.errors.lineItems;
+  }
+  if (lineRes.errors.itemsTotal) {
+    errors.itemsTotal = lineRes.errors.itemsTotal;
+  }
+  Object.assign(lineItemErrors, lineRes.lineItemErrors);
+
+  const valid = Object.keys(errors).length === 0 && Object.keys(lineItemErrors).length === 0;
+
   return {
-    valid: Object.keys(errors).length === 0 && Object.keys(lineItemErrors).length === 0,
+    valid,
     errors,
     lineItemErrors: Object.keys(lineItemErrors).length > 0 ? lineItemErrors : undefined,
   };

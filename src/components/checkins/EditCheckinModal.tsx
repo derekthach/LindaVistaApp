@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { CheckIn, CheckInType, RoomPaymentSplit } from '@/types';
+import type { CheckIn, CheckInType, LineItem, RoomPaymentSplit } from '@/types';
 import Button from '@/components/Button';
 import { FOOD_ITEMS, BEER_ITEMS } from '@/lib/checkins/items';
 import type { ItemOption } from '@/lib/checkins/items';
@@ -18,11 +18,20 @@ import {
   calculatePaymentSplitTotal,
   validatePaymentSplits,
 } from '@/lib/checkins/roomPaymentSplits';
+import { validateSimpleCheckin } from '@/lib/checkins/validation';
+import { lineItemsFromCheckinRecord } from '@/lib/checkins/lineItemsFromCheckin';
 
 const COST_MAX = 1000;
 const AMOUNT_COLLECTED_MAX = 1000;
 const QUANTITY_MIN = 1;
-const QUANTITY_MAX = 999;
+const QUANTITY_MAX = 50;
+
+const initialFoodBeerRow = (): LineItem => ({
+  itemId: '',
+  itemLabel: '',
+  quantitySold: 1,
+  amountCollected: 0,
+});
 
 export interface EditCheckinDraft {
   checkInType: CheckInType;
@@ -34,6 +43,8 @@ export interface EditCheckinDraft {
   staff_name: string;
   room_id?: number | string;
   payment_splits?: RoomPaymentSplit[];
+  /** Food/beer: full line list (same shape as Firestore `lineItems`). */
+  lineItems?: LineItem[];
   itemId?: string;
   itemLabel?: string;
   quantity?: number;
@@ -70,38 +81,6 @@ function timeHmStored(c: CheckIn): string {
   return '';
 }
 
-function getFirstItemId(checkin: CheckIn): string {
-  const line = checkin.lineItems?.[0];
-  if (line?.itemId) return line.itemId;
-  const sum = checkin.summarizedItems?.[0];
-  if (sum?.itemId) return sum.itemId;
-  return '';
-}
-
-function getFirstItemLabel(checkin: CheckIn): string {
-  const line = checkin.lineItems?.[0];
-  if (line?.itemLabel) return line.itemLabel;
-  const sum = checkin.summarizedItems?.[0];
-  if (sum?.itemLabel) return sum.itemLabel;
-  return '';
-}
-
-function getFirstQuantity(checkin: CheckIn): number {
-  const line = checkin.lineItems?.[0];
-  if (line != null && typeof line.quantitySold === 'number') return line.quantitySold;
-  const sum = checkin.summarizedItems?.[0];
-  if (sum != null && typeof sum.totalQuantitySold === 'number') return sum.totalQuantitySold;
-  return 1;
-}
-
-function getFirstAmountCollected(checkin: CheckIn): number {
-  const line = checkin.lineItems?.[0];
-  if (line != null && typeof line.amountCollected === 'number') return line.amountCollected;
-  const sum = checkin.summarizedItems?.[0];
-  if (sum != null && typeof sum.totalAmountCollected === 'number') return sum.totalAmountCollected;
-  return Number(checkin.cost) || 0;
-}
-
 export default function EditCheckinModal({
   open,
   onOpenChange,
@@ -125,9 +104,7 @@ export default function EditCheckinModal({
   const [room_id, setRoomId] = useState<number | string>(1);
   type PayRow = { method: string; amount: string };
   const [paymentRows, setPaymentRows] = useState<PayRow[]>([{ method: 'cash', amount: '' }]);
-  const [itemId, setItemId] = useState('');
-  const [quantity, setQuantity] = useState('');
-  const [amountCollected, setAmountCollected] = useState('');
+  const [lineRows, setLineRows] = useState<LineItem[]>([initialFoodBeerRow()]);
   const [foodPaymentMethod, setFoodPaymentMethod] = useState('');
 
   useEffect(() => {
@@ -152,23 +129,14 @@ export default function EditCheckinModal({
           ]);
         }
       } else {
-        setPaymentRows([{ method: 'cash', amount: String(Number(checkin.cost) || 0) }]);
+        const existing = lineItemsFromCheckinRecord(checkin);
+        setLineRows(existing.length > 0 ? existing : [initialFoodBeerRow()]);
+        setFoodPaymentMethod(
+          hasStoredPaymentMethodSingle(checkin.payment_method)
+            ? String(checkin.payment_method).trim()
+            : ''
+        );
       }
-
-      const options = origType === 'beer' ? BEER_ITEMS : FOOD_ITEMS;
-      const firstId = getFirstItemId(checkin);
-      const firstLabel = getFirstItemLabel(checkin);
-      const byId = options.find((o) => o.id === firstId);
-      const byLabel = options.find((o) => o.label.en === firstLabel || o.label.es === firstLabel);
-      const resolved = byId ?? byLabel ?? options[0];
-      setItemId(resolved?.id ?? '');
-      setQuantity(String(getFirstQuantity(checkin)));
-      setAmountCollected(String(getFirstAmountCollected(checkin)));
-      setFoodPaymentMethod(
-        hasStoredPaymentMethodSingle(checkin.payment_method)
-          ? String(checkin.payment_method).trim()
-          : ''
-      );
     }
   }, [checkin]);
 
@@ -191,12 +159,36 @@ export default function EditCheckinModal({
 
   const receiptNormalized = effectiveIsRoom ? normalizeReceipt(receipt_number) : null;
   const staffValid = Boolean(staff_name.trim()) && effectiveStaffOptions.includes(staff_name);
-  const qtyNum = quantity.trim() === '' ? NaN : Math.floor(Number(quantity));
-  const qtyValid = !Number.isNaN(qtyNum) && Number.isInteger(qtyNum) && qtyNum >= QUANTITY_MIN && qtyNum <= QUANTITY_MAX;
-  const qtyInputNumeric =
-    quantity.trim() === '' ? 0 : Number.isFinite(qtyNum) && qtyNum >= 0 ? qtyNum : 0;
-  const amountNum = amountCollected.trim() === '' ? NaN : Number(amountCollected);
-  const amountValid = !Number.isNaN(amountNum) && amountNum >= 0 && amountNum <= AMOUNT_COLLECTED_MAX;
+
+  const lineItemsForFoodValidation = useMemo(
+    () =>
+      lineRows.map((r) => ({
+        itemId: r.itemId ?? '',
+        itemLabel: r.itemLabel ?? '',
+        quantitySold: Number(r.quantitySold) || 0,
+        amountCollected: Number(r.amountCollected) ?? 0,
+      })),
+    [lineRows]
+  );
+
+  const foodBeerValidation = useMemo(
+    () =>
+      validateSimpleCheckin({
+        date: editDate,
+        time: editTimeHm,
+        staff_name,
+        checkInType: storedType === 'beer' ? 'beer' : 'food',
+        lineItems: lineItemsForFoodValidation,
+        notes: note || undefined,
+        payment_method: foodPaymentMethod,
+      }),
+    [editDate, editTimeHm, staff_name, storedType, lineItemsForFoodValidation, note, foodPaymentMethod]
+  );
+
+  const foodBeerLiveTotal = useMemo(
+    () => lineRows.reduce((sum, r) => sum + (Number(r.amountCollected) || 0), 0),
+    [lineRows]
+  );
 
   const splitValidation = useMemo(
     () =>
@@ -234,12 +226,28 @@ export default function EditCheckinModal({
       currentSplitsJson !== initialSplitsJson ||
       String(room_id) !== String(checkin.room_id ?? 1));
 
+  const initialFoodLineJson = useMemo(() => {
+    if (!checkin || storedCheckInType(checkin) === 'room') return '';
+    return JSON.stringify(lineItemsFromCheckinRecord(checkin));
+  }, [checkin]);
+
+  const currentFoodLineJson = useMemo(
+    () =>
+      JSON.stringify(
+        lineRows.map((r) => ({
+          itemId: r.itemId,
+          itemLabel: r.itemLabel,
+          quantitySold: Number(r.quantitySold) || 0,
+          amountCollected: Number(r.amountCollected) || 0,
+        }))
+      ),
+    [lineRows]
+  );
+
   const hasChangesFoodBeerSpecific =
     !!checkin &&
     !effectiveIsRoom &&
-    (itemId !== getFirstItemId(checkin) ||
-      qtyNum !== getFirstQuantity(checkin) ||
-      String(amountNum) !== String(getFirstAmountCollected(checkin)) ||
+    (currentFoodLineJson !== initialFoodLineJson ||
       foodPaymentMethod !==
         (hasStoredPaymentMethodSingle(checkin.payment_method)
           ? String(checkin.payment_method).trim()
@@ -266,13 +274,7 @@ export default function EditCheckinModal({
     isValidRoomId(room_id) &&
     dateTimeOk;
   const formValidFoodBeer =
-    !effectiveIsRoom &&
-    staffValid &&
-    itemId !== '' &&
-    qtyValid &&
-    amountValid &&
-    hasStoredPaymentMethodSingle(foodPaymentMethod) &&
-    dateTimeOk;
+    !effectiveIsRoom && foodBeerValidation.valid && staffValid && dateTimeOk;
   const formValid = effectiveIsRoom ? formValidRoom : formValidFoodBeer;
   const canSave = formValid && derivedHasChanges && !saveDisabled;
 
@@ -294,19 +296,21 @@ export default function EditCheckinModal({
         payment_splits: splitValidation.splits,
       });
     } else if (!effectiveIsRoom) {
-      const selected = itemCatalog.find((o) => o.id === itemId);
-      const itemLabelSel =
-        selected != null ? (language === 'es' ? selected.label.es : selected.label.en) : itemId;
+      const linePayload: LineItem[] = lineRows
+        .filter((r) => r.itemId?.trim())
+        .map((r) => ({
+          itemId: r.itemId,
+          itemLabel: r.itemLabel,
+          quantitySold: Math.min(QUANTITY_MAX, Math.max(1, Math.floor(Number(r.quantitySold) || 1))),
+          amountCollected: Number(r.amountCollected) ?? 0,
+        }));
       onSave({
         checkInType: storedType === 'beer' ? 'beer' : 'food',
         check_in_date: editDate.trim(),
         check_in_time: editTimeHm.trim(),
         note: noteTrim,
         staff_name,
-        itemId,
-        itemLabel: itemLabelSel,
-        quantity: qtyNum,
-        amountCollected: amountNum,
+        lineItems: linePayload,
         payment_method: foodPaymentMethod,
       });
     }
@@ -332,6 +336,57 @@ export default function EditCheckinModal({
     setPaymentRows((rows) => (rows.length <= 1 ? rows : rows.filter((_, i) => i !== index)));
   }, []);
 
+  const getCatalogItemLabel = useCallback(
+    (item: ItemOption) => (language === 'es' ? item.label.es : item.label.en),
+    [language]
+  );
+
+  const handleFoodItemSelect = useCallback(
+    (rowIndex: number, selectedItemId: string) => {
+      if (!selectedItemId) {
+        setLineRows((prev) => {
+          const next = [...prev];
+          next[rowIndex] = { ...next[rowIndex], itemId: '', itemLabel: '' };
+          return next;
+        });
+        return;
+      }
+      const option = itemCatalog.find((o) => o.id === selectedItemId);
+      if (!option) return;
+      const label = getCatalogItemLabel(option);
+      setLineRows((prev) => {
+        const next = [...prev];
+        next[rowIndex] = {
+          itemId: selectedItemId,
+          itemLabel: label,
+          quantitySold: next[rowIndex].quantitySold || 1,
+          amountCollected: next[rowIndex].amountCollected ?? 0,
+        };
+        return next;
+      });
+    },
+    [itemCatalog, getCatalogItemLabel]
+  );
+
+  const addFoodBeerRow = useCallback(() => {
+    setLineRows((prev) => [...prev, initialFoodBeerRow()]);
+  }, []);
+
+  const removeFoodBeerRow = useCallback((index: number) => {
+    setLineRows((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
+  }, []);
+
+  const updateFoodBeerRow = useCallback(
+    (index: number, field: 'quantitySold' | 'amountCollected', value: number) => {
+      setLineRows((prev) => {
+        const next = [...prev];
+        next[index] = { ...next[index], [field]: value };
+        return next;
+      });
+    },
+    []
+  );
+
   if (!open) return null;
 
   return (
@@ -352,7 +407,7 @@ export default function EditCheckinModal({
     >
       <div
         className="card"
-        style={{ minWidth: 360, maxWidth: 440 }}
+        style={{ minWidth: 360, maxWidth: 520 }}
         onClick={(e) => e.stopPropagation()}
       >
         <h2 id="edit-checkin-title" style={{ margin: '0 0 16px', fontSize: 18 }}>
@@ -531,6 +586,103 @@ export default function EditCheckinModal({
             </>
           ) : (
             <>
+              <div>
+                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8, fontWeight: 600 }}>{t('items')}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {lineRows.map((row, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr 1fr auto',
+                        gap: 8,
+                        alignItems: 'end',
+                      }}
+                    >
+                      <label style={{ margin: 0, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('item')}</div>
+                        <select
+                          value={row.itemId}
+                          onChange={(e) => handleFoodItemSelect(idx, e.target.value)}
+                          style={inputStyle}
+                        >
+                          <option value="">{t('item_select_placeholder')}</option>
+                          {itemCatalog.map((opt) => (
+                            <option key={opt.id} value={opt.id}>
+                              {getCatalogItemLabel(opt)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label style={{ margin: 0, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>
+                          {t('quantity_sold')}
+                        </div>
+                        <QuantitySoldInput
+                          value={row.quantitySold}
+                          onChange={(n) => updateFoodBeerRow(idx, 'quantitySold', n)}
+                          min={QUANTITY_MIN}
+                          max={QUANTITY_MAX}
+                          style={inputStyle}
+                        />
+                      </label>
+                      <label style={{ margin: 0, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>
+                          {t('amount_collected')}
+                        </div>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min={0.01}
+                          max={AMOUNT_COLLECTED_MAX}
+                          value={row.amountCollected === 0 ? '' : row.amountCollected}
+                          onChange={(e) =>
+                            updateFoodBeerRow(idx, 'amountCollected', parseFloat(e.target.value) || 0)
+                          }
+                          style={inputStyle}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => removeFoodBeerRow(idx)}
+                        disabled={lineRows.length <= 1}
+                        style={{
+                          padding: '8px 10px',
+                          borderRadius: 8,
+                          border: '1px solid #e5e7eb',
+                          fontSize: 13,
+                          background: lineRows.length <= 1 ? '#f3f4f6' : '#fff',
+                        }}
+                      >
+                        {t('remove')}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={addFoodBeerRow}
+                  style={{
+                    marginTop: 10,
+                    padding: '8px 12px',
+                    borderRadius: 8,
+                    border: '1px solid #166534',
+                    background: '#fff',
+                    color: '#166534',
+                    fontSize: 13,
+                  }}
+                >
+                  {t('add_another_item')}
+                </button>
+                <div style={{ marginTop: 10, fontWeight: 600 }}>
+                  {t('total')}:{' '}
+                  {new Intl.NumberFormat('en-US', {
+                    style: 'currency',
+                    currency: 'USD',
+                    minimumFractionDigits: 2,
+                  }).format(foodBeerLiveTotal)}
+                </div>
+              </div>
               <label>
                 <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('payment_method')}</div>
                 <select
@@ -546,43 +698,6 @@ export default function EditCheckinModal({
                     </option>
                   ))}
                 </select>
-              </label>
-              <label>
-                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('diff_label_item')}</div>
-                <select
-                  value={itemId}
-                  onChange={(e) => setItemId(e.target.value)}
-                  style={inputStyle}
-                  required
-                >
-                  {itemCatalog.map((opt) => (
-                    <option key={opt.id} value={opt.id}>
-                      {language === 'es' ? opt.label.es : opt.label.en}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('diff_label_quantity')}</div>
-                <QuantitySoldInput
-                  value={qtyInputNumeric}
-                  onChange={(n) => setQuantity(n <= 0 ? '' : String(n))}
-                  min={QUANTITY_MIN}
-                  max={QUANTITY_MAX}
-                  style={inputStyle}
-                />
-              </label>
-              <label>
-                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('amount_collected')}</div>
-                <input
-                  type="number"
-                  step="0.01"
-                  min={0}
-                  max={AMOUNT_COLLECTED_MAX}
-                  value={amountCollected}
-                  onChange={(e) => setAmountCollected(e.target.value)}
-                  style={inputStyle}
-                />
               </label>
             </>
           )}
