@@ -455,13 +455,13 @@ def room_usage_data():
     conn = sqlite3.connect('motel.db')
     c = conn.cursor()
     
-    # Get room usage frequency - top 15 rooms to keep it compact
+    # Get room usage frequency - top 10 rooms to keep it compact
     c.execute('''
         SELECT room_id, COUNT(*) as usage_count
         FROM CheckIns
         GROUP BY room_id
         ORDER BY usage_count DESC
-        LIMIT 15
+        LIMIT 10
     ''')
     
     results = c.fetchall()

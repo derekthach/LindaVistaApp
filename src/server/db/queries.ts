@@ -89,7 +89,7 @@ export function getRoomUsageTop15(): RoomUsageData {
         FROM CheckIns
         GROUP BY room_id
         ORDER BY usage_count DESC
-        LIMIT 15
+        LIMIT 10
       `
     )
     .all() as Array<{ room_id: number | string; usage_count: number }>;

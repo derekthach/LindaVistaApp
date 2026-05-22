@@ -1259,7 +1259,7 @@ export async function getRoomUsageTop15(): Promise<RoomUsageData> {
   }
   const sorted = [...byRoom.entries()]
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 15);
+    .slice(0, 10);
   return {
     room_numbers: sorted.map(([id]) => `Room ${id}`),
     usage_counts: sorted.map(([, count]) => count),
@@ -1267,7 +1267,7 @@ export async function getRoomUsageTop15(): Promise<RoomUsageData> {
 }
 
 /**
- * Room usage frequency for a single month: top 15 rooms by check-in count.
+ * Room usage frequency for a single month: top 10 rooms by check-in count.
  * Only checkInType === 'room'. Excludes room 0 and invalid/missing room numbers.
  * Date range: startOfMonth (inclusive) to startOfNextMonth (exclusive) in America/Puerto_Rico.
  * Uses listCheckinsByDateRange (index on checkInAt only) then filters in memory to avoid a composite index.
@@ -1299,7 +1299,7 @@ export async function getRoomUsageFrequency(params: {
 
   const sorted = [...byRoom.entries()]
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 15);
+    .slice(0, 10);
 
   return {
     room_numbers: sorted.map(([id]) => `Room ${id}`),

@@ -84,7 +84,7 @@ export function deriveRoomUsageFromCheckins(
   }
   const sorted = [...byRoom.entries()]
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 15);
+    .slice(0, 10);
   return {
     room_numbers: sorted.map(([id]) => `Room ${id}`),
     usage_counts: sorted.map(([, count]) => count),

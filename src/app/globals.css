@@ -99,6 +99,37 @@ textarea {
   border-color: #d1d5db;
 }
 
+/* View Check-Ins day navigation — soft pastels */
+.btn-pastel-prev {
+  background: #e8f0fe;
+  color: #1e4a8a;
+  border-color: #c7d9f7;
+}
+
+.btn-pastel-prev:hover:not(:disabled) {
+  background: #d6e6fc;
+  border-color: #a8c4f0;
+  color: #173d75;
+}
+
+.btn-pastel-next {
+  background: #e3f9ef;
+  color: #166534;
+  border-color: #b8ead4;
+}
+
+.btn-pastel-next:hover:not(:disabled) {
+  background: #ccf5e0;
+  border-color: #8fd9b8;
+  color: #14532d;
+}
+
+.btn-pastel-next:disabled {
+  background: #f0fdf4;
+  color: #9ca3af;
+  border-color: #e5e7eb;
+}
+
 /* View Check-Ins expanded row: two columns on desktop, stack on mobile */
 .checkin-expanded-grid {
   display: grid;
@@ -110,5 +141,19 @@ textarea {
 @media (max-width: 640px) {
   .checkin-expanded-grid {
     grid-template-columns: 1fr;
+  }
+
+  .checkins-day-nav > div {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .checkins-day-nav > div > p {
+    order: -1;
+    text-align: center;
+  }
+
+  .checkins-day-nav .btn {
+    width: 100%;
   }
 }

@@ -1,7 +1,8 @@
 'use client';
 
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { DateTime } from 'luxon';
 import type { CheckIn, CheckInType, UserRole, LineItem, SummarizedItem } from '@/types';
 import Button from '@/components/Button';
 import { buildSectionedData, type SectionTotals } from '@/lib/checkins/sectioning';
@@ -87,6 +88,27 @@ function renderTotalsBreakdown(totals: SectionTotals, t: (key: TranslationKey) =
 export type { SectionTotals } from '@/lib/checkins/sectioning';
 
 const SECTION_BUCKET_KEYS: TranslationKey[] = ['section_bucket_1', 'section_bucket_2', 'section_bucket_3'];
+
+const ZONE = 'America/Puerto_Rico';
+
+function addDaysToISODate(iso: string, days: number): string | null {
+  const dt = DateTime.fromISO(iso, { zone: ZONE });
+  if (!dt.isValid) return null;
+  return dt.plus({ days }).toISODate();
+}
+
+function isISODateTodayInPR(iso: string): boolean {
+  const dt = DateTime.fromISO(iso, { zone: ZONE }).startOf('day');
+  if (!dt.isValid) return false;
+  const today = DateTime.now().setZone(ZONE).startOf('day');
+  return dt.equals(today);
+}
+
+function formatISODateLabel(iso: string, locale: 'en' | 'es'): string {
+  const dt = DateTime.fromISO(iso, { zone: ZONE });
+  if (!dt.isValid) return iso;
+  return dt.setLocale(locale === 'es' ? 'es' : 'en').toFormat('cccc, MMMM d, yyyy');
+}
 
 function roomCell(checkin: CheckIn, t: (key: TranslationKey) => string): string | number {
   if (checkin.checkInType === 'food' || checkin.checkInType === 'beer') return '—';
@@ -323,7 +345,7 @@ export default function CheckinsList({
 }) {
   const RECORDS_PER_PAGE = 10;
   const router = useRouter();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [selectedDate, setSelectedDate] = useState(initialDate ?? '');
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -370,11 +392,24 @@ export default function CheckinsList({
     };
   }, [isAdmin]);
 
+  const dateFilterActive = Boolean(initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate));
+  const isSpecificDateSelected = dateFilterActive;
+
+  const navigateToFilteredDate = useCallback(
+    (iso: string) => {
+      setSelectedDate(iso);
+      router.push(`/checkins?date=${encodeURIComponent(iso)}`);
+    },
+    [router]
+  );
+
   const handleFilter = () => {
-    const params = new URLSearchParams();
     const date = selectedDate.trim();
-    if (date) params.set('date', date);
-    router.push(`/checkins?${params.toString()}`);
+    if (!date) {
+      router.push('/checkins');
+      return;
+    }
+    navigateToFilteredDate(date);
   };
 
   const handleClearFilters = () => {
@@ -384,10 +419,27 @@ export default function CheckinsList({
 
   const handleExport = () => {
     const params = new URLSearchParams();
-    const date = selectedDate.trim();
+    const date = dateFilterActive && initialDate ? initialDate : selectedDate.trim();
     if (date) params.set('date', date);
     window.location.href = `/export?${params.toString()}`;
   };
+
+  const goToPreviousDay = () => {
+    if (!initialDate) return;
+    const prev = addDaysToISODate(initialDate, -1);
+    if (prev) navigateToFilteredDate(prev);
+  };
+
+  const goToNextDay = () => {
+    if (!initialDate || isISODateTodayInPR(initialDate)) return;
+    const next = addDaysToISODate(initialDate, 1);
+    if (next) navigateToFilteredDate(next);
+  };
+
+  const isSelectedDateToday = () => (initialDate ? isISODateTodayInPR(initialDate) : false);
+
+  const formatSelectedDateLabel = () =>
+    initialDate ? formatISODateLabel(initialDate, language) : '';
 
   const handleDeleteClick = (checkin: CheckIn) => {
     setErrorMessage(null);
@@ -618,9 +670,6 @@ export default function CheckinsList({
     return () => clearTimeout(t);
   }, [successMessage]);
 
-  const dateFilterActive = Boolean(initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate));
-  const isSpecificDateSelected = dateFilterActive;
-
   const totalPages = Math.max(1, Math.ceil(initialCheckins.length / RECORDS_PER_PAGE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const pageStart = (safeCurrentPage - 1) * RECORDS_PER_PAGE;
@@ -633,6 +682,8 @@ export default function CheckinsList({
     if (!dateFilterActive || initialCheckins.length === 0) return null;
     return buildSectionedData(initialCheckins);
   }, [dateFilterActive, initialCheckins]);
+
+  const filteredDayEmpty = dateFilterActive && initialCheckins.length === 0;
 
   const renderActionsCell = (checkin: CheckIn) => {
     const rowId = stableCheckinRowId(checkin);
@@ -807,6 +858,54 @@ export default function CheckinsList({
       )}
 
       <div className="card" style={{ overflowX: 'auto' }}>
+        {dateFilterActive && (
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'stretch',
+              gap: 12,
+              padding: '12px 8px 8px',
+              borderBottom: '1px solid #e5e7eb',
+            }}
+            className="checkins-day-nav"
+          >
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+              }}
+            >
+              <Button variant="secondary" className="btn-pastel-prev" onClick={goToPreviousDay}>
+                {t('list_previous_day')}
+              </Button>
+              <p
+                style={{
+                  margin: 0,
+                  flex: '1 1 auto',
+                  textAlign: 'center',
+                  fontSize: 15,
+                  fontWeight: 500,
+                  color: '#374151',
+                  minWidth: 200,
+                }}
+              >
+                {t('list_showing_checkins_for', { date: formatSelectedDateLabel() })}
+              </p>
+              <Button
+                variant="secondary"
+                className="btn-pastel-next"
+                onClick={goToNextDay}
+                disabled={isSelectedDateToday()}
+              >
+                {t('list_next_day')}
+              </Button>
+            </div>
+          </div>
+        )}
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
@@ -833,9 +932,21 @@ export default function CheckinsList({
               </th>
             </tr>
           </thead>
-          <tbody>{tableBody()}</tbody>
+          <tbody>
+            {filteredDayEmpty ? (
+              <tr>
+                <td colSpan={colCount} style={{ padding: 16, textAlign: 'center', color: '#6b7280' }}>
+                  {t('list_no_checkins_for_day')}
+                </td>
+              </tr>
+            ) : (
+              tableBody()
+            )}
+          </tbody>
         </table>
-        {initialCheckins.length === 0 && <div style={{ padding: 16 }}>{t('list_no_checkins')}</div>}
+        {!dateFilterActive && initialCheckins.length === 0 && (
+          <div style={{ padding: 16 }}>{t('list_no_checkins')}</div>
+        )}
       </div>
       {showPagination && (
         <div
