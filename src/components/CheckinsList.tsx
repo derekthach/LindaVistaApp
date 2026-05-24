@@ -858,54 +858,6 @@ export default function CheckinsList({
       )}
 
       <div className="card" style={{ overflowX: 'auto' }}>
-        {dateFilterActive && (
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'stretch',
-              gap: 12,
-              padding: '12px 8px 8px',
-              borderBottom: '1px solid #e5e7eb',
-            }}
-            className="checkins-day-nav"
-          >
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 12,
-              }}
-            >
-              <Button variant="secondary" className="btn-pastel-prev" onClick={goToPreviousDay}>
-                {t('list_previous_day')}
-              </Button>
-              <p
-                style={{
-                  margin: 0,
-                  flex: '1 1 auto',
-                  textAlign: 'center',
-                  fontSize: 15,
-                  fontWeight: 500,
-                  color: '#374151',
-                  minWidth: 200,
-                }}
-              >
-                {t('list_showing_checkins_for', { date: formatSelectedDateLabel() })}
-              </p>
-              <Button
-                variant="secondary"
-                className="btn-pastel-next"
-                onClick={goToNextDay}
-                disabled={isSelectedDateToday()}
-              >
-                {t('list_next_day')}
-              </Button>
-            </div>
-          </div>
-        )}
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
@@ -946,6 +898,54 @@ export default function CheckinsList({
         </table>
         {!dateFilterActive && initialCheckins.length === 0 && (
           <div style={{ padding: 16 }}>{t('list_no_checkins')}</div>
+        )}
+        {dateFilterActive && (
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'stretch',
+              gap: 12,
+              padding: '12px 8px 8px',
+              borderTop: '1px solid #e5e7eb',
+            }}
+            className="checkins-day-nav"
+          >
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+              }}
+            >
+              <Button variant="secondary" className="btn-pastel-prev" onClick={goToPreviousDay}>
+                {t('list_previous_day')}
+              </Button>
+              <p
+                style={{
+                  margin: 0,
+                  flex: '1 1 auto',
+                  textAlign: 'center',
+                  fontSize: 15,
+                  fontWeight: 500,
+                  color: '#374151',
+                  minWidth: 200,
+                }}
+              >
+                {t('list_showing_checkins_for', { date: formatSelectedDateLabel() })}
+              </p>
+              <Button
+                variant="secondary"
+                className="btn-pastel-next"
+                onClick={goToNextDay}
+                disabled={isSelectedDateToday()}
+              >
+                {t('list_next_day')}
+              </Button>
+            </div>
+          </div>
         )}
       </div>
       {showPagination && (
