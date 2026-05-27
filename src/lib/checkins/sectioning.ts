@@ -1,5 +1,11 @@
 import type { CheckIn } from '@/types';
 import { isRoomCheckinRecord } from '@/lib/checkins/roomCheckinRecord';
+import {
+  PAYMENT_METHODS,
+  getPaymentMethodTranslationKey,
+  hasStoredPaymentMethodSingle,
+  type PaymentMethodValue,
+} from '@/lib/checkins/paymentMethods';
 
 /** Parse "HH:mm" to minutes since midnight. Invalid => 0. */
 export function timeToMinutes(timeHHmm: string): number {
@@ -61,6 +67,50 @@ export type SectionTotals = {
   carCount: number;
 };
 
+export type PaymentMethodTotalKey = PaymentMethodValue | 'unspecified';
+
+export interface PaymentMethodTotal {
+  method: PaymentMethodTotalKey;
+  cents: number;
+}
+
+function positiveAmountToCents(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.round(n * 100);
+}
+
+function getRecordedCheckinRevenueCents(checkin: CheckIn): number {
+  if ((checkin.checkInType ?? 'room') === 'room') {
+    const roomTotalCents = positiveAmountToCents(checkin.total_collected);
+    if (roomTotalCents > 0) return roomTotalCents;
+  }
+  return positiveAmountToCents(checkin.cost);
+}
+
+function getCanonicalPaymentMethod(value: string | undefined | null): PaymentMethodValue | null {
+  if (!hasStoredPaymentMethodSingle(value)) return null;
+  return getPaymentMethodTranslationKey(String(value));
+}
+
+function addPaymentTotal(
+  totals: Map<PaymentMethodTotalKey, number>,
+  method: PaymentMethodTotalKey,
+  cents: number
+) {
+  if (cents <= 0) return;
+  totals.set(method, (totals.get(method) ?? 0) + cents);
+}
+
+function addSinglePaymentAmount(
+  totals: Map<PaymentMethodTotalKey, number>,
+  paymentMethod: string | undefined | null,
+  cents: number
+) {
+  if (cents <= 0) return;
+  addPaymentTotal(totals, getCanonicalPaymentMethod(paymentMethod) ?? 'unspecified', cents);
+}
+
 export function totalsToCents(checkins: CheckIn[]): SectionTotals {
   let roomCents = 0;
   let foodCents = 0;
@@ -80,6 +130,46 @@ export function totalsToCents(checkins: CheckIn[]): SectionTotals {
     totalCents: roomCents + foodCents + beerCents,
     carCount,
   };
+}
+
+export function paymentMethodTotalsToCents(checkins: CheckIn[]): PaymentMethodTotal[] {
+  const totals = new Map<PaymentMethodTotalKey, number>();
+
+  for (const checkin of checkins) {
+    const revenueCents = getRecordedCheckinRevenueCents(checkin);
+    if (revenueCents <= 0) continue;
+
+    const checkinType = checkin.checkInType ?? 'room';
+    const splits = Array.isArray(checkin.payment_splits) ? checkin.payment_splits : [];
+
+    if (checkinType === 'room' && splits.length > 0) {
+      let splitCents = 0;
+
+      for (const split of splits) {
+        const cents = positiveAmountToCents(split?.amount);
+        if (cents <= 0) continue;
+        addPaymentTotal(totals, getCanonicalPaymentMethod(split?.method) ?? 'unspecified', cents);
+        splitCents += cents;
+      }
+
+      if (splitCents === 0) {
+        addSinglePaymentAmount(totals, checkin.payment_method, revenueCents);
+        continue;
+      }
+
+      if (revenueCents > splitCents) {
+        addPaymentTotal(totals, 'unspecified', revenueCents - splitCents);
+      }
+      continue;
+    }
+
+    addSinglePaymentAmount(totals, checkin.payment_method, revenueCents);
+  }
+
+  return [...PAYMENT_METHODS, 'unspecified' as const].flatMap((method) => {
+    const cents = totals.get(method) ?? 0;
+    return cents > 0 ? [{ method, cents }] : [];
+  });
 }
 
 /** Same sort order as UI table: by time then receipt. */

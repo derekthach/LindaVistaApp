@@ -20,12 +20,14 @@ import {
 } from '@/lib/checkins/staffDisplay';
 import EmployeeOperationalEditModal from '@/components/checkins/EmployeeOperationalEditModal';
 import { formatTime } from '@/lib/utils/formatTime';
-import { totalsToCents } from '@/lib/checkins/sectioning';
+import { paymentMethodTotalsToCents, totalsToCents } from '@/lib/checkins/sectioning';
 
-function centsToCurrency(cents: number): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(
-    cents / 100
-  );
+function centsToCurrency(cents: number, language: 'en' | 'es'): string {
+  return new Intl.NumberFormat(language === 'es' ? 'es-PR' : 'en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+  }).format(cents / 100);
 }
 
 function stableCheckinRowId(c: CheckIn): string {
@@ -222,7 +224,7 @@ export default function EmployeeRecentCheckinsSection({
   guestManualStaffEntry?: boolean;
   omitHeading?: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const router = useRouter();
   const [checkins, setCheckins] = useState<CheckIn[]>([]);
   const [loading, setLoading] = useState(true);
@@ -260,6 +262,7 @@ export default function EmployeeRecentCheckinsSection({
   }, [successMessage]);
 
   const recentTotals = useMemo(() => totalsToCents(checkins), [checkins]);
+  const recentPaymentTotals = useMemo(() => paymentMethodTotalsToCents(checkins), [checkins]);
 
   if (guestManualStaffEntry) return null;
 
@@ -388,15 +391,60 @@ export default function EmployeeRecentCheckinsSection({
             <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8, color: '#374151' }}>
               {t('employee_recent_totals_heading')}
             </div>
-            <p style={{ margin: 0, fontSize: 12, lineHeight: 1.65, color: '#1f2937', wordBreak: 'break-word' }}>
-              {t('list_totals_cars')}: {recentTotals.carCount} | {t('list_totals_room')}:{' '}
-              {centsToCurrency(recentTotals.roomCents)} | {t('list_totals_food')}:{' '}
-              {centsToCurrency(recentTotals.foodCents)} | {t('list_totals_beer')}:{' '}
-              {centsToCurrency(recentTotals.beerCents)} |{' '}
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '4px 12px',
+                fontSize: 12,
+                lineHeight: 1.65,
+                color: '#1f2937',
+              }}
+            >
+              <span>
+                {t('list_totals_cars')}: {recentTotals.carCount}
+              </span>
+              <span>
+                {t('list_totals_room')}: {centsToCurrency(recentTotals.roomCents, language)}
+              </span>
+              <span>
+                {t('list_totals_food')}: {centsToCurrency(recentTotals.foodCents, language)}
+              </span>
+              <span>
+                {t('list_totals_beer')}: {centsToCurrency(recentTotals.beerCents, language)}
+              </span>
               <strong>
-                {t('list_totals_label')}: {centsToCurrency(recentTotals.totalCents)}
+                {t('list_totals_label')}: {centsToCurrency(recentTotals.totalCents, language)}
               </strong>
-            </p>
+            </div>
+            <div style={{ fontWeight: 600, fontSize: 12, marginTop: 10, marginBottom: 6, color: '#4b5563' }}>
+              {t('employee_recent_payment_totals_heading')}
+            </div>
+            {recentPaymentTotals.length > 0 ? (
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '4px 12px',
+                  fontSize: 12,
+                  lineHeight: 1.65,
+                  color: '#1f2937',
+                }}
+              >
+                {recentPaymentTotals.map(({ method, cents }) => (
+                  <span key={method}>
+                    {method === 'unspecified'
+                      ? t('employee_recent_payment_method_unspecified')
+                      : t(getPaymentMethodTranslationKey(method) as TranslationKey)}
+                    : {centsToCurrency(cents, language)}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p style={{ margin: 0, fontSize: 12, lineHeight: 1.65, color: '#6b7280' }}>
+                {t('employee_recent_payment_totals_empty')}
+              </p>
+            )}
           </div>
         )}
       </section>

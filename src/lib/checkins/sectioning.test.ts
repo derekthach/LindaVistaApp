@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildSectionedData, countsAsCar, totalsToCents } from './sectioning';
+import { buildSectionedData, countsAsCar, paymentMethodTotalsToCents, totalsToCents } from './sectioning';
 import type { CheckIn } from '@/types';
 
 function baseRoom(over: Partial<CheckIn> = {}): CheckIn {
@@ -49,5 +49,71 @@ describe('countsAsCar / section totals', () => {
     expect(dayTotals.carCount).toBe(4);
     const t = totalsToCents(checkins);
     expect(t.carCount).toBe(4);
+  });
+});
+
+describe('paymentMethodTotalsToCents', () => {
+  it('splits room revenue by payment method and includes food and beer totals', () => {
+    const checkins: CheckIn[] = [
+      baseRoom({
+        receipt_number: '96711',
+        cost: 65,
+        total_collected: 65,
+        payment_splits: [
+          { method: 'cash', amount: 40 },
+          { method: 'ath_mobil', amount: 25 },
+        ],
+      }),
+      baseRoom({
+        receipt_number: '96712',
+        checkInType: 'food',
+        room_id: 0,
+        cost: 25,
+        payment_method: 'Venmo',
+      }),
+      baseRoom({
+        receipt_number: '96713',
+        checkInType: 'beer',
+        room_id: 0,
+        cost: 15,
+        payment_method: ' cash ',
+      }),
+    ];
+
+    expect(paymentMethodTotalsToCents(checkins)).toEqual([
+      { method: 'cash', cents: 5500 },
+      { method: 'ath_mobil', cents: 2500 },
+      { method: 'venmo', cents: 2500 },
+    ]);
+  });
+
+  it('routes missing payment data to unspecified without showing zero-value methods', () => {
+    const checkins: CheckIn[] = [
+      baseRoom({
+        receipt_number: '96714',
+        cost: 25,
+        total_collected: 25,
+        payment_splits: [{ method: 'cash', amount: 10 }],
+      }),
+      baseRoom({
+        receipt_number: '96715',
+        checkInType: 'food',
+        room_id: 0,
+        cost: 5,
+        payment_method: '',
+      }),
+      baseRoom({
+        receipt_number: '96716',
+        checkInType: 'beer',
+        room_id: 0,
+        cost: 0,
+        payment_method: 'paypal',
+      }),
+    ];
+
+    expect(paymentMethodTotalsToCents(checkins)).toEqual([
+      { method: 'cash', cents: 1000 },
+      { method: 'unspecified', cents: 2000 },
+    ]);
   });
 });
