@@ -1,5 +1,10 @@
 import { normalizeReceipt } from './room';
-import { isValidRoomId, isValidEmployeeRoomCorrection, parseEmployeeRoomPatchValue } from '../rooms';
+import {
+  isValidRoomId,
+  isValidEmployeeRoomCorrection,
+  parseEmployeeRoomPatchValue,
+  parseAdminLateRoomValue,
+} from '../rooms';
 import { validatePaymentSplits } from '../roomPaymentSplits';
 import type { RoomPaymentSplit } from '@/types';
 import { hasStoredPaymentMethodSingle } from '@/lib/checkins/paymentMethods';
@@ -30,6 +35,8 @@ export interface UpdateCheckinValidationResult {
 export interface ValidateUpdateCheckinOptions {
   /** When provided (e.g. merged Firestore + legacy staff), staff_name must be in this list. */
   staffAllowlist?: readonly string[];
+  /** Allows the admin late-entry placeholder room. */
+  allowLateEntryPlaceholderRoom?: boolean;
 }
 
 /**
@@ -66,6 +73,7 @@ export function validateUpdateCheckin(
   }
 
   let parsedSplits: RoomPaymentSplit[] | undefined;
+  let parsedRoomId: number | string | undefined;
   if (isRoomType) {
     const splitResult = validatePaymentSplits(raw.payment_splits);
     if (!splitResult.valid) {
@@ -76,8 +84,18 @@ export function validateUpdateCheckin(
     const roomVal = raw.room_id;
     if (roomVal === undefined || roomVal === null) {
       errors.room_id = 'Room number is required';
+    } else if (options?.allowLateEntryPlaceholderRoom) {
+      parsedRoomId = parseAdminLateRoomValue(roomVal) ?? undefined;
+      if (parsedRoomId === undefined) {
+        errors.room_id = 'Please select a valid room';
+      }
     } else if (!isValidRoomId(roomVal)) {
       errors.room_id = 'Please select a valid room';
+    } else {
+      parsedRoomId =
+        typeof roomVal === 'number'
+          ? roomVal
+          : parseEmployeeRoomPatchValue(roomVal) ?? String(roomVal).trim();
     }
   }
 
@@ -86,6 +104,7 @@ export function validateUpdateCheckin(
     valid,
     errors,
     ...(valid && isRoomType && parsedSplits ? { payment_splits: parsedSplits } : {}),
+    ...(valid && isRoomType && parsedRoomId !== undefined ? { room_id: parsedRoomId } : {}),
   };
 }
 

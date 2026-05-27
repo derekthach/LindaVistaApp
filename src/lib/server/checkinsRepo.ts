@@ -25,6 +25,7 @@ import {
   roundMoney,
 } from '@/lib/checkins/roomPaymentSplits';
 import {
+  isActiveOccupiedRoomDoc,
   isEmployeeRoomNumberLockedForCompletedStayDoc,
   isTargetRoomAvailableForEmployeeCorrection,
   sortRoomsForDisplay,
@@ -43,7 +44,13 @@ import {
 } from '@/lib/checkins/validation/updateCheckin';
 import { normalizeReceipt } from '@/lib/checkins/validation/room';
 import { summarizeLineItems } from '@/lib/checkins/summarize';
-import { FOOD_ITEMS, BEER_ITEMS } from '@/lib/checkins/items';
+import {
+  ADMIN_LATE_BEER_ITEMS,
+  ADMIN_LATE_FOOD_ITEMS,
+  BEER_ITEMS,
+  FOOD_ITEMS,
+  extendCatalogWithStoredItems,
+} from '@/lib/checkins/items';
 
 const CHECKINS_COLLECTION = 'checkins';
 /** Idempotency ledger: one doc per room check-in confirmation (client submission_key). */
@@ -471,7 +478,8 @@ export async function listActiveOccupiedRoomCheckins(): Promise<CheckIn[]> {
       .where('checkInType', '==', 'room')
       .where('isCheckedOut', '==', false)
       .get();
-    const canonicalDocs = dedupeActiveRoomStaySnapshots(snapshot.docs);
+    const activeDocs = snapshot.docs.filter((doc) => isActiveOccupiedRoomDoc(doc.data()));
+    const canonicalDocs = dedupeActiveRoomStaySnapshots(activeDocs);
     const list = canonicalDocs.map((doc) => normalizeCheckin(doc.id, doc.data()));
     return sortRoomsForDisplay(list);
   } catch (err) {
@@ -609,7 +617,10 @@ export async function adminApplyCheckinPatch(
       room_id: body.room_id,
       payment_splits: body.payment_splits,
     };
-    const validation = validateUpdateCheckin(rawRoom as Record<string, unknown>, true, staffOpts);
+    const validation = validateUpdateCheckin(rawRoom as Record<string, unknown>, true, {
+      ...staffOpts,
+      allowLateEntryPlaceholderRoom: data.isPastEntry === true,
+    });
     if (!validation.valid || !validation.payment_splits) {
       throw new Error(Object.values(validation.errors).find(Boolean) ?? 'Validation failed');
     }
@@ -620,7 +631,7 @@ export async function adminApplyCheckinPatch(
       {
         receipt_number: padded,
         staff_name: String(rawRoom.staff_name).trim(),
-        room_id: rawRoom.room_id as number | string,
+        room_id: validation.room_id ?? (rawRoom.room_id as number | string),
         payment_splits: validation.payment_splits,
         check_in_date: checkInDate,
         check_in_time: checkInTime,
@@ -631,7 +642,20 @@ export async function adminApplyCheckinPatch(
     return;
   }
 
-  const catalog = docKind === 'beer' ? BEER_ITEMS : FOOD_ITEMS;
+  const baseCatalog =
+    docKind === 'beer'
+      ? data.isPastEntry === true
+        ? ADMIN_LATE_BEER_ITEMS
+        : BEER_ITEMS
+      : data.isPastEntry === true
+        ? ADMIN_LATE_FOOD_ITEMS
+        : FOOD_ITEMS;
+  const storedItemsSource = Array.isArray(data.lineItems)
+    ? (data.lineItems as Array<Record<string, unknown>>)
+    : Array.isArray(data.summarizedItems)
+      ? (data.summarizedItems as Array<Record<string, unknown>>)
+      : [];
+  const catalog = extendCatalogWithStoredItems(baseCatalog, storedItemsSource);
   const rawFb: Record<string, unknown> = {
     staff_name: body.staff_name,
     payment_method: body.payment_method,

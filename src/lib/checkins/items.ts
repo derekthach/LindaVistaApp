@@ -8,6 +8,16 @@ export interface ItemOption {
   label: { en: string; es: string };
 }
 
+type StoredItemLike = {
+  itemId?: unknown;
+  itemLabel?: unknown;
+};
+
+export const GENERAL_LATE_ENTRY_ITEM: ItemOption = {
+  id: 'General',
+  label: { en: 'General', es: 'General' },
+};
+
 /** Food & Beverage dropdown items (config-driven). */
 export const FOOD_ITEMS: ItemOption[] = [
   { id: 'food_jugos', label: { en: 'Jugos (Juices)', es: 'Jugos' } },
@@ -21,6 +31,8 @@ export const FOOD_ITEMS: ItemOption[] = [
   { id: 'food_panadol', label: { en: 'Panadol (Acetaminophen)', es: 'Panadol (Acetaminofén)' } },
   { id: 'food_condones', label: { en: 'Condones (Condoms)', es: 'Condones (Condones)' } },
 ];
+
+export const ADMIN_LATE_FOOD_ITEMS: ItemOption[] = [GENERAL_LATE_ENTRY_ITEM, ...FOOD_ITEMS];
 
 /** Beer dropdown items. Duplicate "Lambrusco" deduped to one option. */
 export const BEER_ITEMS: ItemOption[] = [
@@ -44,3 +56,26 @@ export const BEER_ITEMS: ItemOption[] = [
   { id: 'beer_caneca_felipe_il', label: { en: 'Felipe Il', es: 'Felipe Il' } },
   { id: 'beer_caneca_gasolina_palo_ready', label: { en: 'Gasolina/Palo Ready', es: 'Gasolina/Palo Ready' } },
 ];
+
+export const ADMIN_LATE_BEER_ITEMS: ItemOption[] = [GENERAL_LATE_ENTRY_ITEM, ...BEER_ITEMS];
+
+export function extendCatalogWithStoredItems(
+  baseCatalog: readonly ItemOption[],
+  storedItems: readonly StoredItemLike[]
+): ItemOption[] {
+  const seen = new Set(baseCatalog.map((item) => item.id));
+  const extras: ItemOption[] = [];
+
+  for (const item of storedItems) {
+    const itemId = String(item.itemId ?? '').trim();
+    if (!itemId || seen.has(itemId)) continue;
+    const label = String(item.itemLabel ?? itemId).trim() || itemId;
+    extras.push({
+      id: itemId,
+      label: { en: label, es: label },
+    });
+    seen.add(itemId);
+  }
+
+  return extras.length > 0 ? [...extras, ...baseCatalog] : [...baseCatalog];
+}

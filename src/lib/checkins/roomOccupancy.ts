@@ -1,5 +1,10 @@
 import type { CheckIn } from '@/types';
-import { FULL_ROOM_CATALOG, roomOptionsForEmployeeEdit, type RoomId } from '@/lib/checkins/rooms';
+import {
+  FULL_ROOM_CATALOG,
+  roomOptionsForEmployeeEdit,
+  isLateEntryPlaceholderRoomId,
+  type RoomId,
+} from '@/lib/checkins/rooms';
 
 /**
  * Normalize room id for occupancy grouping (e.g. "40", "14A", "14b" → same logical key).
@@ -8,12 +13,14 @@ import { FULL_ROOM_CATALOG, roomOptionsForEmployeeEdit, type RoomId } from '@/li
  */
 export function normalizeOccupiedRoomKey(roomId: unknown): string {
   if (roomId == null || roomId === '') return '';
+  if (isLateEntryPlaceholderRoomId(roomId)) return '';
   return String(roomId).trim().toUpperCase().replace(/\s+/g, '');
 }
 
 /** Room stay is open for checkout: room type and explicitly still checked in (`is_checked_out === false`). */
 export function isActiveOccupiedRoom(record: CheckIn): boolean {
   if ((record.checkInType ?? 'room') !== 'room') return false;
+  if (isLateEntryPlaceholderRoomId(record.room_id)) return false;
   return record.is_checked_out === false;
 }
 
@@ -21,6 +28,7 @@ export function isActiveOccupiedRoom(record: CheckIn): boolean {
 export function isActiveOccupiedRoomDoc(data: Record<string, unknown>): boolean {
   if ((data.checkInType as string | undefined) !== 'room') return false;
   if (data.isPastEntry === true) return false;
+  if (isLateEntryPlaceholderRoomId(data.roomId)) return false;
   return data.isCheckedOut === false;
 }
 

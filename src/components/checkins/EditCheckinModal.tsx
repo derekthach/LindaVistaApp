@@ -3,12 +3,24 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CheckIn, CheckInType, LineItem, RoomPaymentSplit } from '@/types';
 import Button from '@/components/Button';
-import { FOOD_ITEMS, BEER_ITEMS } from '@/lib/checkins/items';
+import {
+  ADMIN_LATE_BEER_ITEMS,
+  ADMIN_LATE_FOOD_ITEMS,
+  BEER_ITEMS,
+  FOOD_ITEMS,
+  extendCatalogWithStoredItems,
+} from '@/lib/checkins/items';
 import type { ItemOption } from '@/lib/checkins/items';
 import { normalizeReceipt } from '@/lib/checkins/validation/room';
 import { formatReceiptNumber } from '@/lib/checkins/receipt';
 import { ALLOWED_STAFF } from '@/lib/checkins/validation/updateCheckin';
-import { parseRoomOptionValue, isValidRoomId, roomOptionsForEmployeeEdit } from '@/lib/checkins/rooms';
+import {
+  isValidAdminLateRoomId,
+  isValidRoomId,
+  parseAdminLateRoomOptionValue,
+  parseRoomOptionValue,
+  roomOptionsForEmployeeEdit,
+} from '@/lib/checkins/rooms';
 import { PAYMENT_METHODS, getPaymentMethodTranslationKey, hasStoredPaymentMethodSingle } from '@/lib/checkins/paymentMethods';
 import { useTranslation } from '@/lib/i18n/useTranslation';
 import type { TranslationKey } from '@/lib/i18n/translations';
@@ -142,7 +154,23 @@ export default function EditCheckinModal({
 
   const storedType = checkin ? storedCheckInType(checkin) : 'room';
   const effectiveIsRoom = storedType === 'room';
-  const itemCatalog: ItemOption[] = storedType === 'beer' ? BEER_ITEMS : FOOD_ITEMS;
+  const itemCatalog: ItemOption[] = useMemo(() => {
+    const baseCatalog =
+      storedType === 'beer'
+        ? checkin?.is_past_entry
+          ? ADMIN_LATE_BEER_ITEMS
+          : BEER_ITEMS
+        : checkin?.is_past_entry
+          ? ADMIN_LATE_FOOD_ITEMS
+          : FOOD_ITEMS;
+    const storedItems = checkin ? lineItemsFromCheckinRecord(checkin) : [];
+    return extendCatalogWithStoredItems(baseCatalog, storedItems);
+  }, [checkin, storedType]);
+  const roomOptions = useMemo(() => {
+    const base = roomOptionsForEmployeeEdit(room_id).filter((room) => String(room) !== '0');
+    if (!checkin?.is_past_entry) return base;
+    return [0, ...base];
+  }, [checkin?.is_past_entry, room_id]);
 
   const baseStaffList = useMemo(() => {
     if (staffOptions && staffOptions.length > 0) return [...staffOptions];
@@ -271,7 +299,7 @@ export default function EditCheckinModal({
     receiptNormalized !== null &&
     staffValid &&
     splitsValid &&
-    isValidRoomId(room_id) &&
+    (checkin?.is_past_entry ? isValidAdminLateRoomId(room_id) : isValidRoomId(room_id)) &&
     dateTimeOk;
   const formValidFoodBeer =
     !effectiveIsRoom && foodBeerValidation.valid && staffValid && dateTimeOk;
@@ -573,10 +601,16 @@ export default function EditCheckinModal({
                 <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('room_number')}</div>
                 <select
                   value={String(room_id)}
-                  onChange={(e) => setRoomId(parseRoomOptionValue(e.target.value))}
+                  onChange={(e) =>
+                    setRoomId(
+                      checkin?.is_past_entry
+                        ? parseAdminLateRoomOptionValue(e.target.value)
+                        : parseRoomOptionValue(e.target.value)
+                    )
+                  }
                   style={inputStyle}
                 >
-                  {roomOptionsForEmployeeEdit(room_id).map((r) => (
+                  {roomOptions.map((r) => (
                     <option key={String(r)} value={String(r)}>
                       {formatRoomDisplay(r, t('room'))}
                     </option>

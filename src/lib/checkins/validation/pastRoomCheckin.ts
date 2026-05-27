@@ -1,6 +1,6 @@
 import { DateTime } from 'luxon';
 import { normalizeReceipt } from '@/lib/checkins/validation/room';
-import { isValidRoomId } from '@/lib/checkins/rooms';
+import { isValidAdminLateRoomId, parseAdminLateRoomValue } from '@/lib/checkins/rooms';
 import { validatePaymentSplits, calculatePaymentSplitTotal } from '@/lib/checkins/roomPaymentSplits';
 import type { RoomPaymentSplit } from '@/types';
 
@@ -28,9 +28,10 @@ export function validatePastRoomCheckinAdmin(
   const errors: PastRoomCheckinValidationResult['errors'] = {};
 
   const roomVal = raw.room_id;
+  const parsedRoomId = parseAdminLateRoomValue(roomVal);
   if (roomVal === undefined || roomVal === null || roomVal === '') {
     errors.room_id = 'Room number is required';
-  } else if (!isValidRoomId(roomVal)) {
+  } else if (!isValidAdminLateRoomId(roomVal)) {
     errors.room_id = 'Please select a valid room';
   }
 
@@ -83,9 +84,9 @@ export function validatePastRoomCheckinAdmin(
   return {
     valid,
     errors,
-    ...(valid && normalizedReceipt && splitResult.splits && roomVal != null && dateStr && timeStr && staff
+    ...(valid && normalizedReceipt && splitResult.splits && parsedRoomId != null && dateStr && timeStr && staff
       ? {
-          room_id: roomVal as number | string,
+          room_id: parsedRoomId,
           check_in_date: dateStr,
           check_in_time: timeStr,
           staff_name: staff,

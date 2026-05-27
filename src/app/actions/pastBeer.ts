@@ -6,7 +6,7 @@ import { requireAdmin } from '@/lib/server/requireAdmin';
 import { createPastBeerCheckin } from '@/lib/server/checkinsRepo';
 import { getMergedCheckoutStaffDisplayNames } from '@/lib/server/checkoutStaffAllowlist';
 import { validateAdminPastFoodBeerMulti } from '@/lib/checkins/validation/adminPastFoodBeerMulti';
-import { BEER_ITEMS } from '@/lib/checkins/items';
+import { ADMIN_LATE_BEER_ITEMS } from '@/lib/checkins/items';
 
 export async function submitPastBeerAction(
   _prev: unknown,
@@ -31,7 +31,7 @@ export async function submitPastBeerAction(
     return { error: 'Could not load staff list. Try again.' };
   }
 
-  const validation = validateAdminPastFoodBeerMulti(raw, staffAllowlist, BEER_ITEMS);
+  const validation = validateAdminPastFoodBeerMulti(raw, staffAllowlist, ADMIN_LATE_BEER_ITEMS);
   if (!validation.valid || !validation.lineItems?.length) {
     return { error: validation.error ?? 'Validation failed' };
   }

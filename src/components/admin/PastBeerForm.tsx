@@ -2,13 +2,13 @@
 
 import PastFoodBeerMultiRowForm from '@/components/admin/PastFoodBeerMultiRowForm';
 import { submitPastBeerAction } from '@/app/actions/pastBeer';
-import { BEER_ITEMS } from '@/lib/checkins/items';
+import { ADMIN_LATE_BEER_ITEMS } from '@/lib/checkins/items';
 
 export default function PastBeerForm({ staffNames }: { staffNames: string[] }) {
   return (
     <PastFoodBeerMultiRowForm
       staffNames={staffNames}
-      itemOptions={BEER_ITEMS}
+      itemOptions={ADMIN_LATE_BEER_ITEMS}
       checkInType="beer"
       submitAction={submitPastBeerAction}
       introKey="past_entry_beer_intro"

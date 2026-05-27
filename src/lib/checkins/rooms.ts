@@ -40,9 +40,29 @@ export const ROOM_OPTIONS: (number | string)[] = FULL_ROOM_CATALOG.filter(
 );
 
 export type RoomId = number | string;
+export const LATE_ENTRY_ROOM_PLACEHOLDER = 0;
+export const ADMIN_LATE_ROOM_OPTIONS: RoomId[] = [LATE_ENTRY_ROOM_PLACEHOLDER, ...FULL_ROOM_CATALOG];
 
 const VALID_ROOM_SET = new Set(FULL_ROOM_CATALOG.map((o) => String(o)));
 const NEW_CHECKIN_ROOM_SET = new Set(ROOM_OPTIONS.map((o) => String(o)));
+
+export function isLateEntryPlaceholderRoomId(value: unknown): boolean {
+  if (value === undefined || value === null) return false;
+  return String(value).trim() === String(LATE_ENTRY_ROOM_PLACEHOLDER);
+}
+
+export function parseAdminLateRoomValue(value: unknown): RoomId | null {
+  if (value === undefined || value === null || value === '') return null;
+  if (isLateEntryPlaceholderRoomId(value)) return LATE_ENTRY_ROOM_PLACEHOLDER;
+  const s = String(value).trim();
+  if (s === '') return null;
+  if (!isValidRoomId(s)) return null;
+  return parseRoomOptionValue(s);
+}
+
+export function isValidAdminLateRoomId(value: unknown): boolean {
+  return parseAdminLateRoomValue(value) !== null;
+}
 
 /** Whether the value is in the full catalog (edits, past room entry, display). */
 export function isValidRoomId(value: unknown): boolean {
@@ -113,6 +133,10 @@ export function parseRoomOptionValue(value: string): RoomId {
   if (!Number.isNaN(n) && Number.isInteger(n) && FULL_ROOM_CATALOG.some((o) => o === n)) return n;
   if (FULL_ROOM_CATALOG.some((o) => o === value)) return value;
   return 1;
+}
+
+export function parseAdminLateRoomOptionValue(value: string): RoomId {
+  return parseAdminLateRoomValue(value) ?? LATE_ENTRY_ROOM_PLACEHOLDER;
 }
 
 /** Display label for any room id (supports historical 14/15 and new 14A/14B/15A/15B). */

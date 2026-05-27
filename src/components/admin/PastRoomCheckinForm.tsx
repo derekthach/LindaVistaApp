@@ -5,10 +5,10 @@ import { useRouter } from 'next/navigation';
 import { submitPastRoomCheckinAction } from '@/app/actions/pastRoomCheckin';
 import Button from '@/components/Button';
 import {
-  FULL_ROOM_CATALOG,
-  parseRoomOptionValue,
+  ADMIN_LATE_ROOM_OPTIONS,
+  parseAdminLateRoomOptionValue,
   formatRoomDisplay,
-  isValidRoomId,
+  isValidAdminLateRoomId,
 } from '@/lib/checkins/rooms';
 import { PAYMENT_METHODS } from '@/lib/checkins/paymentMethods';
 import {
@@ -35,7 +35,7 @@ export default function PastRoomCheckinForm({ staffNames }: { staffNames: string
   const router = useRouter();
   const [state, formAction, isPending] = useActionState(submitPastRoomCheckinAction, {});
 
-  const [roomId, setRoomId] = useState<number | string>(1);
+  const [roomId, setRoomId] = useState<number | string>(0);
   const [checkInDate, setCheckInDate] = useState('');
   const [checkInTime, setCheckInTime] = useState('');
   const [staffName, setStaffName] = useState('');
@@ -132,11 +132,11 @@ export default function PastRoomCheckinForm({ staffNames }: { staffNames: string
             <select
               name="room_id"
               value={String(roomId)}
-              onChange={(e) => setRoomId(parseRoomOptionValue(e.target.value))}
+              onChange={(e) => setRoomId(parseAdminLateRoomOptionValue(e.target.value))}
               style={inputStyle}
               required
             >
-              {FULL_ROOM_CATALOG.map((r) => (
+              {ADMIN_LATE_ROOM_OPTIONS.map((r) => (
                 <option key={String(r)} value={String(r)}>
                   {formatRoomDisplay(r, t('room'))}
                 </option>
@@ -312,7 +312,7 @@ export default function PastRoomCheckinForm({ staffNames }: { staffNames: string
             !receiptNumber.trim() ||
             liveTotal == null ||
             liveTotal <= 0 ||
-            !isValidRoomId(roomId)
+            !isValidAdminLateRoomId(roomId)
           }
         >
           {isPending ? t('saving_confirm') : t('submit')}
