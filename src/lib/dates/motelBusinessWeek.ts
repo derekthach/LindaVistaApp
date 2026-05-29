@@ -55,3 +55,37 @@ export function getMotelBusinessWeekStartIso(
 ): string {
   return getMotelBusinessWeekStart(now, zone).toISODate() ?? '';
 }
+
+/** Inclusive Fri and Thu ISO dates for the motel week starting on `weekStartISO` (must be a Friday in PR). */
+export function getMotelBusinessWeekBoundsFromStartIso(
+  weekStartISO: string,
+  zone: string = MOTEL_TIMEZONE
+): { startISO: string; endISO: string } {
+  const start = DateTime.fromISO(weekStartISO, { zone }).startOf('day');
+  const end = start.plus({ days: 6 });
+  return { startISO: start.toISODate() ?? '', endISO: end.toISODate() ?? '' };
+}
+
+/**
+ * Human-readable Fri–Thu label, e.g. "May 29 - June 4, 2026".
+ * `weekStartISO` is snapped to the containing motel week if it is not already a Friday.
+ */
+export function formatMotelWeekRangeLabel(
+  weekStartISO: string,
+  zone: string = MOTEL_TIMEZONE,
+  locale?: string
+): string {
+  const anchor = DateTime.fromISO(weekStartISO, { zone });
+  const start = getMotelBusinessWeekStart(anchor, zone);
+  const end = start.plus({ days: 6 });
+  const startFmt = locale ? start.setLocale(locale) : start;
+  const endFmt = locale ? end.setLocale(locale) : end;
+
+  if (start.year === end.year) {
+    if (start.month === end.month) {
+      return `${startFmt.toFormat('MMMM d')} - ${endFmt.toFormat('d, yyyy')}`;
+    }
+    return `${startFmt.toFormat('MMMM d')} - ${endFmt.toFormat('MMMM d, yyyy')}`;
+  }
+  return `${startFmt.toFormat('MMMM d, yyyy')} - ${endFmt.toFormat('MMMM d, yyyy')}`;
+}

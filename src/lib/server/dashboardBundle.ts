@@ -12,9 +12,13 @@ import type {
 } from '@/types';
 import { isRoomCheckinRecord } from '@/lib/checkins/roomCheckinRecord';
 import { deriveCalendarMonthRoomTrendFromCheckins } from '@/lib/dashboard/calendarMonthTrendData';
+import { deriveRoomUsageForWeekFromCheckins } from '@/lib/dashboard/roomUsageWeekData';
 import { deriveMotelWeekTrendComparisonFromCheckins } from '@/lib/dashboard/motelWeekTrendData';
 import { deriveSummaryMetricsFromCheckins } from '@/lib/dashboard/summaryMetrics';
-import { getMotelBusinessWeekStart } from '@/lib/dates/motelBusinessWeek';
+import {
+  getMotelBusinessWeekBoundsFromStartIso,
+  getMotelBusinessWeekStart,
+} from '@/lib/dates/motelBusinessWeek';
 import { getEmployeeRoomCleanupsForMonth, listCheckinsByDateRange } from '@/lib/server/checkinsRepo';
 
 const ZONE = 'America/Puerto_Rico';
@@ -67,28 +71,12 @@ function sortAndLimitStaffCounts(counts: Map<string, number>, limit = 20): Emplo
 /** Re-export for callers that imported summary derivation from this module. */
 export { deriveSummaryMetricsFromCheckins } from '@/lib/dashboard/summaryMetrics';
 
+/** Re-export weekly room usage derivation for bundle callers. */
 export function deriveRoomUsageFromCheckins(
   checkins: CheckIn[],
-  year: number,
-  month: number
+  weekStartISO: string
 ): RoomUsageData {
-  const { startISO, endISO } = monthIsoBounds(year, month);
-  const byRoom = new Map<number | string, number>();
-  for (const c of checkins) {
-    if (c.checkInType !== 'room') continue;
-    if (c.date < startISO || c.date > endISO) continue;
-    const roomId = c.room_id;
-    if (roomId == null || roomId === '' || (typeof roomId === 'number' && (Number.isNaN(roomId) || roomId <= 0)))
-      continue;
-    byRoom.set(roomId, (byRoom.get(roomId) ?? 0) + 1);
-  }
-  const sorted = [...byRoom.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10);
-  return {
-    room_numbers: sorted.map(([id]) => `Room ${id}`),
-    usage_counts: sorted.map(([, count]) => count),
-  };
+  return deriveRoomUsageForWeekFromCheckins(checkins, weekStartISO, ZONE);
 }
 
 export function deriveMonthlyComparisonFromCheckins(
@@ -149,8 +137,7 @@ export function deriveEmployeeCheckInsFromCheckins(
  * to reduce duplicate Firestore document reads.
  */
 export async function getDashboardBundle(params: {
-  roomMonth: number;
-  roomYear: number;
+  roomWeekStart: string;
   revenueMonth: number;
   revenueYear: number;
 }): Promise<DashboardBundleResponse> {
@@ -160,11 +147,13 @@ export async function getDashboardBundle(params: {
   const weekStart = getMotelBusinessWeekStart(now, ZONE);
   const prevWeekStart = weekStart.minus({ days: 7 });
 
-  const roomStart = DateTime.fromObject(
-    { year: params.roomYear, month: params.roomMonth, day: 1 },
-    { zone: ZONE }
-  ).startOf('day');
-  const roomEnd = roomStart.plus({ months: 1 }).minus({ days: 1 });
+  const roomWeekStartISO =
+    getMotelBusinessWeekStart(
+      DateTime.fromISO(params.roomWeekStart, { zone: ZONE }),
+      ZONE
+    ).toISODate() ?? params.roomWeekStart;
+  const { startISO: roomWeekStartBound, endISO: roomWeekEndBound } =
+    getMotelBusinessWeekBoundsFromStartIso(roomWeekStartISO, ZONE);
 
   const { currentMonthStart, currentMonthEnd, prevMonthStart, prevMonthEnd } = revenueMonthBounds(
     params.revenueMonth,
@@ -182,13 +171,13 @@ export async function getDashboardBundle(params: {
     prevWeekStart.toISODate() ?? '',
     calendarMonthStart,
     calendarPrevMonthStart,
-    roomStart.toISODate() ?? '',
+    roomWeekStartBound,
     currentMonthStart,
     prevMonthStart,
   ];
   const ends = [
     todayISO,
-    roomEnd.toISODate() ?? '',
+    roomWeekEndBound,
     currentMonthEnd,
     prevMonthEnd,
     calendarPrevMonthEnd,
@@ -280,7 +269,7 @@ export async function getDashboardBundle(params: {
   }
 
   try {
-    roomUsage = deriveRoomUsageFromCheckins(checkins, params.roomYear, params.roomMonth);
+    roomUsage = deriveRoomUsageForWeekFromCheckins(checkins, roomWeekStartISO, ZONE);
   } catch (e) {
     console.warn('[dashboard-bundle] room usage derivation failed', e);
   }
@@ -288,12 +277,12 @@ export async function getDashboardBundle(params: {
   try {
     const check_ins = deriveEmployeeCheckInsFromCheckins(
       checkins,
-      params.roomYear,
-      params.roomMonth
+      params.revenueYear,
+      params.revenueMonth
     );
     let cleanups: EmployeeRoomCountSeries = { labels: [], counts: [] };
     try {
-      cleanups = await getEmployeeRoomCleanupsForMonth(params.roomYear, params.roomMonth);
+      cleanups = await getEmployeeRoomCleanupsForMonth(params.revenueYear, params.revenueMonth);
     } catch (e) {
       console.warn('[dashboard-bundle] cleanups query failed', e);
     }

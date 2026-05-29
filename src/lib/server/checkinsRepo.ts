@@ -37,7 +37,11 @@ import { logInfo } from '@/lib/server/log';
 import { isRoomCheckinRecord } from '@/lib/checkins/roomCheckinRecord';
 import { deriveMotelWeekTrendComparisonFromCheckins } from '@/lib/dashboard/motelWeekTrendData';
 import { deriveSummaryMetricsFromCheckins } from '@/lib/dashboard/summaryMetrics';
-import { getMotelBusinessWeekStart } from '@/lib/dates/motelBusinessWeek';
+import { deriveRoomUsageForWeekFromCheckins } from '@/lib/dashboard/roomUsageWeekData';
+import {
+  getMotelBusinessWeekBoundsFromStartIso,
+  getMotelBusinessWeekStart,
+} from '@/lib/dates/motelBusinessWeek';
 import {
   validateUpdateCheckin,
   validateUpdateFoodBeerCheckin,
@@ -1291,44 +1295,21 @@ export async function getRoomUsageTop15(): Promise<RoomUsageData> {
 }
 
 /**
- * Room usage frequency for a single month: top 10 rooms by check-in count.
- * Only checkInType === 'room'. Excludes room 0 and invalid/missing room numbers.
- * Date range: startOfMonth (inclusive) to startOfNextMonth (exclusive) in America/Puerto_Rico.
- * Uses listCheckinsByDateRange (index on checkInAt only) then filters in memory to avoid a composite index.
+ * Room usage frequency for one motel business week: top 10 rooms by room check-in count.
+ * Includes admin late/past room entries; excludes deleted docs; uses latest saved room_id.
  */
 export async function getRoomUsageFrequency(params: {
-  year: number;
-  month: number; // 1-12
+  weekStart: string;
 }): Promise<RoomUsageData> {
-  const { year, month } = params;
-
-  const startOfMonth = DateTime.fromObject(
-    { year, month, day: 1 },
-    { zone: ZONE }
-  ).startOf('day');
-  const lastDayOfMonth = startOfMonth.plus({ months: 1 }).minus({ days: 1 });
-
-  const startISO = startOfMonth.toISODate() ?? '';
-  const endISO = lastDayOfMonth.toISODate() ?? '';
+  const weekStartISO =
+    getMotelBusinessWeekStart(
+      DateTime.fromISO(params.weekStart, { zone: ZONE }),
+      ZONE
+    ).toISODate() ?? params.weekStart;
+  const { startISO, endISO } = getMotelBusinessWeekBoundsFromStartIso(weekStartISO, ZONE);
 
   const checkins = await listCheckinsByDateRange(startISO, endISO);
-
-  const byRoom = new Map<number | string, number>();
-  for (const c of checkins) {
-    if (c.checkInType !== 'room') continue;
-    const roomId = c.room_id;
-    if (roomId == null || roomId === '' || (typeof roomId === 'number' && (Number.isNaN(roomId) || roomId <= 0))) continue;
-    byRoom.set(roomId, (byRoom.get(roomId) ?? 0) + 1);
-  }
-
-  const sorted = [...byRoom.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10);
-
-  return {
-    room_numbers: sorted.map(([id]) => `Room ${id}`),
-    usage_counts: sorted.map(([, count]) => count),
-  };
+  return deriveRoomUsageForWeekFromCheckins(checkins, weekStartISO, ZONE);
 }
 
 const MONTH_NAMES = [

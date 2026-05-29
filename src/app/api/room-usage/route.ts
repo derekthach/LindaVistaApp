@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { DateTime } from 'luxon';
 import { requireAuth } from '@/server/auth/session';
+import { getMotelBusinessWeekStartIso } from '@/lib/dates/motelBusinessWeek';
 import { getRoomUsageFrequency } from '@/lib/server/checkinsRepo';
 import { logError, logInfo } from '@/lib/server/log';
 import { HttpError, toErrorResponse } from '@/lib/server/httpError';
@@ -22,12 +23,11 @@ export async function GET(request: Request) {
 
     const now = DateTime.now().setZone(ZONE);
     const { searchParams } = new URL(request.url);
-    const monthParam = searchParams.get('month');
-    const yearParam = searchParams.get('year');
-    const month = monthParam ? parseInt(monthParam, 10) : now.month;
-    const year = yearParam ? parseInt(yearParam, 10) : now.year;
+    const weekStartParam = searchParams.get('weekStart');
+    const weekStart =
+      weekStartParam?.trim() || getMotelBusinessWeekStartIso(now);
 
-    const data = await getRoomUsageFrequency({ year, month });
+    const data = await getRoomUsageFrequency({ weekStart });
     return NextResponse.json(data);
   } catch (err) {
     if (err instanceof HttpError) {

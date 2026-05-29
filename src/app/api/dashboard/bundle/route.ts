@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { DateTime } from 'luxon';
 import { requireAuth } from '@/server/auth/session';
 import { deriveCalendarMonthRoomTrendFromCheckins } from '@/lib/dashboard/calendarMonthTrendData';
+import { getMotelBusinessWeekStartIso } from '@/lib/dates/motelBusinessWeek';
 import { getDashboardBundle } from '@/lib/server/dashboardBundle';
 import { logError, logInfo } from '@/lib/server/log';
 import { HttpError, toErrorResponse } from '@/lib/server/httpError';
@@ -34,14 +35,13 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const nowPr = DateTime.now().setZone(ZONE);
 
-    const roomMonth = parseIntParam(searchParams.get('roomMonth'), nowPr.month);
-    const roomYear = parseIntParam(searchParams.get('roomYear'), nowPr.year);
+    const roomWeekStart =
+      searchParams.get('roomWeekStart')?.trim() || getMotelBusinessWeekStartIso(nowPr);
     const revenueMonth = parseIntParam(searchParams.get('revenueMonth'), new Date().getMonth() + 1);
     const revenueYear = parseIntParam(searchParams.get('revenueYear'), new Date().getFullYear());
 
     const payload = await getDashboardBundle({
-      roomMonth,
-      roomYear,
+      roomWeekStart,
       revenueMonth,
       revenueYear,
     });

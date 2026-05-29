@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DateTime } from 'luxon';
 import {
+  formatMotelWeekRangeLabel,
   getMotelBusinessWeekRange,
   getMotelBusinessWeekStart,
   getMotelBusinessWeekStartIso,
@@ -67,5 +68,11 @@ describe('getPreviousMotelBusinessWeekRange', () => {
     const { start, end } = getPreviousMotelBusinessWeekRange(wed);
     expect(start.toISODate()).toBe('2026-04-24');
     expect(end.toISODate()).toBe('2026-04-30');
+  });
+});
+
+describe('formatMotelWeekRangeLabel', () => {
+  it('formats Fri–Thu within one year', () => {
+    expect(formatMotelWeekRangeLabel('2026-05-29')).toBe('May 29 - June 4, 2026');
   });
 });

@@ -1,11 +1,16 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { DateTime } from 'luxon';
 import LineChart from './charts/LineChart';
 import BarChart from './charts/BarChart';
 import DashboardSummaryCards from '@/components/DashboardSummaryCards';
 import { deriveCalendarMonthRoomTrendFromCheckins } from '@/lib/dashboard/calendarMonthTrendData';
+import {
+  formatMotelWeekRangeLabel,
+  getMotelBusinessWeekStart,
+  getMotelBusinessWeekStartIso,
+} from '@/lib/dates/motelBusinessWeek';
 import { useTranslation } from '@/lib/i18n/useTranslation';
 import type {
   CalendarMonthRoomTrendData,
@@ -32,9 +37,17 @@ const MONTH_KEY_SUFFIXES = [
   'nov',
   'dec',
 ] as const;
-function roomUsageYearOptions(): number[] {
-  const y = DateTime.now().setZone(ZONE).year;
-  return [y - 2, y - 1, y, y + 1, y + 2];
+function navButtonStyle(disabled: boolean): CSSProperties {
+  return {
+    height: 36,
+    padding: '0 12px',
+    borderRadius: 8,
+    border: '1px solid #e5e7eb',
+    fontSize: 14,
+    background: disabled ? '#f3f4f6' : '#fff',
+    color: disabled ? '#9ca3af' : '#111827',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+  };
 }
 
 const EMPTY_DASHBOARD: DashboardData = {
@@ -108,11 +121,8 @@ export default function DashboardCharts() {
     useState<CalendarMonthRoomTrendData>(EMPTY_CALENDAR_MONTH_PENDING);
   const [roomUsage, setRoomUsage] = useState<RoomUsageData | null>(null);
   const [bundleLoading, setBundleLoading] = useState(true);
-  const [roomUsageMonth, setRoomUsageMonth] = useState(() =>
-    DateTime.now().setZone(ZONE).month
-  );
-  const [roomUsageYear, setRoomUsageYear] = useState(() =>
-    DateTime.now().setZone(ZONE).year
+  const [roomWeekStart, setRoomWeekStart] = useState(() =>
+    getMotelBusinessWeekStartIso(DateTime.now().setZone(ZONE))
   );
   const [monthly, setMonthly] = useState<MonthlyComparisonData | null>(null);
   const [month, setMonth] = useState(new Date().getMonth() + 1);
@@ -123,8 +133,7 @@ export default function DashboardCharts() {
     setBundleLoading(true);
     setCalendarMonthTrend(EMPTY_CALENDAR_MONTH_PENDING);
     const params = new URLSearchParams({
-      roomMonth: String(roomUsageMonth),
-      roomYear: String(roomUsageYear),
+      roomWeekStart,
       revenueMonth: String(month),
       revenueYear: String(year),
     });
@@ -171,7 +180,41 @@ export default function DashboardCharts() {
         setEmployeeActivity(EMPTY_EMPLOYEE_ACTIVITY);
         setBundleLoading(false);
       });
-  }, [roomUsageMonth, roomUsageYear, month, year, t]);
+  }, [roomWeekStart, month, year, t]);
+
+  const roomUsageWeekLabel = useMemo(
+    () =>
+      formatMotelWeekRangeLabel(
+        roomWeekStart,
+        ZONE,
+        language === 'es' ? 'es' : 'en'
+      ),
+    [roomWeekStart, language]
+  );
+
+  const canGoToNextRoomWeek = useMemo(() => {
+    const selected = getMotelBusinessWeekStart(
+      DateTime.fromISO(roomWeekStart, { zone: ZONE }),
+      ZONE
+    );
+    const current = getMotelBusinessWeekStart(DateTime.now().setZone(ZONE), ZONE);
+    return selected < current;
+  }, [roomWeekStart]);
+
+  const goToPreviousRoomWeek = () => {
+    const prev = DateTime.fromISO(roomWeekStart, { zone: ZONE })
+      .minus({ days: 7 })
+      .toISODate();
+    if (prev) setRoomWeekStart(prev);
+  };
+
+  const goToNextRoomWeek = () => {
+    if (!canGoToNextRoomWeek) return;
+    const next = DateTime.fromISO(roomWeekStart, { zone: ZONE })
+      .plus({ days: 7 })
+      .toISODate();
+    if (next) setRoomWeekStart(next);
+  };
 
   const localizeRoomChartLabel = (label: string) =>
     label.replace(/^Room\s+/i, `${t('room')} `);
@@ -304,45 +347,34 @@ export default function DashboardCharts() {
         <h2 style={{ marginBottom: 12 }}>{t('detailed_analytics')}</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
           <div className="card" style={{ height: 360 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-              <h3 style={{ margin: 0 }}>{t('chart_room_usage_top')}</h3>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <select
-                  value={roomUsageMonth}
-                  onChange={(e) => setRoomUsageMonth(parseInt(e.target.value, 10))}
-                  style={{
-                    height: 36,
-                    padding: '0 10px',
-                    borderRadius: 8,
-                    border: '1px solid #e5e7eb',
-                    fontSize: 14,
-                    minWidth: 72,
-                  }}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                gap: 8,
+                flexWrap: 'wrap',
+                marginBottom: 12,
+              }}
+            >
+              <div>
+                <h3 style={{ margin: 0 }}>{t('chart_room_usage_top')}</h3>
+                <div style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>
+                  {roomUsageWeekLabel}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <button type="button" onClick={goToPreviousRoomWeek} style={navButtonStyle(false)}>
+                  {t('chart_previous_week')}
+                </button>
+                <button
+                  type="button"
+                  onClick={goToNextRoomWeek}
+                  disabled={!canGoToNextRoomWeek}
+                  style={navButtonStyle(!canGoToNextRoomWeek)}
                 >
-                  {MONTH_KEY_SUFFIXES.map((suffix, i) => (
-                    <option key={suffix} value={i + 1}>
-                      {t(`month_short_${suffix}` as 'month_short_jan')}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={roomUsageYear}
-                  onChange={(e) => setRoomUsageYear(parseInt(e.target.value, 10))}
-                  style={{
-                    height: 36,
-                    padding: '0 10px',
-                    borderRadius: 8,
-                    border: '1px solid #e5e7eb',
-                    fontSize: 14,
-                    minWidth: 72,
-                  }}
-                >
-                  {roomUsageYearOptions().map((y) => (
-                    <option key={y} value={y}>
-                      {y}
-                    </option>
-                  ))}
-                </select>
+                  {t('chart_next_week')}
+                </button>
               </div>
             </div>
             <div style={{ height: 280 }}>
@@ -355,9 +387,15 @@ export default function DashboardCharts() {
                   label={t('chart_usage_count')}
                   color="rgba(22, 163, 74, 1)"
                   horizontal
+                  showValueLabels
+                  valueAxisMax={
+                    roomUsage.max_count
+                      ? roomUsage.max_count + Math.max(1, Math.ceil(roomUsage.max_count * 0.12))
+                      : undefined
+                  }
                 />
               ) : (
-                <p style={{ color: '#6b7280', padding: 24 }}>{t('chart_no_room_usage_month')}</p>
+                <p style={{ color: '#6b7280', padding: 24 }}>{t('chart_no_room_usage_week')}</p>
               )}
             </div>
           </div>

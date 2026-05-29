@@ -127,6 +127,12 @@ export interface DashboardData {
 export interface RoomUsageData {
   room_numbers: string[];
   usage_counts: number[];
+  /** Fri ISO (PR motel week) for the selected range */
+  week_start?: string;
+  /** Thu ISO (PR motel week) for the selected range */
+  week_end?: string;
+  /** Highest usage count in the result set (for chart axis scaling) */
+  max_count?: number;
 }
 
 /** Bar chart series: staff display names and integer counts (room check-ins or cleanups). */

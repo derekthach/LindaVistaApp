@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -8,9 +9,42 @@ import {
   BarElement,
   Tooltip,
   Legend,
+  type Plugin,
 } from 'chart.js';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
+
+function valueAxisMaxFromData(data: number[]): number | undefined {
+  if (data.length === 0) return undefined;
+  const peak = Math.max(...data);
+  if (peak <= 0) return undefined;
+  return peak + Math.max(1, Math.ceil(peak * 0.12));
+}
+
+function horizontalBarValueLabelsPlugin(): Plugin<'bar'> {
+  return {
+    id: 'horizontalBarValueLabels',
+    afterDatasetsDraw(chart) {
+      if (chart.options.indexAxis !== 'y') return;
+      const { ctx } = chart;
+      ctx.save();
+      ctx.fillStyle = '#374151';
+      ctx.font = '12px system-ui, sans-serif';
+      ctx.textBaseline = 'middle';
+      chart.data.datasets.forEach((_dataset, datasetIndex) => {
+        const meta = chart.getDatasetMeta(datasetIndex);
+        meta.data.forEach((element, index) => {
+          const raw = chart.data.datasets[datasetIndex]?.data[index];
+          const value = typeof raw === 'number' ? raw : Number(raw);
+          if (!Number.isFinite(value)) return;
+          const props = element.getProps(['x', 'y'], true);
+          ctx.fillText(String(value), props.x + 6, props.y);
+        });
+      });
+      ctx.restore();
+    },
+  };
+}
 
 export default function BarChart({
   labels,
@@ -18,15 +52,30 @@ export default function BarChart({
   label,
   color = 'rgba(234, 179, 8, 1)',
   horizontal = false,
+  showValueLabels = false,
+  valueAxisMax,
 }: {
   labels: string[];
   data: number[];
   label: string;
   color?: string;
   horizontal?: boolean;
+  /** When true (horizontal bars), draw the count at the end of each bar. */
+  showValueLabels?: boolean;
+  /** Cap for the value axis; defaults to a padded max from `data` when horizontal. */
+  valueAxisMax?: number;
 }) {
+  const plugins = useMemo(
+    () => (showValueLabels && horizontal ? [horizontalBarValueLabelsPlugin()] : []),
+    [showValueLabels, horizontal]
+  );
+
+  const resolvedValueMax =
+    valueAxisMax ?? (horizontal ? valueAxisMaxFromData(data) : undefined);
+
   return (
     <Bar
+      plugins={plugins}
       data={{
         labels,
         datasets: [
@@ -43,8 +92,18 @@ export default function BarChart({
         responsive: true,
         maintainAspectRatio: false,
         indexAxis: horizontal ? 'y' : 'x',
+        layout: {
+          padding: showValueLabels && horizontal ? { right: 28 } : undefined,
+        },
+        plugins: {
+          legend: { display: false },
+        },
         scales: {
-          [horizontal ? 'x' : 'y']: { beginAtZero: true, ticks: { precision: 0 } },
+          [horizontal ? 'x' : 'y']: {
+            beginAtZero: true,
+            max: resolvedValueMax,
+            ticks: { precision: 0 },
+          },
         },
       }}
     />
