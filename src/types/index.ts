@@ -60,9 +60,9 @@ export interface CheckIn {
   cost: number;
   /** Room: legacy single method when payment_splits is absent. */
   payment_method: string;
-  /** Room: multi-method splits (authoritative total with cost when present). */
+  /** Multi-method payment splits (room, and food/beer when saved with splits). */
   payment_splits?: RoomPaymentSplit[];
-  /** Room: optional denormalized total from Firestore (same as cost for split records). */
+  /** Denormalized total from splits when present (room; optional on food/beer). */
   total_collected?: number;
   staff_name: string;
   /** Firestore: employeeId (staff user doc id) when set. */

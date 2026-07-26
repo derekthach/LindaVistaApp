@@ -4,6 +4,7 @@ import {
   type PaymentMethodValue,
   normalizePaymentMethod,
   isValidPaymentMethod,
+  hasStoredPaymentMethodSingle,
   getPaymentMethodTranslationKey,
 } from '@/lib/checkins/paymentMethods';
 
@@ -16,6 +17,10 @@ const METHOD_LABEL_EN: Record<PaymentMethodValue, string> = {
 };
 
 const COST_MAX = 1000;
+/** Food/beer line-item totals may reach 2000; payment rows must allow the same. */
+export const FOOD_BEER_PAYMENT_MAX = 2000;
+
+export type PaymentSplitFormRow = { method: string; amount: string };
 
 export function getRoomPaymentMethodEnglishLabel(method: string): string {
   const m = normalizePaymentMethod(method);
@@ -29,6 +34,39 @@ export function roundMoney(n: number): number {
 
 export function calculatePaymentSplitTotal(splits: RoomPaymentSplit[]): number {
   return roundMoney(splits.reduce((sum, s) => sum + (Number(s.amount) || 0), 0));
+}
+
+/** Default empty payment row for forms (cash, blank amount). */
+export function defaultPaymentSplitFormRow(): PaymentSplitFormRow {
+  return { method: 'cash', amount: '' };
+}
+
+/**
+ * Load form rows from stored splits, or one legacy row from method + amount.
+ * Preserves legacy single-method records without altering amounts.
+ */
+export function paymentStateToFormRows(
+  splits: RoomPaymentSplit[] | undefined,
+  fallbackMethod: string | undefined,
+  fallbackAmount: number
+): PaymentSplitFormRow[] {
+  if (splits && splits.length > 0) {
+    return splits.map((s) => ({ method: s.method, amount: String(s.amount) }));
+  }
+  const method = hasStoredPaymentMethodSingle(fallbackMethod)
+    ? normalizePaymentMethod(fallbackMethod)
+    : 'cash';
+  const amount =
+    Number.isFinite(fallbackAmount) && fallbackAmount > 0 ? String(roundMoney(fallbackAmount)) : '';
+  return [{ method, amount }];
+}
+
+/** Serialize UI rows for validatePaymentSplits / hidden form fields. */
+export function paymentFormRowsToRaw(rows: PaymentSplitFormRow[]): { method: string; amount: number | string }[] {
+  return rows.map((r) => ({
+    method: r.method,
+    amount: r.amount.trim() === '' ? '' : Number(r.amount),
+  }));
 }
 
 /** Compact: `CASH $40.00, ATH Móvil $25.00` */
@@ -78,16 +116,32 @@ export function parsePaymentSplitsFromFirestore(raw: unknown): RoomPaymentSplit[
   return out.length > 0 ? out : undefined;
 }
 
+export interface ValidatePaymentSplitsOptions {
+  /** Per-row max (default 1000 for room). */
+  maxRowAmount?: number;
+  /** Combined max (default 1000 for room). */
+  maxTotal?: number;
+}
+
 export interface ValidatePaymentSplitsResult {
   valid: boolean;
   error?: string;
   splits?: RoomPaymentSplit[];
+  /** Present when error is err_payment_total_mismatch. */
+  expectedTotal?: number;
+  assignedTotal?: number;
 }
 
 /**
- * At least one row; each row valid method, amount > 0, ≤ COST_MAX per row, total ≤ COST_MAX; no duplicate methods.
+ * At least one row; each row valid method, amount > 0, ≤ max per row, total ≤ max; no duplicate methods.
  */
-export function validatePaymentSplits(raw: unknown): ValidatePaymentSplitsResult {
+export function validatePaymentSplits(
+  raw: unknown,
+  options?: ValidatePaymentSplitsOptions
+): ValidatePaymentSplitsResult {
+  const maxRow = options?.maxRowAmount ?? COST_MAX;
+  const maxTotal = options?.maxTotal ?? COST_MAX;
+
   let arr: unknown[];
   if (typeof raw === 'string') {
     const t = raw.trim();
@@ -137,19 +191,49 @@ export function validatePaymentSplits(raw: unknown): ValidatePaymentSplitsResult
     if (rounded <= 0) {
       return { valid: false, error: 'err_payment_amount_positive' };
     }
-    if (rounded > COST_MAX) {
+    if (rounded > maxRow) {
       return { valid: false, error: 'err_payment_row_max' };
     }
     splits.push({ method, amount: rounded });
   }
 
   const total = calculatePaymentSplitTotal(splits);
-  if (total > COST_MAX) {
+  if (total > maxTotal) {
     return { valid: false, error: 'err_payment_total_max' };
   }
 
   return { valid: true, splits };
 }
+
+/**
+ * Same row rules as validatePaymentSplits, plus assigned total must equal expected check-in total
+ * (food/beer past entry and edit, where line items define the total).
+ */
+export function validatePaymentSplitsForExpectedTotal(
+  raw: unknown,
+  expectedTotal: number,
+  options?: ValidatePaymentSplitsOptions
+): ValidatePaymentSplitsResult {
+  const base = validatePaymentSplits(raw, options);
+  if (!base.valid || !base.splits?.length) return base;
+  const assigned = calculatePaymentSplitTotal(base.splits);
+  const expected = roundMoney(expectedTotal);
+  if (assigned !== expected) {
+    return {
+      valid: false,
+      error: 'err_payment_total_mismatch',
+      splits: base.splits,
+      expectedTotal: expected,
+      assignedTotal: assigned,
+    };
+  }
+  return base;
+}
+
+export const FOOD_BEER_PAYMENT_SPLIT_OPTIONS: ValidatePaymentSplitsOptions = {
+  maxRowAmount: FOOD_BEER_PAYMENT_MAX,
+  maxTotal: FOOD_BEER_PAYMENT_MAX,
+};
 
 /** Normalized total for room check-in (split-based or legacy cost). */
 export function getRoomCollectedTotal(checkin: CheckIn): number {

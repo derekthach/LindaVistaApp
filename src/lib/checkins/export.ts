@@ -29,6 +29,9 @@ function plateCell(checkin: CheckIn): string {
 }
 
 function foodBeerPaymentCsv(checkin: CheckIn): string {
+  if (checkin.payment_splits && checkin.payment_splits.length > 0) {
+    return formatPaymentBreakdownPipe(checkin.payment_splits);
+  }
   if (!hasStoredPaymentMethodSingle(checkin.payment_method)) return 'Not recorded';
   const pm = getRoomPaymentMethodEnglishLabel(checkin.payment_method);
   return `${pm} $${Number(checkin.cost).toFixed(2)}`;

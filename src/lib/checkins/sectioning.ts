@@ -139,10 +139,9 @@ export function paymentMethodTotalsToCents(checkins: CheckIn[]): PaymentMethodTo
     const revenueCents = getRecordedCheckinRevenueCents(checkin);
     if (revenueCents <= 0) continue;
 
-    const checkinType = checkin.checkInType ?? 'room';
     const splits = Array.isArray(checkin.payment_splits) ? checkin.payment_splits : [];
 
-    if (checkinType === 'room' && splits.length > 0) {
+    if (splits.length > 0) {
       let splitCents = 0;
 
       for (const split of splits) {
