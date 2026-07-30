@@ -248,6 +248,7 @@ export interface CreateSimpleCheckinInput {
   summarizedItems: SummarizedItem[];
   notes?: string;
   payment_method: string;
+  payment_splits?: RoomPaymentSplit[];
   employee_id?: string;
   created_by_username?: string;
   employee_name_snapshot?: string;
@@ -269,6 +270,11 @@ export async function createSimpleCheckin(
   );
   const checkInAt = dt.isValid ? Timestamp.fromDate(dt.toJSDate()) : Timestamp.now();
 
+  const splits = data.payment_splits?.length ? data.payment_splits : undefined;
+  const paymentMethod = splits?.[0]?.method
+    ? normalizePaymentMethod(splits[0].method)
+    : normalizePaymentMethod(data.payment_method);
+
   const doc: Record<string, unknown> = {
     checkInAt,
     createdAt: Timestamp.now(),
@@ -277,8 +283,12 @@ export async function createSimpleCheckin(
     lineItems: data.lineItems,
     summarizedItems: data.summarizedItems,
     note: data.notes ?? '',
-    paymentMethod: normalizePaymentMethod(data.payment_method),
+    paymentMethod,
   };
+  if (splits?.length) {
+    doc.paymentSplits = splits;
+    doc.totalCollected = calculatePaymentSplitTotal(splits);
+  }
 
   if (data.employee_id) doc.employeeId = data.employee_id;
   if (data.created_by_username) doc.createdByUsername = data.created_by_username;

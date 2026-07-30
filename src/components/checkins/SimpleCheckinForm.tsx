@@ -14,6 +14,15 @@ import { validateSimpleCheckin } from '@/lib/checkins/validation';
 import type { TranslationKey } from '@/components/LanguageToggle';
 import { QuantitySoldInput } from '@/components/checkins/QuantitySoldInput';
 import { PAYMENT_METHODS, getPaymentMethodTranslationKey } from '@/lib/checkins/paymentMethods';
+import PaymentSplitsEditor from '@/components/checkins/PaymentSplitsEditor';
+import {
+  defaultPaymentSplitFormRow,
+  FOOD_BEER_PAYMENT_SPLIT_OPTIONS,
+  paymentFormRowsToRaw,
+  paymentStateToFormRows,
+  type PaymentSplitFormRow,
+  validatePaymentSplitsForExpectedTotal,
+} from '@/lib/checkins/roomPaymentSplits';
 
 const SIMPLE_TYPES: ('food' | 'beer')[] = ['food', 'beer'];
 const QUANTITY_MAX = 50;
@@ -47,6 +56,7 @@ function SimpleCheckinFormContent({
   const [staffName, setStaffName] = useState('');
   const [notes, setNotes] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
+  const [paymentRows, setPaymentRows] = useState<PaymentSplitFormRow[]>([defaultPaymentSplitFormRow()]);
   const [lineRows, setLineRows] = useState<LineItem[]>([initialRow()]);
   const [submitting, setSubmitting] = useState(false);
   const [hasAttemptedReview, setHasAttemptedReview] = useState(false);
@@ -62,28 +72,58 @@ function SimpleCheckinFormContent({
     [lineRows]
   );
 
-  const validation = useMemo(
+  const totalAmountCollected = useMemo(
+    () => lineRows.reduce((sum, r) => sum + (Number(r.amountCollected) || 0), 0),
+    [lineRows]
+  );
+
+  const splitValidation = useMemo(
     () =>
-      validateSimpleCheckin({
+      validatePaymentSplitsForExpectedTotal(
+        paymentFormRowsToRaw(paymentRows),
+        totalAmountCollected,
+        FOOD_BEER_PAYMENT_SPLIT_OPTIONS
+      ),
+    [paymentRows, totalAmountCollected]
+  );
+
+  const validation = useMemo(() => {
+    if (isAdmin) {
+      return validateSimpleCheckin({
         date,
         time,
         staff_name: staffName,
         checkInType: type,
         lineItems: lineItemsForValidation,
         notes: notes || undefined,
-        payment_method: paymentMethod,
-      }),
-    [date, time, staffName, type, lineItemsForValidation, notes, paymentMethod]
-  );
+        payment_splits: splitValidation.splits ?? paymentFormRowsToRaw(paymentRows),
+      });
+    }
+    return validateSimpleCheckin({
+      date,
+      time,
+      staff_name: staffName,
+      checkInType: type,
+      lineItems: lineItemsForValidation,
+      notes: notes || undefined,
+      payment_method: paymentMethod,
+    });
+  }, [
+    isAdmin,
+    date,
+    time,
+    staffName,
+    type,
+    lineItemsForValidation,
+    notes,
+    paymentMethod,
+    paymentRows,
+    splitValidation.splits,
+  ]);
 
   const displayErrors = validation.errors;
   const displayLineItemErrors = validation.lineItemErrors ?? {};
   const formValid = validation.valid;
-
-  const totalAmountCollected = useMemo(
-    () => lineRows.reduce((sum, r) => sum + (Number(r.amountCollected) || 0), 0),
-    [lineRows]
-  );
 
   useEffect(() => {
     const { date: d, time: tm } = getDefaultDateAndTime();
@@ -105,6 +145,13 @@ function SimpleCheckinFormContent({
       );
       setNotes(draft.notes ?? '');
       setPaymentMethod(draft.payment_method ?? '');
+      const lineTotal = (draft.lineItems ?? []).reduce(
+        (sum, item) => sum + (Number(item.amountCollected) || 0),
+        0
+      );
+      setPaymentRows(
+        paymentStateToFormRows(draft.payment_splits, draft.payment_method, lineTotal)
+      );
       setLineRows(
         draft.lineItems.length > 0
           ? draft.lineItems.map((item) => ({
@@ -196,12 +243,34 @@ function SimpleCheckinFormContent({
       staff_name,
       lineItems,
       notes: notes?.trim() ? notes.trim().slice(0, 250) : undefined,
-      payment_method: paymentMethod,
+      ...(isAdmin && validation.payment_splits?.length
+        ? {
+            payment_splits: validation.payment_splits,
+            payment_method: validation.payment_splits[0].method,
+          }
+        : { payment_method: paymentMethod }),
     });
     router.push(`/checkins/new/${type}/validate`);
   };
 
-  const msg = (code: string) => t(code as TranslationKey);
+  const msg = (code: string) => {
+    if (
+      code === 'err_payment_total_mismatch' &&
+      splitValidation.expectedTotal != null &&
+      splitValidation.assignedTotal != null
+    ) {
+      const remaining = Math.max(
+        0,
+        Math.round((splitValidation.expectedTotal - splitValidation.assignedTotal) * 100) / 100
+      );
+      return t('err_payment_total_mismatch' as TranslationKey, {
+        expected: splitValidation.expectedTotal.toFixed(2),
+        assigned: splitValidation.assignedTotal.toFixed(2),
+        remaining: remaining.toFixed(2),
+      });
+    }
+    return t(code as TranslationKey);
+  };
 
   return (
     <div className="card">
@@ -423,32 +492,51 @@ function SimpleCheckinFormContent({
           )}
         </section>
 
-        <label>
-          <div>{t('payment_method')}</div>
-          <select
-            value={paymentMethod}
-            onChange={(e) => setPaymentMethod(e.target.value)}
-            style={{
+        {isAdmin ? (
+          <PaymentSplitsEditor
+            value={paymentRows}
+            onChange={setPaymentRows}
+            validation={splitValidation}
+            validateOptions={FOOD_BEER_PAYMENT_SPLIT_OPTIONS}
+            showError={hasAttemptedReview && !splitValidation.valid}
+            expectedTotal={totalAmountCollected}
+            amountInputMax={FOOD_BEER_PAYMENT_SPLIT_OPTIONS.maxRowAmount}
+            inputStyle={{
               width: '100%',
               padding: '8px 12px',
               borderRadius: 8,
               border: '1px solid #d1d5db',
+              fontSize: 14,
             }}
-            required
-          >
-            <option value="">{t('payment_method_select_placeholder')}</option>
-            {PAYMENT_METHODS.map((method) => (
-              <option key={method} value={method}>
-                {t(getPaymentMethodTranslationKey(method) as TranslationKey)}
-              </option>
-            ))}
-          </select>
-          {hasAttemptedReview && displayErrors.payment_method && (
-            <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 4 }}>
-              {msg(displayErrors.payment_method)}
-            </div>
-          )}
-        </label>
+          />
+        ) : (
+          <label>
+            <div>{t('payment_method')}</div>
+            <select
+              value={paymentMethod}
+              onChange={(e) => setPaymentMethod(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: '1px solid #d1d5db',
+              }}
+              required
+            >
+              <option value="">{t('payment_method_select_placeholder')}</option>
+              {PAYMENT_METHODS.map((method) => (
+                <option key={method} value={method}>
+                  {t(getPaymentMethodTranslationKey(method) as TranslationKey)}
+                </option>
+              ))}
+            </select>
+            {hasAttemptedReview && displayErrors.payment_method && (
+              <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 4 }}>
+                {msg(displayErrors.payment_method)}
+              </div>
+            )}
+          </label>
+        )}
 
         <label>
           <div>

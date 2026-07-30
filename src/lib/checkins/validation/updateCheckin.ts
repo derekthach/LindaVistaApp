@@ -336,7 +336,16 @@ export function validateUpdateFoodBeerCheckin(
         const assigned = (
           splitResult.assignedTotal ?? calculatePaymentSplitTotal(splitResult.splits ?? [])
         ).toFixed(2);
-        errors.payment_splits = `Payment methods must total $${expected}. Currently assigned: $${assigned}.`;
+        const remaining = Math.max(
+          0,
+          Math.round(
+            ((splitResult.expectedTotal ?? lineTotal) -
+              (splitResult.assignedTotal ??
+                calculatePaymentSplitTotal(splitResult.splits ?? []))) *
+              100
+          ) / 100
+        ).toFixed(2);
+        errors.payment_splits = `Payment methods must total $${expected}. Currently assigned: $${assigned}. Remaining: $${remaining}.`;
       } else {
         errors.payment_splits = splitResult.error ?? 'Invalid payment breakdown';
       }

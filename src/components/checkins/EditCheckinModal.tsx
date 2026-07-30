@@ -654,6 +654,7 @@ export default function EditCheckinModal({
                 inputStyle={inputStyle}
                 totalLabelKey="label_total_collected"
                 amountInputMax={FOOD_BEER_PAYMENT_SPLIT_OPTIONS.maxRowAmount}
+                expectedTotal={foodBeerLiveTotal}
               />
             </>
           )}

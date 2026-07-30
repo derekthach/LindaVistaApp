@@ -438,6 +438,7 @@ export default function PastFoodBeerMultiRowForm({
           inputStyle={inputStyle}
           totalLabelKey="label_total_collected"
           amountInputMax={FOOD_BEER_PAYMENT_SPLIT_OPTIONS.maxRowAmount}
+          expectedTotal={totalAmountCollected}
         />
 
         <label style={{ margin: 0 }}>

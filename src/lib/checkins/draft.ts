@@ -1,4 +1,5 @@
-import type { LineItem } from '@/types';
+import type { LineItem, RoomPaymentSplit } from '@/types';
+import { parsePaymentSplitsFromFirestore } from '@/lib/checkins/roomPaymentSplits';
 
 export interface FoodBeerDraft {
   checkInType: 'food' | 'beer';
@@ -7,7 +8,10 @@ export interface FoodBeerDraft {
   staff_name: string;
   lineItems: LineItem[];
   notes?: string;
+  /** First method / legacy single method. */
   payment_method: string;
+  /** Multi-method splits when present (admin food/beer). */
+  payment_splits?: RoomPaymentSplit[];
 }
 
 const DRAFT_KEY_FOOD = 'lv_checkin_draft_food';
@@ -24,9 +28,11 @@ export function getDraft(type: 'food' | 'beer'): FoodBeerDraft | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as FoodBeerDraft;
     if (parsed?.checkInType !== type || !Array.isArray(parsed.lineItems)) return null;
+    const payment_splits = parsePaymentSplitsFromFirestore(parsed.payment_splits);
     return {
       ...parsed,
       payment_method: typeof parsed.payment_method === 'string' ? parsed.payment_method : '',
+      ...(payment_splits?.length ? { payment_splits } : {}),
     };
   } catch {
     return null;

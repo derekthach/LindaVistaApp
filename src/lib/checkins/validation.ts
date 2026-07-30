@@ -1,6 +1,11 @@
 import type { CheckInType } from './types';
-import type { LineItem } from '@/types';
+import type { LineItem, RoomPaymentSplit } from '@/types';
 import { hasStoredPaymentMethodSingle } from '@/lib/checkins/paymentMethods';
+import {
+  FOOD_BEER_PAYMENT_SPLIT_OPTIONS,
+  roundMoney,
+  validatePaymentSplitsForExpectedTotal,
+} from '@/lib/checkins/roomPaymentSplits';
 
 /** Error codes returned by validation; map to bilingual messages in UI. */
 export const VALIDATION_CODES = {
@@ -36,8 +41,10 @@ export interface SimpleCheckinFormValues {
   checkInType: CheckInType;
   lineItems: LineItem[];
   notes?: string;
-  /** Required for food and beer normal check-ins. */
+  /** Required for food and beer when payment_splits is absent (employee / legacy). */
   payment_method?: string;
+  /** Admin multi-payment; when present, total must equal line-item total. */
+  payment_splits?: unknown;
 }
 
 export interface ValidationResult {
@@ -45,6 +52,7 @@ export interface ValidationResult {
   /** Error codes keyed by field (staff_name, date, time, lineItems, itemsTotal, notes, etc.) */
   errors: Record<string, string>;
   lineItemErrors?: Record<number, { quantitySold?: string; amountCollected?: string; itemId?: string }>;
+  payment_splits?: RoomPaymentSplit[];
 }
 
 /** Food/beer item rows only (shared by simple check-in, past entry, admin updates). */
@@ -98,11 +106,22 @@ export function validateFoodBeerLineItemsRows(lineItems: LineItem[] | undefined)
   return { errors, lineItemErrors };
 }
 
+function lineItemsCollectedTotal(lineItems: LineItem[] | undefined): number {
+  return roundMoney(
+    (lineItems ?? []).reduce((sum, item) => {
+      if (!item.itemId?.trim()) return sum;
+      const a = Number(item.amountCollected);
+      return sum + (Number.isFinite(a) && a > 0 ? a : 0);
+    }, 0)
+  );
+}
+
 /**
  * Validation for food/beer check-in form.
  * Returns error codes for bilingual display. Rules:
  * - Staff required; at least one valid item row (item selected, quantity 1-50 int, amount > 0 and <= 1000).
  * - Total amount across rows <= 2000. Notes optional, max 250 chars.
+ * - Payment: either multi-splits matching line total, or a single stored payment_method.
  */
 export function validateSimpleCheckin(values: SimpleCheckinFormValues): ValidationResult {
   const errors: Record<string, string> = {};
@@ -122,13 +141,6 @@ export function validateSimpleCheckin(values: SimpleCheckinFormValues): Validati
     errors.checkInType = VALIDATION_CODES.invalidCheckInType;
   }
 
-  if (values.checkInType === 'food' || values.checkInType === 'beer') {
-    const pm = values.payment_method?.trim() ?? '';
-    if (!hasStoredPaymentMethodSingle(pm)) {
-      errors.payment_method = VALIDATION_CODES.requiredPaymentMethod;
-    }
-  }
-
   if (values.notes != null && values.notes.length > NOTES_MAX_LENGTH) {
     errors.notes = VALIDATION_CODES.notesMax;
   }
@@ -142,11 +154,40 @@ export function validateSimpleCheckin(values: SimpleCheckinFormValues): Validati
   }
   Object.assign(lineItemErrors, lineRes.lineItemErrors);
 
+  let payment_splits: RoomPaymentSplit[] | undefined;
+  if (values.checkInType === 'food' || values.checkInType === 'beer') {
+    const hasSplitsField =
+      values.payment_splits != null &&
+      values.payment_splits !== '' &&
+      !(typeof values.payment_splits === 'string' && String(values.payment_splits).trim() === '') &&
+      !(Array.isArray(values.payment_splits) && values.payment_splits.length === 0);
+
+    if (hasSplitsField) {
+      const expected = lineItemsCollectedTotal(values.lineItems);
+      const splitResult = validatePaymentSplitsForExpectedTotal(
+        values.payment_splits,
+        expected,
+        FOOD_BEER_PAYMENT_SPLIT_OPTIONS
+      );
+      if (!splitResult.valid || !splitResult.splits?.length) {
+        errors.payment_splits = splitResult.error ?? 'err_payment_invalid_data';
+      } else {
+        payment_splits = splitResult.splits;
+      }
+    } else {
+      const pm = values.payment_method?.trim() ?? '';
+      if (!hasStoredPaymentMethodSingle(pm)) {
+        errors.payment_method = VALIDATION_CODES.requiredPaymentMethod;
+      }
+    }
+  }
+
   const valid = Object.keys(errors).length === 0 && Object.keys(lineItemErrors).length === 0;
 
   return {
     valid,
     errors,
     lineItemErrors: Object.keys(lineItemErrors).length > 0 ? lineItemErrors : undefined,
+    ...(valid && payment_splits ? { payment_splits } : {}),
   };
 }

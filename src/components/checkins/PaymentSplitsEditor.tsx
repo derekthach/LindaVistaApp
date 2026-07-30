@@ -4,6 +4,7 @@ import { useCallback } from 'react';
 import { PAYMENT_METHODS, getPaymentMethodTranslationKey } from '@/lib/checkins/paymentMethods';
 import {
   calculatePaymentSplitTotal,
+  roundMoney,
   type PaymentSplitFormRow,
   validatePaymentSplits,
   type ValidatePaymentSplitsOptions,
@@ -35,6 +36,11 @@ export type PaymentSplitsEditorProps = {
   totalLabelKey?: TranslationKey;
   /** Max amount attribute on number inputs (defaults from validateOptions or 1000). */
   amountInputMax?: number;
+  /**
+   * When set, show Check-In Total / Payment Total / Remaining under the rows
+   * (food/beer forms where line items define the expected total).
+   */
+  expectedTotal?: number;
 };
 
 /**
@@ -52,6 +58,7 @@ export default function PaymentSplitsEditor({
   titleKey = 'payment_breakdown',
   totalLabelKey = 'total_collected',
   amountInputMax,
+  expectedTotal,
 }: PaymentSplitsEditorProps) {
   const { t } = useTranslation();
 
@@ -67,8 +74,27 @@ export default function PaymentSplitsEditor({
       validateOptions
     );
 
+  const assignedFromRows = roundMoney(
+    value.reduce((sum, r) => {
+      const n = Number(r.amount);
+      return sum + (Number.isFinite(n) && n > 0 ? n : 0);
+    }, 0)
+  );
   const liveTotal =
-    validation.valid && validation.splits ? calculatePaymentSplitTotal(validation.splits) : null;
+    validation.valid && validation.splits
+      ? calculatePaymentSplitTotal(validation.splits)
+      : assignedFromRows > 0
+        ? assignedFromRows
+        : null;
+
+  const expectedRounded =
+    expectedTotal != null && Number.isFinite(expectedTotal) ? roundMoney(expectedTotal) : null;
+  const remaining =
+    expectedRounded != null && liveTotal != null
+      ? roundMoney(expectedRounded - liveTotal)
+      : expectedRounded != null
+        ? expectedRounded
+        : null;
 
   const maxAttr = amountInputMax ?? validateOptions?.maxRowAmount ?? 1000;
 
@@ -102,6 +128,10 @@ export default function PaymentSplitsEditor({
       ? t('err_payment_total_mismatch', {
           expected: validation.expectedTotal.toFixed(2),
           assigned: validation.assignedTotal.toFixed(2),
+          remaining: Math.max(
+            0,
+            roundMoney(validation.expectedTotal - validation.assignedTotal)
+          ).toFixed(2),
         })
       : validation.error
         ? t(validation.error as TranslationKey)
@@ -188,9 +218,28 @@ export default function PaymentSplitsEditor({
       >
         {t('add_payment_method')}
       </button>
-      <div style={{ marginTop: 12, fontSize: 15, fontWeight: 600 }}>
-        {t(totalLabelKey)}: {liveTotal != null ? `$${liveTotal.toFixed(2)}` : '—'}
-      </div>
+      {expectedRounded != null ? (
+        <div style={{ marginTop: 12, display: 'grid', gap: 4, fontSize: 14 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>{t('check_in_total')}</span>
+            <span style={{ fontWeight: 600 }}>${expectedRounded.toFixed(2)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>{t('payment_total')}</span>
+            <span style={{ fontWeight: 600 }}>{liveTotal != null ? `$${liveTotal.toFixed(2)}` : '—'}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>{t('payment_remaining')}</span>
+            <span style={{ fontWeight: 600 }}>
+              {remaining != null ? `$${remaining.toFixed(2)}` : '—'}
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div style={{ marginTop: 12, fontSize: 15, fontWeight: 600 }}>
+          {t(totalLabelKey)}: {liveTotal != null ? `$${liveTotal.toFixed(2)}` : '—'}
+        </div>
+      )}
       {showError && resolvedError ? (
         <div style={{ color: '#dc2626', fontSize: 12, marginTop: 6 }}>{resolvedError}</div>
       ) : null}

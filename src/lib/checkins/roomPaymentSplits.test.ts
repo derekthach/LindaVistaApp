@@ -127,7 +127,7 @@ describe('validateAdminPastFoodBeerMulti multi-payment', () => {
     );
     expect(result.valid).toBe(false);
     expect(result.error).toBe(
-      'Payment methods must total $19.00. Currently assigned: $16.00.'
+      'Payment methods must total $19.00. Currently assigned: $16.00. Remaining: $3.00.'
     );
   });
 });

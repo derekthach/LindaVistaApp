@@ -231,15 +231,20 @@ export async function confirmFoodBeerCheckinAction(
     checkInType: draft.checkInType,
     lineItems: draft.lineItems,
     notes: draft.notes,
-    payment_method: draft.payment_method,
+    ...(draft.payment_splits?.length
+      ? { payment_splits: draft.payment_splits }
+      : { payment_method: draft.payment_method }),
   });
   if (!validation.valid) {
     const firstError = Object.values(validation.errors).find(Boolean)
       ?? Object.values(validation.lineItemErrors ?? {}).flatMap((row) => Object.values(row)).find(Boolean);
     return {
-      error: firstError ?? 'fix_errors_below',
+      error: firstError ?? 'form_errors_below',
     };
   }
+
+  const payment_splits = validation.payment_splits ?? draft.payment_splits;
+  const payment_method = payment_splits?.[0]?.method ?? draft.payment_method;
 
   const summarizedItems = summarizeLineItems(draft.lineItems);
   await createSimpleCheckin(draft.checkInType, {
@@ -249,7 +254,8 @@ export async function confirmFoodBeerCheckinAction(
     lineItems: draft.lineItems,
     summarizedItems,
     notes: draft.notes,
-    payment_method: draft.payment_method,
+    payment_method,
+    ...(payment_splits?.length ? { payment_splits } : {}),
     ...(session.role === 'employee'
       ? {
           employee_id: session.userId?.trim() || (guestEmployee ? 'guest' : undefined),

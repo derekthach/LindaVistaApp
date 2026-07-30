@@ -122,9 +122,17 @@ export function validateAdminPastFoodBeerMulti(
       const assigned = (
         splitResult.assignedTotal ?? calculatePaymentSplitTotal(splitResult.splits ?? [])
       ).toFixed(2);
+      const remaining = Math.max(
+        0,
+        Math.round(
+          ((splitResult.expectedTotal ?? lineTotal) -
+            (splitResult.assignedTotal ?? calculatePaymentSplitTotal(splitResult.splits ?? []))) *
+            100
+        ) / 100
+      ).toFixed(2);
       return {
         valid: false,
-        error: `Payment methods must total $${expected}. Currently assigned: $${assigned}.`,
+        error: `Payment methods must total $${expected}. Currently assigned: $${assigned}. Remaining: $${remaining}.`,
       };
     }
     return { valid: false, error: 'Invalid payment breakdown' };
