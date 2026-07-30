@@ -6,10 +6,17 @@ import type { TranslationKey } from '@/lib/i18n/translations';
 import { useTranslation } from '@/lib/i18n/useTranslation';
 import Button from '@/components/Button';
 import type { ItemOption } from '@/lib/checkins/items';
-import { PAYMENT_METHODS, getPaymentMethodTranslationKey } from '@/lib/checkins/paymentMethods';
 import { validateSimpleCheckin } from '@/lib/checkins/validation';
 import type { LineItem } from '@/types';
 import { QuantitySoldInput } from '@/components/checkins/QuantitySoldInput';
+import PaymentSplitsEditor from '@/components/checkins/PaymentSplitsEditor';
+import {
+  defaultPaymentSplitFormRow,
+  FOOD_BEER_PAYMENT_SPLIT_OPTIONS,
+  paymentFormRowsToRaw,
+  type PaymentSplitFormRow,
+  validatePaymentSplitsForExpectedTotal,
+} from '@/lib/checkins/roomPaymentSplits';
 
 const QUANTITY_MAX = 50;
 
@@ -57,7 +64,7 @@ export default function PastFoodBeerMultiRowForm({
   const [time, setTime] = useState('');
   const [staffName, setStaffName] = useState('');
   const [notes, setNotes] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('');
+  const [paymentRows, setPaymentRows] = useState<PaymentSplitFormRow[]>([defaultPaymentSplitFormRow()]);
   const [lineRows, setLineRows] = useState<LineItem[]>([initialRow()]);
   const [submitAttempted, setSubmitAttempted] = useState(false);
 
@@ -123,31 +130,68 @@ export default function PastFoodBeerMultiRowForm({
     [lineRows]
   );
 
-  const validation = useMemo(
-    () =>
-      validateSimpleCheckin({
-        date,
-        time,
-        staff_name: staffName,
-        checkInType,
-        lineItems: lineItemsForValidation,
-        notes: notes || undefined,
-        payment_method: paymentMethod,
-      }),
-    [date, time, staffName, checkInType, lineItemsForValidation, notes, paymentMethod]
-  );
-
-  const displayErrors = validation.errors;
-  const displayLineItemErrors = validation.lineItemErrors ?? {};
-
   const totalAmountCollected = useMemo(
     () => lineRows.reduce((sum, r) => sum + (Number(r.amountCollected) || 0), 0),
     [lineRows]
   );
 
+  const splitValidation = useMemo(
+    () =>
+      validatePaymentSplitsForExpectedTotal(
+        paymentFormRowsToRaw(paymentRows),
+        totalAmountCollected,
+        FOOD_BEER_PAYMENT_SPLIT_OPTIONS
+      ),
+    [paymentRows, totalAmountCollected]
+  );
+
+  const paymentSplitsJson = useMemo(() => {
+    if (!splitValidation.valid || !splitValidation.splits?.length) return '';
+    return JSON.stringify(splitValidation.splits);
+  }, [splitValidation]);
+
+  const validation = useMemo(() => {
+    const base = validateSimpleCheckin({
+      date,
+      time,
+      staff_name: staffName,
+      checkInType,
+      lineItems: lineItemsForValidation,
+      notes: notes || undefined,
+      payment_method: splitValidation.splits?.[0]?.method,
+    });
+    const errors = { ...base.errors };
+    if (!splitValidation.valid) {
+      errors.payment_splits = splitValidation.error ?? 'err_payment_invalid_data';
+      delete errors.payment_method;
+    } else {
+      delete errors.payment_method;
+    }
+    const valid =
+      Object.keys(errors).length === 0 &&
+      Object.keys(base.lineItemErrors ?? {}).length === 0 &&
+      splitValidation.valid;
+    return { ...base, errors, valid };
+  }, [date, time, staffName, checkInType, lineItemsForValidation, notes, splitValidation]);
+
+  const displayErrors = validation.errors;
+  const displayLineItemErrors = validation.lineItemErrors ?? {};
+
   const formOk = validation.valid;
 
-  const msg = (code: string) => t(code as TranslationKey);
+  const msg = (code: string) => {
+    if (
+      code === 'err_payment_total_mismatch' &&
+      splitValidation.expectedTotal != null &&
+      splitValidation.assignedTotal != null
+    ) {
+      return t('err_payment_total_mismatch', {
+        expected: splitValidation.expectedTotal.toFixed(2),
+        assigned: splitValidation.assignedTotal.toFixed(2),
+      });
+    }
+    return t(code as TranslationKey);
+  };
 
   const cardStyle: React.CSSProperties = {
     width: '100%',
@@ -202,7 +246,7 @@ export default function PastFoodBeerMultiRowForm({
       {(state?.error || (submitAttempted && !formOk)) && (
         <div style={{ padding: 12, backgroundColor: '#fef2f2', color: '#991b1b', borderRadius: 8, fontSize: 14 }}>
           {state?.error ??
-            (submitAttempted && !formOk ? t('fix_errors_below' as TranslationKey) : '')}
+            (submitAttempted && !formOk ? t('form_errors_below' as TranslationKey) : '')}
         </div>
       )}
 
@@ -212,6 +256,7 @@ export default function PastFoodBeerMultiRowForm({
         style={{ display: 'grid', gap: 14 }}
       >
         <input type="hidden" name="lineItems" value={JSON.stringify(linePayload)} />
+        <input type="hidden" name="payment_splits" value={paymentSplitsJson} />
 
         <div style={fieldGridStyle}>
           <label style={{ margin: 0, minWidth: 0 }}>
@@ -263,10 +308,10 @@ export default function PastFoodBeerMultiRowForm({
             ))}
           </select>
           {submitAttempted && displayErrors.staff_name && (
-              <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 4 }}>
+            <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 4 }}>
               {msg(displayErrors.staff_name)}
-              </div>
-            )}
+            </div>
+          )}
         </label>
 
         <div>
@@ -384,28 +429,16 @@ export default function PastFoodBeerMultiRowForm({
           )}
         </div>
 
-        <label style={{ margin: 0, minWidth: 0 }}>
-          <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('payment_method')}</div>
-          <select
-            name="payment_method"
-            value={paymentMethod}
-            onChange={(e) => setPaymentMethod(e.target.value)}
-            style={inputStyle}
-            required
-          >
-            <option value="">{t('payment_method_select_placeholder')}</option>
-            {PAYMENT_METHODS.map((method) => (
-              <option key={method} value={method}>
-                {t(getPaymentMethodTranslationKey(method) as TranslationKey)}
-              </option>
-            ))}
-          </select>
-          {submitAttempted && displayErrors.payment_method && (
-            <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 4 }}>
-              {msg(displayErrors.payment_method)}
-            </div>
-          )}
-        </label>
+        <PaymentSplitsEditor
+          value={paymentRows}
+          onChange={setPaymentRows}
+          validation={splitValidation}
+          validateOptions={FOOD_BEER_PAYMENT_SPLIT_OPTIONS}
+          showError={submitAttempted && !splitValidation.valid}
+          inputStyle={inputStyle}
+          totalLabelKey="label_total_collected"
+          amountInputMax={FOOD_BEER_PAYMENT_SPLIT_OPTIONS.maxRowAmount}
+        />
 
         <label style={{ margin: 0 }}>
           <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('notes')}</div>
@@ -422,7 +455,7 @@ export default function PastFoodBeerMultiRowForm({
           )}
         </label>
 
-        <Button type="submit" variant="primary" disabled={isPending || !formOk}>
+        <Button type="submit" variant="primary" disabled={isPending || !formOk || !paymentSplitsJson}>
           {isPending ? t('saving_confirm') : t(submitLabelKey)}
         </Button>
       </form>

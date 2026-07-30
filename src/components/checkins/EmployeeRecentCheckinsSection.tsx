@@ -21,6 +21,7 @@ import {
 import EmployeeOperationalEditModal from '@/components/checkins/EmployeeOperationalEditModal';
 import { formatTime } from '@/lib/utils/formatTime';
 import { paymentMethodTotalsToCents, totalsToCents } from '@/lib/checkins/sectioning';
+import { EMPLOYEE_ENTRY_ACCESS_HOURS } from '@/lib/checkins/employeeAccess';
 
 function centsToCurrency(cents: number, language: 'en' | 'es'): string {
   return new Intl.NumberFormat(language === 'es' ? 'es-PR' : 'en-US', {
@@ -292,7 +293,9 @@ export default function EmployeeRecentCheckinsSection({
             <h2 className="page-title" style={{ fontSize: 22, marginBottom: 4 }}>
               {t('employee_recent_checkins_title')}
             </h2>
-            <p style={{ color: '#6b7280', fontSize: 14, marginBottom: 16 }}>{t('employee_recent_checkins_subtitle')}</p>
+            <p style={{ color: '#6b7280', fontSize: 14, marginBottom: 16 }}>
+              {t('employee_recent_checkins_subtitle', { hours: EMPLOYEE_ENTRY_ACCESS_HOURS })}
+            </p>
           </>
         )}
 
@@ -309,7 +312,7 @@ export default function EmployeeRecentCheckinsSection({
         {error && <p style={{ color: '#dc2626' }}>{error}</p>}
         {!loading && !error && checkins.length === 0 && (
           <p style={{ color: '#6b7280', padding: 16, background: '#f9fafb', borderRadius: 8 }}>
-            {t('employee_recent_none')}
+            {t('employee_recent_none', { hours: EMPLOYEE_ENTRY_ACCESS_HOURS })}
           </p>
         )}
         {!loading && checkins.length > 0 && (

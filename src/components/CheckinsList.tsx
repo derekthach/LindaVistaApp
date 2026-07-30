@@ -311,9 +311,11 @@ function DetailsPanel({ checkin, t }: { checkin: CheckIn; t: (key: TranslationKe
         ) : null}
         <dt style={labelStyle}>{t('payment_method')}</dt>
         <dd style={{ margin: 0, ...valueStyle }}>
-          {hasStoredPaymentMethodSingle(checkin.payment_method)
-            ? t(getPaymentMethodTranslationKey(checkin.payment_method) as TranslationKey)
-            : t('payment_method_not_recorded')}
+          {checkin.payment_splits && checkin.payment_splits.length > 0
+            ? getRoomPaymentBreakdownDisplayLocalized(checkin, (k) => t(k as TranslationKey)).compactComma
+            : hasStoredPaymentMethodSingle(checkin.payment_method)
+              ? t(getPaymentMethodTranslationKey(checkin.payment_method) as TranslationKey)
+              : t('payment_method_not_recorded')}
         </dd>
         <dt style={labelStyle}>{t('items')}</dt>
         <dd style={{ margin: 0, ...valueStyle }}>{itemsSummary}</dd>
@@ -588,22 +590,40 @@ export default function CheckinsList({
       });
     }
 
-    const fromPm = hasStoredPaymentMethodSingle(checkin.payment_method)
-      ? String(checkin.payment_method).trim()
-      : '';
-    const toPm = draft.payment_method?.trim() ?? '';
-    if (toPm !== fromPm) {
-      const fromPmLabel = fromPm
-        ? t(getPaymentMethodTranslationKey(fromPm) as TranslationKey)
-        : t('payment_method_not_recorded');
-      const toPmLabel = toPm
-        ? t(getPaymentMethodTranslationKey(toPm) as TranslationKey)
-        : t('payment_method_not_recorded');
-      lines.push({
-        label: t('diff_label_payment_method'),
-        from: fromPmLabel,
-        to: toPmLabel,
-      });
+    const fromPay = getRoomPaymentBreakdownDisplayLocalized(checkin, (k) => t(k as TranslationKey));
+    const toSplits = draft.payment_splits;
+    if (toSplits && toSplits.length > 0) {
+      const toBreakdown = toSplits
+        .map(
+          (s) =>
+            `${t(getPaymentMethodTranslationKey(s.method) as TranslationKey)} $${Number(s.amount).toFixed(2)}`
+        )
+        .join(', ');
+      if (fromPay.compactComma !== toBreakdown) {
+        lines.push({
+          label: t('diff_label_payment_breakdown'),
+          from: fromPay.compactComma,
+          to: toBreakdown,
+        });
+      }
+    } else {
+      const fromPm = hasStoredPaymentMethodSingle(checkin.payment_method)
+        ? String(checkin.payment_method).trim()
+        : '';
+      const toPm = draft.payment_method?.trim() ?? '';
+      if (toPm !== fromPm) {
+        const fromPmLabel = fromPm
+          ? t(getPaymentMethodTranslationKey(fromPm) as TranslationKey)
+          : t('payment_method_not_recorded');
+        const toPmLabel = toPm
+          ? t(getPaymentMethodTranslationKey(toPm) as TranslationKey)
+          : t('payment_method_not_recorded');
+        lines.push({
+          label: t('diff_label_payment_method'),
+          from: fromPmLabel,
+          to: toPmLabel,
+        });
+      }
     }
     return lines;
   }
@@ -640,6 +660,7 @@ export default function CheckinsList({
             : {
                 lineItems: draftFoodBeerLineItems(pendingUpdate.draft),
                 payment_method: pendingUpdate.draft.payment_method,
+                payment_splits: pendingUpdate.draft.payment_splits,
               }),
         }),
       });

@@ -20,7 +20,7 @@ export async function submitPastFoodBeverageAction(
     time: formData.get('time'),
     staff_name: formData.get('staff_name'),
     lineItems: formData.get('lineItems'),
-    payment_method: formData.get('payment_method'),
+    payment_splits: formData.get('payment_splits'),
     notes: formData.get('notes'),
   };
 
@@ -32,7 +32,7 @@ export async function submitPastFoodBeverageAction(
   }
 
   const validation = validateAdminPastFoodBeerMulti(raw, staffAllowlist, ADMIN_LATE_FOOD_ITEMS);
-  if (!validation.valid || !validation.lineItems?.length) {
+  if (!validation.valid || !validation.lineItems?.length || !validation.payment_splits?.length) {
     return { error: validation.error ?? 'Validation failed' };
   }
 
@@ -43,6 +43,7 @@ export async function submitPastFoodBeverageAction(
       staff_name: validation.staff_name!,
       lineItems: validation.lineItems,
       payment_method: validation.payment_method!,
+      payment_splits: validation.payment_splits,
       notes: validation.notes,
       adminUsername: session.username?.trim() || 'admin',
       adminUserId: session.userId?.trim() || undefined,

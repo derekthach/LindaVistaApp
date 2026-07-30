@@ -5,7 +5,7 @@ import {
   parseEmployeeRoomPatchValue,
   parseAdminLateRoomValue,
 } from '../rooms';
-import { validatePaymentSplits } from '../roomPaymentSplits';
+import { validatePaymentSplits, validatePaymentSplitsForExpectedTotal, FOOD_BEER_PAYMENT_SPLIT_OPTIONS, calculatePaymentSplitTotal, roundMoney } from '../roomPaymentSplits';
 import type { RoomPaymentSplit } from '@/types';
 import { hasStoredPaymentMethodSingle } from '@/lib/checkins/paymentMethods';
 import { VALIDATION_CODES } from '@/lib/checkins/validation';
@@ -119,12 +119,16 @@ export interface UpdateFoodBeerPayload {
   quantity: number;
   amountCollected: number;
   payment_method: string;
+  payment_splits?: RoomPaymentSplit[];
 }
 
 export interface UpdateFoodBeerValidationResult {
   valid: boolean;
-  errors: Partial<Record<keyof UpdateFoodBeerPayload | 'lineItems' | 'itemsTotal', string>>;
+  errors: Partial<
+    Record<keyof UpdateFoodBeerPayload | 'lineItems' | 'itemsTotal' | 'payment_splits', string>
+  >;
   normalizedLineItems?: LineItem[];
+  payment_splits?: RoomPaymentSplit[];
 }
 
 export interface ValidateUpdateFoodBeerCheckinOptions extends ValidateUpdateCheckinOptions {
@@ -223,15 +227,18 @@ export function validateUpdateFoodBeerCheckin(
     errors.staff_name = 'Staff must be one of: ' + ALLOWED_STAFF.join(', ');
   }
 
-  const pm = raw.payment_method != null ? String(raw.payment_method).trim() : '';
-  if (!hasStoredPaymentMethodSingle(pm)) {
-    errors.payment_method = VALIDATION_CODES.requiredPaymentMethod;
-  }
+  const hasSplitsField =
+    raw.payment_splits != null &&
+    raw.payment_splits !== '' &&
+    !(typeof raw.payment_splits === 'string' && String(raw.payment_splits).trim() === '');
 
   const parsedLines = parseLineItemsFromUnknown(raw.lineItems);
   const useMulti =
     parsedLines !== null &&
     parsedLines.some((r) => String(r.itemId ?? '').trim().length > 0);
+
+  let normalizedLineItems: LineItem[] | undefined;
+  let lineTotal = 0;
 
   if (useMulti && parsedLines) {
     const rowVal = validateFoodBeerLineItemsRows(parsedLines);
@@ -246,7 +253,7 @@ export function validateUpdateFoodBeerCheckin(
     }
 
     const catalog = options?.catalog;
-    const normalizedLineItems = normalizeSubmittedFoodBeerLineItems(parsedLines);
+    normalizedLineItems = normalizeSubmittedFoodBeerLineItems(parsedLines);
 
     if (catalog && catalog.length > 0) {
       for (const row of normalizedLineItems) {
@@ -257,69 +264,104 @@ export function validateUpdateFoodBeerCheckin(
       }
     }
 
-    const valid = Object.keys(errors).length === 0 && normalizedLineItems.length > 0;
-    if (!valid) {
-      return { valid: false, errors };
-    }
-    return { valid: true, errors: {}, normalizedLineItems };
-  }
-
-  const itemId = raw.itemId != null ? String(raw.itemId).trim() : '';
-  if (!itemId) {
-    errors.itemId = 'Item is required';
-  }
-
-  const qtyVal = raw.quantity;
-  if (qtyVal === undefined || qtyVal === null || qtyVal === '') {
-    errors.quantity = 'Quantity is required';
+    lineTotal = roundMoney(
+      normalizedLineItems.reduce((sum, r) => sum + (Number(r.amountCollected) || 0), 0)
+    );
   } else {
-    const qty = Number(qtyVal);
-    if (Number.isNaN(qty) || !Number.isInteger(qty) || qty < QUANTITY_MIN || qty > QUANTITY_MAX) {
-      errors.quantity = `Quantity must be a whole number from ${QUANTITY_MIN} to ${QUANTITY_MAX}`;
+    const itemId = raw.itemId != null ? String(raw.itemId).trim() : '';
+    if (!itemId) {
+      errors.itemId = 'Item is required';
     }
-  }
 
-  const amountVal = raw.amountCollected;
-  if (amountVal === undefined || amountVal === null || amountVal === '') {
-    errors.amountCollected = 'Amount collected is required';
-  } else {
-    const amount = Number(amountVal);
-    if (Number.isNaN(amount)) {
-      errors.amountCollected = 'Amount must be a number';
-    } else if (amount < 0) {
-      errors.amountCollected = 'Amount cannot be negative';
-    } else if (amount > AMOUNT_COLLECTED_MAX) {
-      errors.amountCollected = `Amount cannot exceed $${AMOUNT_COLLECTED_MAX}`;
+    const qtyVal = raw.quantity;
+    if (qtyVal === undefined || qtyVal === null || qtyVal === '') {
+      errors.quantity = 'Quantity is required';
+    } else {
+      const qty = Number(qtyVal);
+      if (Number.isNaN(qty) || !Number.isInteger(qty) || qty < QUANTITY_MIN || qty > QUANTITY_MAX) {
+        errors.quantity = `Quantity must be a whole number from ${QUANTITY_MIN} to ${QUANTITY_MAX}`;
+      }
     }
-  }
 
-  const valid = Object.keys(errors).length === 0;
-  if (!valid) {
-    return { valid: false, errors };
-  }
+    const amountVal = raw.amountCollected;
+    if (amountVal === undefined || amountVal === null || amountVal === '') {
+      errors.amountCollected = 'Amount collected is required';
+    } else {
+      const amount = Number(amountVal);
+      if (Number.isNaN(amount)) {
+        errors.amountCollected = 'Amount must be a number';
+      } else if (amount < 0) {
+        errors.amountCollected = 'Amount cannot be negative';
+      } else if (amount > AMOUNT_COLLECTED_MAX) {
+        errors.amountCollected = `Amount cannot exceed $${AMOUNT_COLLECTED_MAX}`;
+      } else {
+        lineTotal = roundMoney(amount);
+      }
+    }
 
-  const normalizedLineItems: LineItem[] = [
-    {
-      itemId,
-      itemLabel:
-        raw.itemLabel != null && String(raw.itemLabel).trim()
-          ? String(raw.itemLabel).trim()
-          : itemId,
-      quantitySold: Math.floor(Number(raw.quantity)),
-      amountCollected: Number(raw.amountCollected),
-    },
-  ];
+    if (Object.keys(errors).filter((k) => k !== 'staff_name' && k !== 'payment_method' && k !== 'payment_splits').length === 0 && itemId) {
+      normalizedLineItems = [
+        {
+          itemId,
+          itemLabel:
+            raw.itemLabel != null && String(raw.itemLabel).trim()
+              ? String(raw.itemLabel).trim()
+              : itemId,
+          quantitySold: Math.floor(Number(raw.quantity)),
+          amountCollected: Number(raw.amountCollected),
+        },
+      ];
 
-  const catalog = options?.catalog;
-  if (catalog && catalog.length > 0) {
-    for (const row of normalizedLineItems) {
-      if (!catalog.some((o) => o.id === row.itemId)) {
-        return { valid: false, errors: { ...errors, itemId: 'Invalid item' } };
+      const catalog = options?.catalog;
+      if (catalog && catalog.length > 0) {
+        for (const row of normalizedLineItems) {
+          if (!catalog.some((o) => o.id === row.itemId)) {
+            errors.itemId = 'Invalid item';
+          }
+        }
       }
     }
   }
 
-  return { valid: true, errors: {}, normalizedLineItems };
+  let parsedSplits: RoomPaymentSplit[] | undefined;
+  if (hasSplitsField) {
+    const splitResult = validatePaymentSplitsForExpectedTotal(
+      raw.payment_splits,
+      lineTotal,
+      FOOD_BEER_PAYMENT_SPLIT_OPTIONS
+    );
+    if (!splitResult.valid || !splitResult.splits?.length) {
+      if (splitResult.error === 'err_payment_total_mismatch') {
+        const expected = (splitResult.expectedTotal ?? lineTotal).toFixed(2);
+        const assigned = (
+          splitResult.assignedTotal ?? calculatePaymentSplitTotal(splitResult.splits ?? [])
+        ).toFixed(2);
+        errors.payment_splits = `Payment methods must total $${expected}. Currently assigned: $${assigned}.`;
+      } else {
+        errors.payment_splits = splitResult.error ?? 'Invalid payment breakdown';
+      }
+    } else {
+      parsedSplits = splitResult.splits;
+    }
+  } else {
+    const pm = raw.payment_method != null ? String(raw.payment_method).trim() : '';
+    if (!hasStoredPaymentMethodSingle(pm)) {
+      errors.payment_method = VALIDATION_CODES.requiredPaymentMethod;
+    }
+  }
+
+  const valid =
+    Object.keys(errors).length === 0 && !!normalizedLineItems && normalizedLineItems.length > 0;
+  if (!valid) {
+    return { valid: false, errors };
+  }
+
+  return {
+    valid: true,
+    errors: {},
+    normalizedLineItems,
+    ...(parsedSplits ? { payment_splits: parsedSplits } : {}),
+  };
 }
 
 export { ALLOWED_STAFF };
