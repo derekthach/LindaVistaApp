@@ -132,7 +132,8 @@ export const translations = {
     checkout_rooms_title: 'Checkout Rooms',
     checkout_rooms_subtitle: 'Rooms currently occupied or awaiting turnover',
     employee_recent_checkins_title: 'My Recent Check-Ins',
-    employee_recent_checkins_subtitle: 'Your entries from the last 8 hours — review or fix small mistakes.',
+    employee_recent_checkins_subtitle:
+      'Your entries from the last {hours} hours — review or fix small mistakes.',
     employee_recent_col_time: 'Time',
     employee_recent_col_type: 'Type',
     employee_recent_col_summary: 'Summary',
@@ -141,9 +142,10 @@ export const translations = {
     employee_recent_action_view: 'View',
     employee_recent_action_hide: 'Hide',
     employee_recent_action_edit: 'Edit',
-    employee_recent_none: 'No check-ins in the last 8 hours.',
+    employee_recent_none: 'No check-ins in the last {hours} hours.',
     employee_recent_edit_title: 'Edit check-in',
-    employee_recent_error_window: 'This check-in can no longer be edited (outside the 8-hour window).',
+    employee_recent_error_window:
+      'This check-in can no longer be edited (outside the {hours}-hour window).',
     employee_recent_error_forbidden: 'You can only edit your own recent check-ins.',
     employee_recent_saved: 'Saved.',
     employee_recent_room_locked_help:
@@ -462,6 +464,12 @@ export const translations = {
     err_payment_amount_positive: 'Each amount must be greater than 0',
     err_payment_row_max: 'Each row cannot exceed $1000',
     err_payment_total_max: 'Total collected cannot exceed $1000',
+    err_payment_total_mismatch:
+      'Payment methods must total ${expected}. Currently assigned: ${assigned}. Remaining: ${remaining}.',
+    check_in_total: 'Check-In Total',
+    payment_total: 'Payment Total',
+    payment_remaining: 'Remaining',
+    payment_methods_heading: 'Payment Methods',
     error_cost_required: 'Cost is required',
     error_cost_number: 'Cost must be a number',
     error_cost_negative: 'Cost cannot be negative',
@@ -607,7 +615,7 @@ export const translations = {
     checkout_rooms_subtitle: 'Habitaciones ocupadas o en espera de limpieza',
     employee_recent_checkins_title: 'Mis registros recientes',
     employee_recent_checkins_subtitle:
-      'Tus registros de las últimas 8 horas — revisa o corrige errores pequeños.',
+      'Tus registros de las últimas {hours} horas — revisa o corrige errores pequeños.',
     employee_recent_col_time: 'Hora',
     employee_recent_col_type: 'Tipo',
     employee_recent_col_summary: 'Resumen',
@@ -616,9 +624,10 @@ export const translations = {
     employee_recent_action_view: 'Ver',
     employee_recent_action_hide: 'Ocultar',
     employee_recent_action_edit: 'Editar',
-    employee_recent_none: 'No hay registros en las últimas 8 horas.',
+    employee_recent_none: 'No hay registros en las últimas {hours} horas.',
     employee_recent_edit_title: 'Editar registro',
-    employee_recent_error_window: 'Este registro ya no se puede editar (fuera de las 8 horas).',
+    employee_recent_error_window:
+      'Este registro ya no se puede editar (fuera de las {hours} horas).',
     employee_recent_error_forbidden: 'Solo puede editar sus propios registros recientes.',
     employee_recent_saved: 'Guardado.',
     employee_recent_room_locked_help:
@@ -939,6 +948,12 @@ export const translations = {
     err_payment_amount_positive: 'Cada monto debe ser mayor que 0',
     err_payment_row_max: 'Cada fila no puede superar $1000',
     err_payment_total_max: 'El total cobrado no puede superar $1000',
+    err_payment_total_mismatch:
+      'Los métodos de pago deben sumar ${expected}. Asignado actualmente: ${assigned}. Restante: ${remaining}.',
+    check_in_total: 'Total del registro',
+    payment_total: 'Total de pago',
+    payment_remaining: 'Restante',
+    payment_methods_heading: 'Métodos de pago',
     error_cost_required: 'El costo es obligatorio',
     error_cost_number: 'El costo debe ser un número',
     error_cost_negative: 'El costo no puede ser negativo',

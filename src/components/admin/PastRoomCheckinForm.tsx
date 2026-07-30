@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useCallback, useMemo, useState } from 'react';
+import { useActionState, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { submitPastRoomCheckinAction } from '@/app/actions/pastRoomCheckin';
 import Button from '@/components/Button';
@@ -10,16 +10,16 @@ import {
   formatRoomDisplay,
   isValidAdminLateRoomId,
 } from '@/lib/checkins/rooms';
-import { PAYMENT_METHODS } from '@/lib/checkins/paymentMethods';
+import PaymentSplitsEditor from '@/components/checkins/PaymentSplitsEditor';
 import {
   calculatePaymentSplitTotal,
+  defaultPaymentSplitFormRow,
+  paymentFormRowsToRaw,
+  type PaymentSplitFormRow,
   validatePaymentSplits,
 } from '@/lib/checkins/roomPaymentSplits';
-import { getPaymentMethodTranslationKey } from '@/lib/checkins/paymentMethods';
 import { useTranslation } from '@/lib/i18n/useTranslation';
-import type { TranslationKey } from '@/lib/i18n/translations';
 
-const COST_MAX = 1000;
 const inputStyle: React.CSSProperties = {
   width: '100%',
   padding: '8px 10px',
@@ -27,8 +27,6 @@ const inputStyle: React.CSSProperties = {
   border: '1px solid #e5e7eb',
   fontSize: 14,
 };
-
-type PayRow = { method: string; amount: string };
 
 export default function PastRoomCheckinForm({ staffNames }: { staffNames: string[] }) {
   const { t } = useTranslation();
@@ -40,19 +38,11 @@ export default function PastRoomCheckinForm({ staffNames }: { staffNames: string
   const [checkInTime, setCheckInTime] = useState('');
   const [staffName, setStaffName] = useState('');
   const [receiptNumber, setReceiptNumber] = useState('');
-  const [paymentRows, setPaymentRows] = useState<PayRow[]>([{ method: 'cash', amount: '' }]);
+  const [paymentRows, setPaymentRows] = useState<PaymentSplitFormRow[]>([defaultPaymentSplitFormRow()]);
   const [note, setNote] = useState('');
 
   const splitValidation = useMemo(
-    () =>
-      validatePaymentSplits(
-        JSON.stringify(
-          paymentRows.map((r) => ({
-            method: r.method,
-            amount: r.amount.trim() === '' ? '' : Number(r.amount),
-          }))
-        )
-      ),
+    () => validatePaymentSplits(paymentFormRowsToRaw(paymentRows)),
     [paymentRows]
   );
 
@@ -65,20 +55,6 @@ export default function PastRoomCheckinForm({ staffNames }: { staffNames: string
     ? calculatePaymentSplitTotal(splitValidation.splits)
     : null;
 
-  const updatePaymentRow = useCallback((index: number, patch: Partial<PayRow>) => {
-    setPaymentRows((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
-  }, []);
-
-  const addPaymentRow = useCallback(() => {
-    const used = new Set(paymentRows.map((r) => r.method));
-    const next = PAYMENT_METHODS.find((m) => !used.has(m));
-    if (!next) return;
-    setPaymentRows((rows) => [...rows, { method: next, amount: '' }]);
-  }, [paymentRows]);
-
-  const removePaymentRow = useCallback((index: number) => {
-    setPaymentRows((rows) => (rows.length <= 1 ? rows : rows.filter((_, i) => i !== index)));
-  }, []);
 
   const cardStyle: React.CSSProperties = {
     width: '100%',
@@ -203,90 +179,14 @@ export default function PastRoomCheckinForm({ staffNames }: { staffNames: string
           </label>
         </div>
 
-        <div>
-          <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8, fontWeight: 600 }}>{t('payment_breakdown')}</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {paymentRows.map((row, idx) => {
-              const usedElsewhere = new Set(paymentRows.filter((_, i) => i !== idx).map((r) => r.method));
-              return (
-                <div
-                  key={idx}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr auto',
-                    gap: 8,
-                    alignItems: 'end',
-                  }}
-                >
-                  <label style={{ margin: 0 }}>
-                    <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('payment_method')}</div>
-                    <select
-                      value={row.method}
-                      onChange={(e) => updatePaymentRow(idx, { method: e.target.value })}
-                      style={inputStyle}
-                    >
-                      {PAYMENT_METHODS.map((method) => (
-                        <option key={method} value={method} disabled={usedElsewhere.has(method)}>
-                          {t(getPaymentMethodTranslationKey(method) as TranslationKey)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label style={{ margin: 0 }}>
-                    <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('amount')}</div>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min={0}
-                      max={COST_MAX}
-                      value={row.amount}
-                      onChange={(e) => updatePaymentRow(idx, { amount: e.target.value })}
-                      style={inputStyle}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => removePaymentRow(idx)}
-                    disabled={paymentRows.length <= 1}
-                    style={{
-                      padding: '8px 10px',
-                      borderRadius: 8,
-                      border: '1px solid #e5e7eb',
-                      fontSize: 13,
-                      background: paymentRows.length <= 1 ? '#f3f4f6' : '#fff',
-                    }}
-                  >
-                    {t('remove')}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-          <button
-            type="button"
-            onClick={addPaymentRow}
-            disabled={paymentRows.length >= PAYMENT_METHODS.length}
-            style={{
-              marginTop: 10,
-              padding: '8px 12px',
-              borderRadius: 8,
-              border: '1px solid #166534',
-              background: '#fff',
-              color: '#166534',
-              fontSize: 13,
-            }}
-          >
-            {t('add_payment_method')}
-          </button>
-          <div style={{ marginTop: 10, fontWeight: 600 }}>
-            {t('label_total_collected')}: {liveTotal != null ? `$${liveTotal.toFixed(2)}` : '—'}
-          </div>
-          {!splitValidation.valid && splitValidation.error && (
-            <div style={{ color: '#dc2626', fontSize: 12, marginTop: 6 }}>
-              {t(splitValidation.error as TranslationKey)}
-            </div>
-          )}
-        </div>
+        <PaymentSplitsEditor
+          value={paymentRows}
+          onChange={setPaymentRows}
+          validation={splitValidation}
+          showError={!splitValidation.valid}
+          inputStyle={inputStyle}
+          totalLabelKey="label_total_collected"
+        />
 
         <label style={{ margin: 0 }}>
           <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('notes')}</div>

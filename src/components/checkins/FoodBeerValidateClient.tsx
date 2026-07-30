@@ -9,6 +9,10 @@ import type { FoodBeerDraft } from '@/lib/checkins/draft';
 import { confirmFoodBeerCheckinAction } from '@/app/actions/checkin';
 import { formatTime } from '@/lib/utils/formatTime';
 import { getPaymentMethodTranslationKey, hasStoredPaymentMethodSingle } from '@/lib/checkins/paymentMethods';
+import {
+  calculatePaymentSplitTotal,
+  formatPaymentBreakdownLinesLocalized,
+} from '@/lib/checkins/roomPaymentSplits';
 
 function centsToCurrency(cents: number, locale: string): string {
   return new Intl.NumberFormat(locale === 'es' ? 'es-PR' : 'en-US', {
@@ -53,7 +57,7 @@ function ValidateContent({
       }
       clearDraft(type);
       router.push('/checkins/new');
-    } catch (err) {
+    } catch {
       setError(t('verify_generic_error'));
       setConfirming(false);
     }
@@ -72,6 +76,15 @@ function ValidateContent({
     0
   );
   const typeLabel = type === 'food' ? t('food_and_beverage') : t('beer');
+  const paymentSplits = draft.payment_splits;
+  const paymentLines =
+    paymentSplits && paymentSplits.length > 0
+      ? formatPaymentBreakdownLinesLocalized(paymentSplits, (k) => t(k as TranslationKey))
+      : null;
+  const paymentTotal =
+    paymentSplits && paymentSplits.length > 0
+      ? calculatePaymentSplitTotal(paymentSplits)
+      : null;
 
   return (
     <div className="card">
@@ -122,14 +135,34 @@ function ValidateContent({
           <span>{centsToCurrency(totalCents, language)}</span>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <strong>{t('payment_method')}:</strong>
-          <span>
-            {hasStoredPaymentMethodSingle(draft.payment_method)
-              ? t(getPaymentMethodTranslationKey(draft.payment_method) as TranslationKey)
-              : t('payment_method_not_recorded')}
-          </span>
-        </div>
+        {paymentLines ? (
+          <div style={{ marginTop: 8 }}>
+            <strong>{t('payment_methods_heading')}:</strong>
+            <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
+              {paymentLines.map((line, idx) => (
+                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>{line.split(':')[0]}</span>
+                  <span>{line.includes(':') ? line.slice(line.indexOf(':') + 1).trim() : line}</span>
+                </div>
+              ))}
+              {paymentTotal != null && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600 }}>
+                  <span>{t('total')}</span>
+                  <span>${paymentTotal.toFixed(2)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <strong>{t('payment_method')}:</strong>
+            <span>
+              {hasStoredPaymentMethodSingle(draft.payment_method)
+                ? t(getPaymentMethodTranslationKey(draft.payment_method) as TranslationKey)
+                : t('payment_method_not_recorded')}
+            </span>
+          </div>
+        )}
 
         {draft.notes && (
           <div style={{ marginTop: 8 }}>

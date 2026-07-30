@@ -21,22 +21,26 @@ import {
   parseRoomOptionValue,
   roomOptionsForEmployeeEdit,
 } from '@/lib/checkins/rooms';
-import { PAYMENT_METHODS, getPaymentMethodTranslationKey, hasStoredPaymentMethodSingle } from '@/lib/checkins/paymentMethods';
+import { hasStoredPaymentMethodSingle } from '@/lib/checkins/paymentMethods';
 import { useTranslation } from '@/lib/i18n/useTranslation';
-import type { TranslationKey } from '@/lib/i18n/translations';
 import { formatRoomDisplay } from '@/lib/checkins/rooms';
 import { QuantitySoldInput } from '@/components/checkins/QuantitySoldInput';
+import PaymentSplitsEditor from '@/components/checkins/PaymentSplitsEditor';
 import {
-  calculatePaymentSplitTotal,
+  defaultPaymentSplitFormRow,
+  FOOD_BEER_PAYMENT_SPLIT_OPTIONS,
+  paymentFormRowsToRaw,
+  paymentStateToFormRows,
+  type PaymentSplitFormRow,
   validatePaymentSplits,
+  validatePaymentSplitsForExpectedTotal,
 } from '@/lib/checkins/roomPaymentSplits';
 import { validateSimpleCheckin } from '@/lib/checkins/validation';
 import { lineItemsFromCheckinRecord } from '@/lib/checkins/lineItemsFromCheckin';
 
-const COST_MAX = 1000;
-const AMOUNT_COLLECTED_MAX = 1000;
 const QUANTITY_MIN = 1;
 const QUANTITY_MAX = 50;
+const AMOUNT_COLLECTED_MAX = 1000;
 
 const initialFoodBeerRow = (): LineItem => ({
   itemId: '',
@@ -114,10 +118,8 @@ export default function EditCheckinModal({
   const [receipt_number, setReceiptNumber] = useState('');
   const [staff_name, setStaffName] = useState('');
   const [room_id, setRoomId] = useState<number | string>(1);
-  type PayRow = { method: string; amount: string };
-  const [paymentRows, setPaymentRows] = useState<PayRow[]>([{ method: 'cash', amount: '' }]);
+  const [paymentRows, setPaymentRows] = useState<PaymentSplitFormRow[]>([defaultPaymentSplitFormRow()]);
   const [lineRows, setLineRows] = useState<LineItem[]>([initialFoodBeerRow()]);
-  const [foodPaymentMethod, setFoodPaymentMethod] = useState('');
 
   useEffect(() => {
     if (checkin) {
@@ -131,23 +133,17 @@ export default function EditCheckinModal({
       setStaffName(checkin.staff_name ?? '');
       setRoomId(checkin.room_id ?? 1);
 
-      if (origType === 'room') {
-        const splits = checkin.payment_splits;
-        if (splits && splits.length > 0) {
-          setPaymentRows(splits.map((s) => ({ method: s.method, amount: String(s.amount) })));
-        } else {
-          setPaymentRows([
-            { method: checkin.payment_method || 'cash', amount: String(Number(checkin.cost) || 0) },
-          ]);
-        }
-      } else {
+      setPaymentRows(
+        paymentStateToFormRows(
+          checkin.payment_splits,
+          checkin.payment_method,
+          Number(checkin.cost) || 0
+        )
+      );
+
+      if (origType !== 'room') {
         const existing = lineItemsFromCheckinRecord(checkin);
         setLineRows(existing.length > 0 ? existing : [initialFoodBeerRow()]);
-        setFoodPaymentMethod(
-          hasStoredPaymentMethodSingle(checkin.payment_method)
-            ? String(checkin.payment_method).trim()
-            : ''
-        );
       }
     }
   }, [checkin]);
@@ -199,47 +195,77 @@ export default function EditCheckinModal({
     [lineRows]
   );
 
-  const foodBeerValidation = useMemo(
-    () =>
-      validateSimpleCheckin({
-        date: editDate,
-        time: editTimeHm,
-        staff_name,
-        checkInType: storedType === 'beer' ? 'beer' : 'food',
-        lineItems: lineItemsForFoodValidation,
-        notes: note || undefined,
-        payment_method: foodPaymentMethod,
-      }),
-    [editDate, editTimeHm, staff_name, storedType, lineItemsForFoodValidation, note, foodPaymentMethod]
-  );
-
   const foodBeerLiveTotal = useMemo(
     () => lineRows.reduce((sum, r) => sum + (Number(r.amountCollected) || 0), 0),
     [lineRows]
   );
 
-  const splitValidation = useMemo(
-    () =>
-      validatePaymentSplits(
-        JSON.stringify(
-          paymentRows.map((r) => ({
-            method: r.method,
-            amount: r.amount.trim() === '' ? '' : Number(r.amount),
-          }))
-        )
-      ),
+  const roomSplitValidation = useMemo(
+    () => validatePaymentSplits(paymentFormRowsToRaw(paymentRows)),
     [paymentRows]
   );
+
+  const foodSplitValidation = useMemo(
+    () =>
+      validatePaymentSplitsForExpectedTotal(
+        paymentFormRowsToRaw(paymentRows),
+        foodBeerLiveTotal,
+        FOOD_BEER_PAYMENT_SPLIT_OPTIONS
+      ),
+    [paymentRows, foodBeerLiveTotal]
+  );
+
+  const splitValidation = effectiveIsRoom ? roomSplitValidation : foodSplitValidation;
   const splitsValid = splitValidation.valid && !!splitValidation.splits?.length;
-  const liveRoomTotal = splitsValid ? calculatePaymentSplitTotal(splitValidation.splits!) : null;
+
+  const foodBeerValidation = useMemo(() => {
+    const base = validateSimpleCheckin({
+      date: editDate,
+      time: editTimeHm,
+      staff_name,
+      checkInType: storedType === 'beer' ? 'beer' : 'food',
+      lineItems: lineItemsForFoodValidation,
+      notes: note || undefined,
+      payment_method: foodSplitValidation.splits?.[0]?.method,
+    });
+    const errors = { ...base.errors };
+    delete errors.payment_method;
+    if (!foodSplitValidation.valid) {
+      errors.payment_splits = foodSplitValidation.error ?? 'err_payment_invalid_data';
+    }
+    const valid =
+      Object.keys(errors).length === 0 &&
+      Object.keys(base.lineItemErrors ?? {}).length === 0 &&
+      foodSplitValidation.valid;
+    return { ...base, errors, valid };
+  }, [
+    editDate,
+    editTimeHm,
+    staff_name,
+    storedType,
+    lineItemsForFoodValidation,
+    note,
+    foodSplitValidation,
+  ]);
 
   const initialSplitsJson = useMemo(() => {
-    if (!checkin || storedCheckInType(checkin) !== 'room') return '';
+    if (!checkin) return '';
     const splits = checkin.payment_splits;
     if (splits && splits.length > 0) return JSON.stringify(splits);
-    return JSON.stringify([
-      { method: checkin.payment_method || 'cash', amount: Number(checkin.cost) || 0 },
-    ]);
+    if (storedCheckInType(checkin) === 'room') {
+      return JSON.stringify([
+        { method: checkin.payment_method || 'cash', amount: Number(checkin.cost) || 0 },
+      ]);
+    }
+    if (hasStoredPaymentMethodSingle(checkin.payment_method)) {
+      return JSON.stringify([
+        {
+          method: String(checkin.payment_method).trim(),
+          amount: Number(checkin.cost) || 0,
+        },
+      ]);
+    }
+    return '';
   }, [checkin]);
 
   const currentSplitsJson = useMemo(() => {
@@ -275,11 +301,7 @@ export default function EditCheckinModal({
   const hasChangesFoodBeerSpecific =
     !!checkin &&
     !effectiveIsRoom &&
-    (currentFoodLineJson !== initialFoodLineJson ||
-      foodPaymentMethod !==
-        (hasStoredPaymentMethodSingle(checkin.payment_method)
-          ? String(checkin.payment_method).trim()
-          : ''));
+    (currentFoodLineJson !== initialFoodLineJson || currentSplitsJson !== initialSplitsJson);
 
   const derivedHasChanges =
     !!checkin &&
@@ -302,7 +324,7 @@ export default function EditCheckinModal({
     (checkin?.is_past_entry ? isValidAdminLateRoomId(room_id) : isValidRoomId(room_id)) &&
     dateTimeOk;
   const formValidFoodBeer =
-    !effectiveIsRoom && foodBeerValidation.valid && staffValid && dateTimeOk;
+    !effectiveIsRoom && foodBeerValidation.valid && staffValid && dateTimeOk && splitsValid;
   const formValid = effectiveIsRoom ? formValidRoom : formValidFoodBeer;
   const canSave = formValid && derivedHasChanges && !saveDisabled;
 
@@ -323,7 +345,7 @@ export default function EditCheckinModal({
         room_id,
         payment_splits: splitValidation.splits,
       });
-    } else if (!effectiveIsRoom) {
+    } else if (!effectiveIsRoom && splitValidation.splits) {
       const linePayload: LineItem[] = lineRows
         .filter((r) => r.itemId?.trim())
         .map((r) => ({
@@ -339,7 +361,8 @@ export default function EditCheckinModal({
         note: noteTrim,
         staff_name,
         lineItems: linePayload,
-        payment_method: foodPaymentMethod,
+        payment_method: splitValidation.splits[0].method,
+        payment_splits: splitValidation.splits,
       });
     }
   };
@@ -348,21 +371,6 @@ export default function EditCheckinModal({
     const padded = normalizeReceipt(receipt_number);
     if (padded !== null) setReceiptNumber(padded);
   };
-
-  const updatePaymentRow = useCallback((index: number, patch: Partial<PayRow>) => {
-    setPaymentRows((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
-  }, []);
-
-  const addPaymentRow = useCallback(() => {
-    const used = new Set(paymentRows.map((r) => r.method));
-    const next = PAYMENT_METHODS.find((m) => !used.has(m));
-    if (!next) return;
-    setPaymentRows((rows) => [...rows, { method: next, amount: '' }]);
-  }, [paymentRows]);
-
-  const removePaymentRow = useCallback((index: number) => {
-    setPaymentRows((rows) => (rows.length <= 1 ? rows : rows.filter((_, i) => i !== index)));
-  }, []);
 
   const getCatalogItemLabel = useCallback(
     (item: ItemOption) => (language === 'es' ? item.label.es : item.label.en),
@@ -509,94 +517,14 @@ export default function EditCheckinModal({
 
           {effectiveIsRoom ? (
             <>
-              <div>
-                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8, fontWeight: 600 }}>
-                  {t('payment_breakdown')}
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {paymentRows.map((row, idx) => {
-                    const usedElsewhere = new Set(paymentRows.filter((_, i) => i !== idx).map((r) => r.method));
-                    return (
-                      <div
-                        key={idx}
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: '1fr 1fr auto',
-                          gap: 8,
-                          alignItems: 'end',
-                        }}
-                      >
-                        <label style={{ margin: 0 }}>
-                          <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>
-                            {t('payment_method')}
-                          </div>
-                          <select
-                            value={row.method}
-                            onChange={(e) => updatePaymentRow(idx, { method: e.target.value })}
-                            style={inputStyle}
-                          >
-                            {PAYMENT_METHODS.map((method) => (
-                              <option key={method} value={method} disabled={usedElsewhere.has(method)}>
-                                {t(getPaymentMethodTranslationKey(method) as TranslationKey)}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label style={{ margin: 0 }}>
-                          <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('amount')}</div>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min={0}
-                            max={COST_MAX}
-                            value={row.amount}
-                            onChange={(e) => updatePaymentRow(idx, { amount: e.target.value })}
-                            style={inputStyle}
-                          />
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => removePaymentRow(idx)}
-                          disabled={paymentRows.length <= 1}
-                          style={{
-                            padding: '8px 10px',
-                            borderRadius: 8,
-                            border: '1px solid #e5e7eb',
-                            fontSize: 13,
-                            background: paymentRows.length <= 1 ? '#f3f4f6' : '#fff',
-                          }}
-                        >
-                          {t('remove')}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-                <button
-                  type="button"
-                  onClick={addPaymentRow}
-                  disabled={paymentRows.length >= PAYMENT_METHODS.length}
-                  style={{
-                    marginTop: 10,
-                    padding: '8px 12px',
-                    borderRadius: 8,
-                    border: '1px solid #166534',
-                    background: '#fff',
-                    color: '#166534',
-                    fontSize: 13,
-                  }}
-                >
-                  {t('add_payment_method')}
-                </button>
-                <div style={{ marginTop: 10, fontWeight: 600 }}>
-                  {t('label_total_collected')}: {liveRoomTotal != null ? `$${liveRoomTotal.toFixed(2)}` : '—'}
-                </div>
-                {!splitsValid && splitValidation.error && (
-                  <div style={{ color: '#dc2626', fontSize: 12, marginTop: 6 }}>
-                    {t(splitValidation.error as TranslationKey)}
-                  </div>
-                )}
-              </div>
+              <PaymentSplitsEditor
+                value={paymentRows}
+                onChange={setPaymentRows}
+                validation={roomSplitValidation}
+                showError={!splitsValid && !!roomSplitValidation.error}
+                inputStyle={inputStyle}
+                totalLabelKey="label_total_collected"
+              />
               <label>
                 <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('room_number')}</div>
                 <select
@@ -717,22 +645,17 @@ export default function EditCheckinModal({
                   }).format(foodBeerLiveTotal)}
                 </div>
               </div>
-              <label>
-                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('payment_method')}</div>
-                <select
-                  value={foodPaymentMethod}
-                  onChange={(e) => setFoodPaymentMethod(e.target.value)}
-                  style={inputStyle}
-                  required
-                >
-                  <option value="">{t('payment_method_select_placeholder')}</option>
-                  {PAYMENT_METHODS.map((method) => (
-                    <option key={method} value={method}>
-                      {t(getPaymentMethodTranslationKey(method) as TranslationKey)}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <PaymentSplitsEditor
+                value={paymentRows}
+                onChange={setPaymentRows}
+                validation={foodSplitValidation}
+                validateOptions={FOOD_BEER_PAYMENT_SPLIT_OPTIONS}
+                showError={!foodSplitValidation.valid}
+                inputStyle={inputStyle}
+                totalLabelKey="label_total_collected"
+                amountInputMax={FOOD_BEER_PAYMENT_SPLIT_OPTIONS.maxRowAmount}
+                expectedTotal={foodBeerLiveTotal}
+              />
             </>
           )}
 

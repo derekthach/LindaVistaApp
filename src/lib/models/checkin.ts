@@ -81,9 +81,9 @@ export function normalizeCheckin(id: string, data: Record<string, unknown>): Che
   const staffName =
     (data.staffName as string) ?? (data.staffId as string) ?? '';
 
-  const paymentSplitsParsed = isRoom ? parsePaymentSplitsFromFirestore(data.paymentSplits) : undefined;
+  const paymentSplitsParsed = parsePaymentSplitsFromFirestore(data.paymentSplits);
   const totalCollectedRaw =
-    isRoom && data.totalCollected != null ? Number(data.totalCollected) : undefined;
+    data.totalCollected != null ? Number(data.totalCollected) : undefined;
 
   let cost: number;
   if (isRoom) {
@@ -98,7 +98,7 @@ export function normalizeCheckin(id: string, data: Record<string, unknown>): Che
 
   const paymentRaw = (data.paymentMethod ?? data.payment) as string | undefined;
   let paymentMethod: string;
-  if (isRoom && paymentSplitsParsed?.length) {
+  if (paymentSplitsParsed?.length) {
     paymentMethod = paymentSplitsParsed[0].method;
   } else if (isRoom) {
     paymentMethod = normalizePaymentMethod(paymentRaw);
@@ -195,13 +195,15 @@ export function normalizeCheckin(id: string, data: Record<string, unknown>): Che
     note,
     lineItems,
     summarizedItems,
-    ...(isRoom && paymentSplitsParsed && paymentSplitsParsed.length > 0
+    ...(paymentSplitsParsed && paymentSplitsParsed.length > 0
       ? {
           payment_splits: paymentSplitsParsed,
           total_collected:
             totalCollectedRaw != null && !Number.isNaN(totalCollectedRaw)
               ? roundMoney(totalCollectedRaw)
-              : cost,
+              : isRoom
+                ? cost
+                : roundMoney(calculatePaymentSplitTotal(paymentSplitsParsed)),
         }
       : {}),
     ...(isRoom && is_checked_out !== undefined

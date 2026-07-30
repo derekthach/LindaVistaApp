@@ -32,6 +32,7 @@ import {
   roomOptionsForEmployeeRecentEdit,
 } from '@/lib/checkins/roomOccupancy';
 import { formatTime } from '@/lib/utils/formatTime';
+import { EMPLOYEE_ENTRY_ACCESS_HOURS } from '@/lib/checkins/employeeAccess';
 
 const COST_MAX = 1000;
 const AMOUNT_COLLECTED_MAX = 1000;
@@ -358,7 +359,7 @@ export default function EmployeeOperationalEditModal({
         const rawErr = typeof data.error === 'string' ? data.error : '';
         const msg =
           rawErr === 'Edit window expired'
-            ? t('employee_recent_error_window')
+            ? t('employee_recent_error_window', { hours: EMPLOYEE_ENTRY_ACCESS_HOURS })
             : rawErr === 'Forbidden'
               ? t('employee_recent_error_forbidden')
               : rawErr === 'error_room_required'

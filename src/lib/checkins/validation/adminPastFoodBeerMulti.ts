@@ -1,8 +1,13 @@
 import { DateTime } from 'luxon';
 import type { ItemOption } from '@/lib/checkins/items';
-import type { LineItem } from '@/types';
+import type { LineItem, RoomPaymentSplit } from '@/types';
 import { validateFoodBeerLineItemsRows } from '@/lib/checkins/validation';
-import { isValidPaymentMethod, normalizePaymentMethod } from '@/lib/checkins/paymentMethods';
+import {
+  calculatePaymentSplitTotal,
+  FOOD_BEER_PAYMENT_SPLIT_OPTIONS,
+  roundMoney,
+  validatePaymentSplitsForExpectedTotal,
+} from '@/lib/checkins/roomPaymentSplits';
 import { parseLineItemsFromUnknown, normalizeSubmittedFoodBeerLineItems } from '@/lib/checkins/lineItemsPayload';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -17,12 +22,14 @@ export interface AdminPastFoodBeerMultiResult {
   staff_name?: string;
   lineItems?: LineItem[];
   payment_method?: string;
+  payment_splits?: RoomPaymentSplit[];
   notes?: string;
 }
 
 /**
  * Admin Add Past Entry: food or beer with multiple catalog line items.
  * Same row rules as normal simple check-in (validateFoodBeerLineItemsRows).
+ * Payment may be a multi-method breakdown whose total must equal line-item total.
  */
 export function validateAdminPastFoodBeerMulti(
   raw: Record<string, unknown>,
@@ -58,15 +65,6 @@ export function validateAdminPastFoodBeerMulti(
     return { valid: false, error: 'Staff must be selected from the allowed list' };
   }
 
-  const pmRaw = raw.payment_method != null ? String(raw.payment_method).trim() : '';
-  if (!pmRaw) {
-    return { valid: false, error: 'Payment method is required' };
-  }
-  if (!isValidPaymentMethod(pmRaw)) {
-    return { valid: false, error: 'Invalid payment method' };
-  }
-  const payment_method = normalizePaymentMethod(pmRaw);
-
   let notes: string | undefined;
   const noteRaw = raw.notes != null ? String(raw.notes) : '';
   const noteTrim = noteRaw.trim();
@@ -100,13 +98,54 @@ export function validateAdminPastFoodBeerMulti(
     }
   }
 
+  const lineTotal = roundMoney(
+    normalized.reduce((sum, r) => sum + (Number(r.amountCollected) || 0), 0)
+  );
+
+  const hasSplitsField =
+    raw.payment_splits != null &&
+    raw.payment_splits !== '' &&
+    !(typeof raw.payment_splits === 'string' && String(raw.payment_splits).trim() === '');
+
+  if (!hasSplitsField) {
+    return { valid: false, error: 'Payment breakdown is required' };
+  }
+
+  const splitResult = validatePaymentSplitsForExpectedTotal(
+    raw.payment_splits,
+    lineTotal,
+    FOOD_BEER_PAYMENT_SPLIT_OPTIONS
+  );
+  if (!splitResult.valid || !splitResult.splits?.length) {
+    if (splitResult.error === 'err_payment_total_mismatch') {
+      const expected = (splitResult.expectedTotal ?? lineTotal).toFixed(2);
+      const assigned = (
+        splitResult.assignedTotal ?? calculatePaymentSplitTotal(splitResult.splits ?? [])
+      ).toFixed(2);
+      const remaining = Math.max(
+        0,
+        Math.round(
+          ((splitResult.expectedTotal ?? lineTotal) -
+            (splitResult.assignedTotal ?? calculatePaymentSplitTotal(splitResult.splits ?? []))) *
+            100
+        ) / 100
+      ).toFixed(2);
+      return {
+        valid: false,
+        error: `Payment methods must total $${expected}. Currently assigned: $${assigned}. Remaining: $${remaining}.`,
+      };
+    }
+    return { valid: false, error: 'Invalid payment breakdown' };
+  }
+
   return {
     valid: true,
     date: dateStr,
     time: timeHm,
     staff_name: staff,
     lineItems: normalized,
-    payment_method,
+    payment_method: splitResult.splits[0].method,
+    payment_splits: splitResult.splits,
     notes,
   };
 }

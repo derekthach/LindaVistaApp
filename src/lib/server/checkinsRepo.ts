@@ -22,6 +22,7 @@ import {
   formatPaymentBreakdownComma,
   formatPaymentBreakdownForAuditDoc,
   getRoomCollectedTotalFromDoc,
+  parsePaymentSplitsFromFirestore,
   roundMoney,
 } from '@/lib/checkins/roomPaymentSplits';
 import {
@@ -247,6 +248,7 @@ export interface CreateSimpleCheckinInput {
   summarizedItems: SummarizedItem[];
   notes?: string;
   payment_method: string;
+  payment_splits?: RoomPaymentSplit[];
   employee_id?: string;
   created_by_username?: string;
   employee_name_snapshot?: string;
@@ -268,6 +270,11 @@ export async function createSimpleCheckin(
   );
   const checkInAt = dt.isValid ? Timestamp.fromDate(dt.toJSDate()) : Timestamp.now();
 
+  const splits = data.payment_splits?.length ? data.payment_splits : undefined;
+  const paymentMethod = splits?.[0]?.method
+    ? normalizePaymentMethod(splits[0].method)
+    : normalizePaymentMethod(data.payment_method);
+
   const doc: Record<string, unknown> = {
     checkInAt,
     createdAt: Timestamp.now(),
@@ -276,8 +283,12 @@ export async function createSimpleCheckin(
     lineItems: data.lineItems,
     summarizedItems: data.summarizedItems,
     note: data.notes ?? '',
-    paymentMethod: normalizePaymentMethod(data.payment_method),
+    paymentMethod,
   };
+  if (splits?.length) {
+    doc.paymentSplits = splits;
+    doc.totalCollected = calculatePaymentSplitTotal(splits);
+  }
 
   if (data.employee_id) doc.employeeId = data.employee_id;
   if (data.created_by_username) doc.createdByUsername = data.created_by_username;
@@ -293,6 +304,7 @@ export interface CreatePastFoodBeverageCheckinInput {
   staff_name: string;
   lineItems: LineItem[];
   payment_method: string;
+  payment_splits: RoomPaymentSplit[];
   notes?: string;
   adminUsername: string;
   adminUserId?: string;
@@ -323,7 +335,11 @@ async function createPastFoodOrBeerCheckin(
   const summarizedItems = summarizeLineItems(lineItems);
 
   const noteTrim = (data.notes ?? '').trim().slice(0, 250);
-  const paymentMethod = normalizePaymentMethod(data.payment_method);
+  const splits = data.payment_splits;
+  const splitTotal = calculatePaymentSplitTotal(splits);
+  const paymentMethod = splits[0]?.method
+    ? normalizePaymentMethod(splits[0].method)
+    : normalizePaymentMethod(data.payment_method);
 
   const doc: Record<string, unknown> = {
     checkInAt,
@@ -335,6 +351,8 @@ async function createPastFoodOrBeerCheckin(
     summarizedItems,
     note: noteTrim,
     paymentMethod,
+    paymentSplits: splits,
+    totalCollected: splitTotal,
     isPastEntry: true,
     source: 'admin_past_entry',
     createdByRole: 'admin',
@@ -663,6 +681,7 @@ export async function adminApplyCheckinPatch(
   const rawFb: Record<string, unknown> = {
     staff_name: body.staff_name,
     payment_method: body.payment_method,
+    payment_splits: body.payment_splits,
     lineItems: body.lineItems,
     itemId: body.itemId,
     itemLabel: body.itemLabel,
@@ -676,12 +695,15 @@ export async function adminApplyCheckinPatch(
       'Validation failed';
     throw new Error(err);
   }
+  const paymentMethod =
+    validation.payment_splits?.[0]?.method ?? String(rawFb.payment_method ?? '').trim();
   await updateCheckinFoodBeer(
     id,
     {
       staff_name: String(rawFb.staff_name).trim(),
       lineItems: validation.normalizedLineItems,
-      payment_method: String(rawFb.payment_method ?? '').trim(),
+      payment_method: paymentMethod,
+      ...(validation.payment_splits ? { payment_splits: validation.payment_splits } : {}),
       check_in_date: checkInDate,
       check_in_time: checkInTime,
       ...(typeof body.note === 'string' ? { note: String(body.note).trim() } : {}),
@@ -871,6 +893,7 @@ export interface UpdateCheckinFoodBeerInput {
   staff_name: string;
   lineItems: LineItem[];
   payment_method: string;
+  payment_splits?: RoomPaymentSplit[];
   check_in_date?: string;
   check_in_time?: string;
   /** When defined (including ''); omit to preserve existing note unchanged. */
@@ -915,16 +938,28 @@ export async function updateCheckinFoodBeer(
   const summarizedItems = summarizeLineItems(lineItems);
 
   const auditBeforeLines = lineItemsForAuditFromFirestore(data);
+  const beforeSplits = parsePaymentSplitsFromFirestore(data.paymentSplits);
   const beforePaymentRaw = data.paymentMethod ?? data.payment;
-  const beforePaymentStored = hasStoredPaymentMethodSingle(
-    beforePaymentRaw != null ? String(beforePaymentRaw) : ''
-  )
-    ? normalizePaymentMethod(String(beforePaymentRaw).trim())
-    : '';
+  const beforePaymentStored = beforeSplits?.length
+    ? beforeSplits[0].method
+    : hasStoredPaymentMethodSingle(beforePaymentRaw != null ? String(beforePaymentRaw) : '')
+      ? normalizePaymentMethod(String(beforePaymentRaw).trim())
+      : '';
+  const afterSplits = payload.payment_splits?.length
+    ? payload.payment_splits
+    : beforeSplits;
   const afterPmRaw = String(payload.payment_method ?? '').trim();
-  const afterPaymentStored = hasStoredPaymentMethodSingle(afterPmRaw)
-    ? normalizePaymentMethod(afterPmRaw)
-    : '';
+  const afterPaymentStored = afterSplits?.length
+    ? afterSplits[0].method
+    : hasStoredPaymentMethodSingle(afterPmRaw)
+      ? normalizePaymentMethod(afterPmRaw)
+      : beforePaymentStored;
+  const beforePaymentAudit = beforeSplits?.length
+    ? formatPaymentBreakdownComma(beforeSplits)
+    : beforePaymentStored;
+  const afterPaymentAudit = afterSplits?.length
+    ? formatPaymentBreakdownComma(afterSplits)
+    : afterPaymentStored;
 
   const beforeTs = data.checkInAt as Timestamp | undefined;
   const noteBefore = normalizeStoredDocNote(data.note ?? data.notes);
@@ -948,7 +983,7 @@ export async function updateCheckinFoodBeer(
     item: auditLabelForFoodBeerLines(auditBeforeLines),
     quantity: auditQuantityTotal(auditBeforeLines),
     amountCollected: auditAmountTotal(auditBeforeLines),
-    paymentMethod: beforePaymentStored,
+    paymentMethod: beforePaymentAudit,
   };
   const after: Record<string, unknown> = {
     checkInAt: afterCheckInIso,
@@ -957,7 +992,7 @@ export async function updateCheckinFoodBeer(
     item: auditLabelForFoodBeerLines(lineItems),
     quantity: auditQuantityTotal(lineItems),
     amountCollected: auditAmountTotal(lineItems),
-    paymentMethod: afterPaymentStored,
+    paymentMethod: afterPaymentAudit,
   };
   const changedFields: string[] = [];
   if (newCheckInAt && typeof beforeTs?.toMillis === 'function') {
@@ -990,6 +1025,10 @@ export async function updateCheckinFoodBeer(
     updatedAt: Timestamp.now(),
     updatedBy: editedBy,
   };
+  if (payload.payment_splits?.length) {
+    updateData.paymentSplits = payload.payment_splits;
+    updateData.totalCollected = calculatePaymentSplitTotal(payload.payment_splits);
+  }
   if (changedFields.includes('checkInAt') && newCheckInAt) {
     updateData.checkInAt = newCheckInAt;
   }
@@ -1008,8 +1047,15 @@ export async function updateCheckinFoodBeer(
   }
 }
 
-/** Rolling window for “my recent check-ins” and employee self-edit eligibility. */
-export const EMPLOYEE_RECENT_CHECKINS_HOURS = 8;
+import {
+  EMPLOYEE_ENTRY_ACCESS_HOURS,
+  isWithinEmployeeAccessWindow,
+} from '@/lib/checkins/employeeAccess';
+
+export { EMPLOYEE_ENTRY_ACCESS_HOURS };
+
+/** @deprecated Prefer EMPLOYEE_ENTRY_ACCESS_HOURS — same value, kept for existing imports. */
+export const EMPLOYEE_RECENT_CHECKINS_HOURS = EMPLOYEE_ENTRY_ACCESS_HOURS;
 
 export function getRecordEventMs(data: Record<string, unknown>): number {
   const ts = data.checkInAt as Timestamp | undefined;
@@ -1036,11 +1082,9 @@ export function checkinOwnedByEmployee(
 
 export function isWithinEmployeeEditHours(
   data: Record<string, unknown>,
-  hours: number = EMPLOYEE_RECENT_CHECKINS_HOURS
+  hours: number = EMPLOYEE_ENTRY_ACCESS_HOURS
 ): boolean {
-  const zone = 'America/Puerto_Rico';
-  const cutoff = DateTime.now().setZone(zone).minus({ hours }).toMillis();
-  return getRecordEventMs(data) >= cutoff;
+  return isWithinEmployeeAccessWindow(getRecordEventMs(data), undefined, hours);
 }
 
 /**
@@ -1052,7 +1096,7 @@ export async function listRecentCheckinsForEmployee(opts: {
   username: string;
   hours?: number;
 }): Promise<CheckIn[]> {
-  const hours = opts.hours ?? EMPLOYEE_RECENT_CHECKINS_HOURS;
+  const hours = opts.hours ?? EMPLOYEE_ENTRY_ACCESS_HOURS;
   const zone = 'America/Puerto_Rico';
   const cutoff = DateTime.now().setZone(zone).minus({ hours });
   const cutoffTs = Timestamp.fromDate(cutoff.toJSDate());
