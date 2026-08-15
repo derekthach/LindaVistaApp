@@ -1,6 +1,9 @@
 /**
  * Resolves View Check-ins list query params without loading unbounded history by default.
  * America/Puerto_Rico “today” is supplied by the caller (keeps this helper pure/testable).
+ *
+ * Bare `/checkins` resolves in-place to today’s day query (no redirect hop) so App Router
+ * soft navigation keeps the admin shell mounted.
  */
 
 export type ViewCheckinsSearchParams = {
@@ -12,7 +15,6 @@ export type ViewCheckinsSearchParams = {
 };
 
 export type ViewCheckinsResolved =
-  | { kind: 'redirect_today'; todayISO: string }
   | { kind: 'day'; dateISO: string; startISO: string; endISO: string }
   | { kind: 'range'; startISO: string; endISO: string; dateISO?: undefined }
   | { kind: 'all'; startISO?: undefined; endISO?: undefined; dateISO?: undefined };
@@ -27,7 +29,7 @@ export function wantsAllCheckins(params: ViewCheckinsSearchParams): boolean {
 }
 
 /**
- * Default: Puerto Rico calendar day.
+ * Default: Puerto Rico calendar day (in-place, no redirect).
  * Opt-in history dump: `?all=1` (still server-capped by listCheckinsByDateRange).
  * Explicit `date` or `start_date`+`end_date` preserved for navigation/export flows.
  */
@@ -51,9 +53,9 @@ export function resolveViewCheckinsQuery(
     return { kind: 'all' };
   }
 
-  if (!isIsoDate(todayISO)) {
-    return { kind: 'all' };
+  if (isIsoDate(todayISO)) {
+    return { kind: 'day', dateISO: todayISO, startISO: todayISO, endISO: todayISO };
   }
 
-  return { kind: 'redirect_today', todayISO };
+  return { kind: 'all' };
 }

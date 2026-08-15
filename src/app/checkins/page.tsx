@@ -1,6 +1,5 @@
-import { redirect } from 'next/navigation';
-import { DateTime } from 'luxon';
 import { requireAuth } from '@/server/auth/session';
+import { DateTime } from 'luxon';
 import { listCheckinsByDateRange } from '@/lib/server/checkinsRepo';
 import AppLayout from '@/components/AppLayout';
 import CheckinsList from '@/components/CheckinsList';
@@ -26,10 +25,6 @@ export default async function CheckinsPage({
   const params = await searchParams;
   const todayISO = DateTime.now().setZone(ZONE).toISODate() ?? '';
   const resolved = resolveViewCheckinsQuery(params, todayISO);
-
-  if (resolved.kind === 'redirect_today') {
-    redirect(`/checkins?date=${encodeURIComponent(resolved.todayISO)}`);
-  }
 
   const startISO = resolved.kind === 'all' ? undefined : resolved.startISO;
   const endISO = resolved.kind === 'all' ? undefined : resolved.endISO;

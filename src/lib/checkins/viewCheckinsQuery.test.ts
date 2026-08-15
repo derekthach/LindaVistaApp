@@ -14,10 +14,12 @@ describe('wantsAllCheckins', () => {
 describe('resolveViewCheckinsQuery', () => {
   const today = '2026-08-14';
 
-  it('redirects bare /checkins to today (PR) instead of unfiltered history', () => {
+  it('defaults bare /checkins to today (PR) in-place without redirect', () => {
     expect(resolveViewCheckinsQuery({}, today)).toEqual({
-      kind: 'redirect_today',
-      todayISO: today,
+      kind: 'day',
+      dateISO: today,
+      startISO: today,
+      endISO: today,
     });
   });
 

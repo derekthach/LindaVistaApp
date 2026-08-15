@@ -1,13 +1,16 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { usePathname } from 'next/navigation';
+import { DateTime } from 'luxon';
 import { logoutAction } from '@/app/actions/auth';
 import { LV_PENDING_RESETS_INVALIDATE } from '@/lib/adminNavEvents';
 import { isGuestEmployeeUsername } from '@/lib/auth/guestEmployee';
 import { useTranslation } from '@/lib/i18n/useTranslation';
 import type { UserRole } from '@/types';
+
+const ZONE = 'America/Puerto_Rico';
 
 export default function Sidebar({
   role,
@@ -23,6 +26,12 @@ export default function Sidebar({
   const { t } = useTranslation();
   const pathname = usePathname();
   const [pendingResetCount, setPendingResetCount] = useState(0);
+
+  /** Direct dated URL — one soft nav, no server redirect that blanked the admin shell. */
+  const viewCheckinsHref = useMemo(() => {
+    const todayISO = DateTime.now().setZone(ZONE).toISODate();
+    return todayISO ? `/checkins?date=${encodeURIComponent(todayISO)}` : '/checkins';
+  }, []);
 
   const fetchPendingResets = useCallback(async () => {
     if (role !== 'admin') return;
@@ -143,7 +152,7 @@ export default function Sidebar({
           </Link>
         )}
         {role === 'admin' && (
-          <Link href="/checkins" prefetch={false} style={linkStyle('/checkins', true)}>
+          <Link href={viewCheckinsHref} prefetch={false} style={linkStyle('/checkins', true)}>
             {t('nav_view_checkins')}
           </Link>
         )}
