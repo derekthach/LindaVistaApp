@@ -19,7 +19,11 @@ import {
   getMotelBusinessWeekBoundsFromStartIso,
   getMotelBusinessWeekStart,
 } from '@/lib/dates/motelBusinessWeek';
-import { getEmployeeRoomCleanupsForMonth, listCheckinsByDateRange } from '@/lib/server/checkinsRepo';
+import {
+  getEmployeeRoomCleanupsForMonth,
+  listCheckinsByDateRange,
+} from '@/lib/server/checkinsRepo';
+import { logInfo } from '@/lib/server/log';
 
 const ZONE = 'America/Puerto_Rico';
 
@@ -141,6 +145,7 @@ export async function getDashboardBundle(params: {
   revenueMonth: number;
   revenueYear: number;
 }): Promise<DashboardBundleResponse> {
+  const started = Date.now();
   const now = DateTime.now().setZone(ZONE);
   const todayISO = now.toISODate() ?? '';
 
@@ -290,6 +295,16 @@ export async function getDashboardBundle(params: {
   } catch (e) {
     console.warn('[dashboard-bundle] employee activity derivation failed', e);
   }
+
+  logInfo('dashboard.bundle.complete', {
+    docsReturned: checkins.length,
+    rangeStart: unionStart,
+    rangeEnd: unionEnd,
+    roomWeekStart: roomWeekStartISO,
+    revenueMonth: params.revenueMonth,
+    revenueYear: params.revenueYear,
+    durationMs: Date.now() - started,
+  });
 
   return {
     summaryMetrics,

@@ -45,6 +45,14 @@ export async function GET(request: Request) {
       revenueMonth,
       revenueYear,
     });
+    logInfo('api.dashboard.bundle.complete', {
+      requestId,
+      rangeStart: payload.meta.rangeStart,
+      rangeEnd: payload.meta.rangeEnd,
+      roomWeekStart,
+      revenueMonth,
+      revenueYear,
+    });
     return NextResponse.json(payload);
   } catch (err) {
     if (err instanceof HttpError) {

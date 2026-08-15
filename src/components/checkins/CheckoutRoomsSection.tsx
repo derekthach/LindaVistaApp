@@ -21,29 +21,38 @@ export default function CheckoutRoomsSection({
   const [checkins, setCheckins] = useState<CheckIn[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [selected, setSelected] = useState<CheckIn | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
+    setLoadFailed(false);
     try {
       const res = await fetch('/api/checkins/active-occupied', { credentials: 'include' });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(typeof data.error === 'string' ? data.error : t('error_failed_to_load'));
+        const msg = typeof data.error === 'string' ? data.error : null;
+        if (msg) setError(msg);
+        else setLoadFailed(true);
+        setCheckins([]);
+        return;
       }
       setCheckins(Array.isArray(data.checkins) ? data.checkins : []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('error_failed_to_load'));
+      if (e instanceof Error && e.message) setError(e.message);
+      else setLoadFailed(true);
       setCheckins([]);
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const displayError = error ?? (loadFailed ? t('error_failed_to_load') : null);
 
   const openModal = (c: CheckIn) => {
     setSelected(c);
@@ -66,8 +75,8 @@ export default function CheckoutRoomsSection({
         </p>
 
         {loading && <p style={{ color: '#6b7280' }}>{t('loading')}</p>}
-        {error && <p style={{ color: '#dc2626' }}>{error}</p>}
-        {!loading && !error && checkins.length === 0 && (
+        {displayError && <p style={{ color: '#dc2626' }}>{displayError}</p>}
+        {!loading && !displayError && checkins.length === 0 && (
           <p style={{ color: '#6b7280', padding: 16, background: '#f9fafb', borderRadius: 8 }}>
             {t('no_rooms_checked_in')}
           </p>

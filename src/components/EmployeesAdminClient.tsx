@@ -473,6 +473,7 @@ function ConfirmDeleteModal({
     try {
       const res = await adminSoftDeleteEmployeeAction(fd);
       if (res.ok) {
+        window.dispatchEvent(new CustomEvent(LV_PENDING_RESETS_INVALIDATE));
         router.refresh();
         onDone();
         onClose();

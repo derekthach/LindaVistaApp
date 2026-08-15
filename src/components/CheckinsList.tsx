@@ -340,10 +340,13 @@ export default function CheckinsList({
   initialCheckins,
   initialDate,
   role,
+  viewingAll = false,
 }: {
   initialCheckins: CheckIn[];
   initialDate?: string;
   role?: UserRole;
+  /** Explicit `?all=1` unfiltered (capped) history — not the default View Check-ins path. */
+  viewingAll?: boolean;
 }) {
   const RECORDS_PER_PAGE = 10;
   const router = useRouter();
@@ -396,6 +399,7 @@ export default function CheckinsList({
 
   const dateFilterActive = Boolean(initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate));
   const isSpecificDateSelected = dateFilterActive;
+  const canClearToAllHistory = dateFilterActive || !viewingAll;
 
   const navigateToFilteredDate = useCallback(
     (iso: string) => {
@@ -408,6 +412,7 @@ export default function CheckinsList({
   const handleFilter = () => {
     const date = selectedDate.trim();
     if (!date) {
+      // Empty date field → today's PR day (same as default View Check-ins), not unbounded history.
       router.push('/checkins');
       return;
     }
@@ -415,8 +420,9 @@ export default function CheckinsList({
   };
 
   const handleClearFilters = () => {
+    // Opt-in to capped unfiltered history (was previously the accidental default).
     setSelectedDate('');
-    router.replace('/checkins');
+    router.replace('/checkins?all=1');
   };
 
   const handleExport = () => {
@@ -857,7 +863,7 @@ export default function CheckinsList({
             <Button variant="primary" onClick={handleFilter}>
               {t('list_filter')}
             </Button>
-            <Button variant="ghost" onClick={handleClearFilters} disabled={!dateFilterActive}>
+            <Button variant="ghost" onClick={handleClearFilters} disabled={!canClearToAllHistory}>
               {t('list_clear_filters')}
             </Button>
             <Button variant="secondary" onClick={handleExport}>

@@ -87,16 +87,6 @@ const EMPTY_CALENDAR_MONTH_PENDING: CalendarMonthRoomTrendData = {
   roomRevenuePrevMonth: [],
 };
 
-function emptyMonthly(month: number, year: number, monthName: string, prevMonthName: string): MonthlyComparisonData {
-  const prevMonth = month === 1 ? 12 : month - 1;
-  const prevYear = month === 1 ? year - 1 : year;
-  return {
-    current_month: { name: monthName, year, total: 0, car_count: 0 },
-    prev_month: { name: prevMonthName, year: prevYear, total: 0, car_count: 0 },
-    years_available: [String(year)],
-  };
-}
-
 function trendChartXLabels(
   data: DashboardData | null,
   language: 'en' | 'es'
@@ -114,7 +104,6 @@ function trendChartXLabels(
 
 export default function DashboardCharts() {
   const { t, language } = useTranslation();
-  const monthLabel = (m: number) => t(`month_short_${MONTH_KEY_SUFFIXES[m - 1]}` as 'month_short_jan');
   const [metrics, setMetrics] = useState<SummaryMetrics>(DEFAULT_METRICS);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [calendarMonthTrend, setCalendarMonthTrend] =
@@ -130,6 +119,7 @@ export default function DashboardCharts() {
   const [employeeActivity, setEmployeeActivity] = useState<EmployeeRoomActivityData | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     setBundleLoading(true);
     setCalendarMonthTrend(EMPTY_CALENDAR_MONTH_PENDING);
     const params = new URLSearchParams({
@@ -137,18 +127,17 @@ export default function DashboardCharts() {
       revenueMonth: String(month),
       revenueYear: String(year),
     });
-    const prevCalMonth = month === 1 ? 12 : month - 1;
-    const fallback = emptyMonthly(month, year, monthLabel(month), monthLabel(prevCalMonth));
 
     fetch(`/api/dashboard/bundle?${params.toString()}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data: DashboardBundleResponse | null) => {
+        if (cancelled) return;
         if (!data) {
           setMetrics(DEFAULT_METRICS);
           setDashboard(EMPTY_DASHBOARD);
           setCalendarMonthTrend(fullMonthZerosCalendarTrend());
           setRoomUsage(EMPTY_ROOM_USAGE);
-          setMonthly(fallback);
+          setMonthly(null);
           setEmployeeActivity(EMPTY_EMPLOYEE_ACTIVITY);
           setBundleLoading(false);
           return;
@@ -157,30 +146,43 @@ export default function DashboardCharts() {
         setDashboard(data.sevenDayTrend);
         setCalendarMonthTrend(data.calendarMonthRoomTrend ?? fullMonthZerosCalendarTrend());
         setRoomUsage(data.roomUsage);
-        setMonthly({
-          ...data.monthlyRevenue,
-          current_month: {
-            ...data.monthlyRevenue.current_month,
-            name: monthLabel(month),
-          },
-          prev_month: {
-            ...data.monthlyRevenue.prev_month,
-            name: monthLabel(prevCalMonth),
-          },
-        });
+        setMonthly(data.monthlyRevenue);
         setEmployeeActivity(data.employeeRoomActivity);
         setBundleLoading(false);
       })
       .catch(() => {
+        if (cancelled) return;
         setMetrics(DEFAULT_METRICS);
         setDashboard(EMPTY_DASHBOARD);
         setCalendarMonthTrend(fullMonthZerosCalendarTrend());
         setRoomUsage(EMPTY_ROOM_USAGE);
-        setMonthly(fallback);
+        setMonthly(null);
         setEmployeeActivity(EMPTY_EMPLOYEE_ACTIVITY);
         setBundleLoading(false);
       });
-  }, [roomWeekStart, month, year, t]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [roomWeekStart, month, year]);
+
+  const displayMonthly = useMemo(() => {
+    if (!monthly) return null;
+    const prevCalMonth = month === 1 ? 12 : month - 1;
+    const currentName = t(`month_short_${MONTH_KEY_SUFFIXES[month - 1]}` as 'month_short_jan');
+    const prevName = t(`month_short_${MONTH_KEY_SUFFIXES[prevCalMonth - 1]}` as 'month_short_jan');
+    return {
+      ...monthly,
+      current_month: {
+        ...monthly.current_month,
+        name: currentName,
+      },
+      prev_month: {
+        ...monthly.prev_month,
+        name: prevName,
+      },
+    };
+  }, [monthly, month, t]);
 
   const roomUsageWeekLabel = useMemo(
     () =>
@@ -411,7 +413,7 @@ export default function DashboardCharts() {
                   ))}
                 </select>
                 <select value={year} onChange={(e) => setYear(parseInt(e.target.value, 10))}>
-                  {(monthly?.years_available || [String(new Date().getFullYear())]).map((y) => (
+                  {(displayMonthly?.years_available || [String(new Date().getFullYear())]).map((y) => (
                     <option key={y} value={y}>
                       {y}
                     </option>
@@ -420,25 +422,25 @@ export default function DashboardCharts() {
               </div>
             </div>
 
-            {monthly && (
+            {displayMonthly && (
               <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
                 <div className="card" style={{ background: '#f0fdf4' }}>
                   <strong>
-                    {monthly.current_month.name} {monthly.current_month.year}
+                    {displayMonthly.current_month.name} {displayMonthly.current_month.year}
                   </strong>
-                  <div>${monthly.current_month.total.toFixed(2)}</div>
+                  <div>${displayMonthly.current_month.total.toFixed(2)}</div>
                   <div>
-                    {monthly.current_month.car_count} {t('room_checkins_count_suffix')}
+                    {displayMonthly.current_month.car_count} {t('room_checkins_count_suffix')}
                   </div>
                 </div>
                 <div style={{ textAlign: 'center', color: '#6b7280' }}>{t('vs')}</div>
                 <div className="card" style={{ background: '#f8fafc' }}>
                   <strong>
-                    {monthly.prev_month.name} {monthly.prev_month.year}
+                    {displayMonthly.prev_month.name} {displayMonthly.prev_month.year}
                   </strong>
-                  <div>${monthly.prev_month.total.toFixed(2)}</div>
+                  <div>${displayMonthly.prev_month.total.toFixed(2)}</div>
                   <div>
-                    {monthly.prev_month.car_count} {t('room_checkins_count_suffix')}
+                    {displayMonthly.prev_month.car_count} {t('room_checkins_count_suffix')}
                   </div>
                 </div>
               </div>
