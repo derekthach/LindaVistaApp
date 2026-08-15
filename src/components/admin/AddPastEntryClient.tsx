@@ -67,7 +67,6 @@ export default function AddPastEntryClient({ staffNames }: { staffNames: string[
           fontSize: 14,
           color: '#374151',
           lineHeight: 1.55,
-          textAlign: 'center',
         }}
       >
         {t('past_entry_page_intro')}
