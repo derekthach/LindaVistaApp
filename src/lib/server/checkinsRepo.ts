@@ -34,7 +34,7 @@ import {
 import { normalizePaymentMethod, hasStoredPaymentMethodSingle } from '@/lib/checkins/paymentMethods';
 import { HttpError } from '@/lib/server/httpError';
 import { dedupeActiveRoomStaySnapshots } from '@/lib/server/activeRoomStayDedupe';
-import { logInfo } from '@/lib/server/log';
+import { logInfo } from './log';
 import { isRoomCheckinRecord } from '@/lib/checkins/roomCheckinRecord';
 import { deriveMotelWeekTrendComparisonFromCheckins } from '@/lib/dashboard/motelWeekTrendData';
 import { deriveSummaryMetricsFromCheckins } from '@/lib/dashboard/summaryMetrics';
@@ -441,6 +441,7 @@ export async function listCheckinsByDateRange(
   startISO?: string,
   endISO?: string
 ): Promise<CheckIn[]> {
+  const started = Date.now();
   try {
     const db = getAdminDb();
     const now = DateTime.now().setZone('America/Puerto_Rico');
@@ -464,11 +465,21 @@ export async function listCheckinsByDateRange(
     const snapshot = await query.get();
 
     const docs = snapshot.docs;
+    let result: CheckIn[];
     if (filteredMode) {
-      return docs.map((doc) => normalizeCheckin(doc.id, doc.data()));
+      result = docs.map((doc) => normalizeCheckin(doc.id, doc.data()));
+    } else {
+      const sorted = [...docs].sort((a, b) => getCreationTime(b.data()) - getCreationTime(a.data()));
+      result = sorted.map((doc) => normalizeCheckin(doc.id, doc.data()));
     }
-    const sorted = [...docs].sort((a, b) => getCreationTime(b.data()) - getCreationTime(a.data()));
-    return sorted.map((doc) => normalizeCheckin(doc.id, doc.data()));
+    logInfo('checkins.list.complete', {
+      docsReturned: result.length,
+      startISO: startISO ?? null,
+      endISO: endISO ?? null,
+      filteredMode,
+      durationMs: Date.now() - started,
+    });
+    return result;
   } catch (err) {
     if (isFirestoreUnavailableError(err)) {
       if (isProduction()) throw err;
@@ -493,6 +504,7 @@ export async function deleteCheckinById(id: string): Promise<void> {
  * canonical stay (newest by max(createdAt, checkInAt)) is returned so checkout tiles stay unique.
  */
 export async function listActiveOccupiedRoomCheckins(): Promise<CheckIn[]> {
+  const started = Date.now();
   try {
     const db = getAdminDb();
     const snapshot = await db
@@ -503,7 +515,14 @@ export async function listActiveOccupiedRoomCheckins(): Promise<CheckIn[]> {
     const activeDocs = snapshot.docs.filter((doc) => isActiveOccupiedRoomDoc(doc.data()));
     const canonicalDocs = dedupeActiveRoomStaySnapshots(activeDocs);
     const list = canonicalDocs.map((doc) => normalizeCheckin(doc.id, doc.data()));
-    return sortRoomsForDisplay(list);
+    const sorted = sortRoomsForDisplay(list);
+    logInfo('checkins.active-occupied.complete', {
+      docsReturned: snapshot.size,
+      activeDocs: activeDocs.length,
+      canonicalReturned: sorted.length,
+      durationMs: Date.now() - started,
+    });
+    return sorted;
   } catch (err) {
     if (isFirestoreUnavailableError(err)) {
       if (isProduction()) throw err;

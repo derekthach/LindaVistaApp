@@ -230,6 +230,7 @@ export default function EmployeeRecentCheckinsSection({
   const [checkins, setCheckins] = useState<CheckIn[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editing, setEditing] = useState<CheckIn | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -237,24 +238,32 @@ export default function EmployeeRecentCheckinsSection({
 
   const load = useCallback(async () => {
     setError(null);
+    setLoadFailed(false);
     try {
       const res = await fetch('/api/checkins/my-recent', { credentials: 'include' });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(typeof data.error === 'string' ? data.error : t('error_failed_to_load'));
+        const msg = typeof data.error === 'string' ? data.error : null;
+        if (msg) setError(msg);
+        else setLoadFailed(true);
+        setCheckins([]);
+        return;
       }
       setCheckins(Array.isArray(data.checkins) ? data.checkins : []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('error_failed_to_load'));
+      if (e instanceof Error && e.message) setError(e.message);
+      else setLoadFailed(true);
       setCheckins([]);
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const displayError = error ?? (loadFailed ? t('error_failed_to_load') : null);
 
   useEffect(() => {
     if (!successMessage) return;
@@ -309,8 +318,8 @@ export default function EmployeeRecentCheckinsSection({
         )}
 
         {loading && <p style={{ color: '#6b7280' }}>{t('loading')}</p>}
-        {error && <p style={{ color: '#dc2626' }}>{error}</p>}
-        {!loading && !error && checkins.length === 0 && (
+        {displayError && <p style={{ color: '#dc2626' }}>{displayError}</p>}
+        {!loading && !displayError && checkins.length === 0 && (
           <p style={{ color: '#6b7280', padding: 16, background: '#f9fafb', borderRadius: 8 }}>
             {t('employee_recent_none', { hours: EMPLOYEE_ENTRY_ACCESS_HOURS })}
           </p>
@@ -381,7 +390,7 @@ export default function EmployeeRecentCheckinsSection({
             </table>
           </div>
         )}
-        {!loading && !error && (
+        {!loading && !displayError && (
           <div
             className="card"
             style={{

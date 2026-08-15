@@ -36,9 +36,10 @@ export default function Sidebar({
     }
   }, [role]);
 
+  // Load once per admin shell mount (not on every pathname change).
   useEffect(() => {
     void fetchPendingResets();
-  }, [fetchPendingResets, pathname]);
+  }, [fetchPendingResets]);
 
   useEffect(() => {
     if (role !== 'admin') return;
@@ -87,7 +88,7 @@ export default function Sidebar({
 
       <nav style={{ display: 'grid', gap: 8, padding: 16 }}>
         {role === 'admin' && (
-          <Link href="/dashboard" style={linkStyle('/dashboard')}>
+          <Link href="/dashboard" prefetch={false} style={linkStyle('/dashboard')}>
             {t('nav_dashboard')}
           </Link>
         )}
@@ -104,6 +105,7 @@ export default function Sidebar({
         {role === 'admin' && (
           <Link
             href="/admin/employees"
+            prefetch={false}
             style={{
               ...linkStyle('/admin/employees'),
               display: 'flex',
@@ -141,12 +143,12 @@ export default function Sidebar({
           </Link>
         )}
         {role === 'admin' && (
-          <Link href="/checkins" style={linkStyle('/checkins', true)}>
+          <Link href="/checkins" prefetch={false} style={linkStyle('/checkins', true)}>
             {t('nav_view_checkins')}
           </Link>
         )}
         {role === 'admin' && (
-          <Link href="/admin/add-past-entry" style={linkStyle('/admin/add-past-entry', true)}>
+          <Link href="/admin/add-past-entry" prefetch={false} style={linkStyle('/admin/add-past-entry', true)}>
             {t('nav_add_past_entry')}
           </Link>
         )}

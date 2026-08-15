@@ -3,6 +3,7 @@ import { getAdminDb } from '@/lib/server/firebaseAdmin';
 import { formatEmployeeNameSnapshot } from '@/lib/employeeDisplayName';
 import { isGuestEmployeeUsername } from '@/lib/auth/guestEmployee';
 import { readLoginSystemUsersJson } from '@/lib/server/readLoginSystemUsersJson';
+import { logInfo } from '@/lib/server/log';
 import type { User, UserRole } from '@/types';
 
 const USERS_COLLECTION = 'users';
@@ -106,6 +107,7 @@ function jsonEmployeesByDocId(): Map<string, User> {
  * the table matches who can authenticate from the file.
  */
 export async function listUsersPublic(): Promise<PublicUserRow[]> {
+  const started = Date.now();
   const snap = await db().collection(USERS_COLLECTION).orderBy('username').get();
   const jsonById = jsonEmployeesByDocId();
   const jsonDocIds = new Set(jsonById.keys());
@@ -165,13 +167,25 @@ export async function listUsersPublic(): Promise<PublicUserRow[]> {
   }
 
   rows.sort((a, b) => a.username.localeCompare(b.username, 'en', { sensitivity: 'base' }));
-  return rows.filter(
+  const filtered = rows.filter(
     (r) => r.role === 'employee' && r.hiddenFromEmployeeList !== true
   );
+  logInfo('admin.users.complete', {
+    docsReturned: snap.size,
+    publicRows: filtered.length,
+    durationMs: Date.now() - started,
+  });
+  return filtered;
 }
 
 export async function countPendingPasswordResets(): Promise<number> {
+  const started = Date.now();
   const snap = await db().collection(USERS_COLLECTION).where('passwordResetRequested', '==', true).get();
+  logInfo('admin.pending-password-resets-count.complete', {
+    docsReturned: snap.size,
+    count: snap.size,
+    durationMs: Date.now() - started,
+  });
   return snap.size;
 }
 
