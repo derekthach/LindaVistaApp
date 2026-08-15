@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { DateTime } from 'luxon';
 import type { CheckIn, CheckInType, UserRole, LineItem, SummarizedItem } from '@/types';
 import Button from '@/components/Button';
-import { buildSectionedData, type SectionTotals } from '@/lib/checkins/sectioning';
+import { buildSectionedData, paymentMethodTotalsToCents, type SectionTotals } from '@/lib/checkins/sectioning';
 import { carColorLabel } from '@/lib/checkins/colors';
 import { formatRoomDisplay } from '@/lib/checkins/rooms';
 import type { TranslationKey } from '@/lib/i18n/translations';
@@ -710,6 +710,12 @@ export default function CheckinsList({
     return buildSectionedData(initialCheckins);
   }, [dateFilterActive, initialCheckins]);
 
+  /** Same loaded day records as Day total — no extra fetch. */
+  const dayPaymentTotals = useMemo(() => {
+    if (!dateFilterActive || initialCheckins.length === 0) return [];
+    return paymentMethodTotalsToCents(initialCheckins);
+  }, [dateFilterActive, initialCheckins]);
+
   const filteredDayEmpty = dateFilterActive && initialCheckins.length === 0;
 
   const renderActionsCell = (checkin: CheckIn) => {
@@ -811,6 +817,40 @@ export default function CheckinsList({
               {t('list_day_total')}
             </td>
             <td style={{ padding: 8 }}>{renderTotalsBreakdown(sectioned.dayTotals, t)}</td>
+          </tr>
+          <tr style={{ backgroundColor: '#e5e7eb' }}>
+            <td colSpan={colCount} style={{ padding: '2px 8px 10px', textAlign: 'right' }}>
+              <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 4, color: '#4b5563' }}>
+                {t('employee_recent_payment_totals_heading')}
+              </div>
+              {dayPaymentTotals.length > 0 ? (
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    flexWrap: 'wrap',
+                    justifyContent: 'flex-end',
+                    gap: '4px 12px',
+                    fontSize: 12,
+                    lineHeight: 1.65,
+                    fontWeight: 500,
+                    color: '#1f2937',
+                  }}
+                >
+                  {dayPaymentTotals.map(({ method, cents }) => (
+                    <span key={method}>
+                      {method === 'unspecified'
+                        ? t('employee_recent_payment_method_unspecified')
+                        : t(getPaymentMethodTranslationKey(method) as TranslationKey)}
+                      : {centsToCurrency(cents)}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ margin: 0, fontSize: 12, lineHeight: 1.65, color: '#6b7280', fontWeight: 400 }}>
+                  {t('employee_recent_payment_totals_empty')}
+                </p>
+              )}
+            </td>
           </tr>
         </>
       );

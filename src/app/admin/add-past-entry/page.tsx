@@ -28,22 +28,10 @@ export default async function AddPastEntryPage() {
       employeeUsername={session.role === 'employee' ? session.username : undefined}
     >
       <div className="container">
-        <div
-          style={{
-            maxWidth: 960,
-            margin: '0 auto',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'stretch',
-          }}
-        >
-          <div style={{ textAlign: 'center', marginBottom: 8 }}>
-            <LocalizedPageHeading titleKey="past_entry_page_title" subtitleKey="past_entry_page_subtitle" />
-          </div>
-          <Suspense fallback={<PastEntryLoading />}>
-            <AddPastEntryClient staffNames={staffNames} />
-          </Suspense>
-        </div>
+        <LocalizedPageHeading titleKey="past_entry_page_title" subtitleKey="past_entry_page_subtitle" />
+        <Suspense fallback={<PastEntryLoading />}>
+          <AddPastEntryClient staffNames={staffNames} />
+        </Suspense>
       </div>
     </AppLayout>
   );
