@@ -10,7 +10,7 @@ export type ViewCheckinsSearchParams = {
   date?: string;
   start_date?: string;
   end_date?: string;
-  /** Explicit opt-in to the unfiltered (capped) history list. */
+  /** Explicit opt-in to newest-created records across all business dates. */
   all?: string;
 };
 
@@ -28,9 +28,12 @@ export function wantsAllCheckins(params: ViewCheckinsSearchParams): boolean {
   return raw === '1' || raw === 'true' || raw === 'yes';
 }
 
+/** Query string for Admin View Check-Ins with no date filter (newest entered first). */
+export const VIEW_CHECKINS_ALL_HREF = '/checkins?all=1';
+
 /**
  * Default: Puerto Rico calendar day (in-place, no redirect).
- * Opt-in history dump: `?all=1` (still server-capped by listCheckinsByDateRange).
+ * Opt-in unfiltered view: `?all=1` — latest records by createdAt (capped; not a full history dump).
  * Explicit `date` or `start_date`+`end_date` preserved for navigation/export flows.
  */
 export function resolveViewCheckinsQuery(

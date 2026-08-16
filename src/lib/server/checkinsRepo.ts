@@ -2,6 +2,7 @@ import { Timestamp, FieldValue } from 'firebase-admin/firestore';
 import { DateTime } from 'luxon';
 import { getAdminDb } from './firebaseAdmin';
 import { isFirestoreUnavailableError, isProduction } from './firestoreError';
+import { compareCheckinsByCreatedAtDesc } from '@/lib/checkins/createdAtSort';
 import { normalizeCheckin } from '@/lib/models/checkin';
 import { formatReceiptNumber, parseReceiptNumber, RECEIPT_MAX } from '@/lib/checkins/receipt';
 import type {
@@ -203,6 +204,7 @@ export async function createPastRoomCheckin(data: CreatePastRoomCheckinInput): P
   const checkInAt = dt.isValid ? Timestamp.fromDate(dt.toJSDate()) : Timestamp.now();
   const splits = data.payment_splits;
   const totalCollected = roundMoney(calculatePaymentSplitTotal(splits));
+  /** When the admin entered this record — not the historical stay date/time. */
   const createdAt = Timestamp.now();
   const noteTrim = (data.note ?? '').trim().slice(0, 500);
 
@@ -423,19 +425,17 @@ function endExclusiveISO(isoDate: string): Date {
 
 const UNFILTERED_LIMIT = 3000;
 
-/** Timestamp for "creation" sort: createdAt if present, else checkInAt (for legacy docs). */
-function getCreationTime(data: Record<string, unknown>): number {
-  const created = (data.createdAt as Timestamp | undefined)?.toDate?.();
-  const checkIn = (data.checkInAt as Timestamp | undefined)?.toDate?.();
-  const d = created ?? checkIn ?? new Date(0);
-  return d.getTime();
-}
+/** Cap for Admin View Check-Ins with no date selected (newest-created page). */
+export const VIEW_CHECKINS_RECENT_LIMIT = 100;
 
 /**
  * List check-ins in a date range. Dates are YYYY-MM-DD and interpreted in America/Puerto_Rico.
  * - Filtered (startISO and endISO provided): filter by business date (checkInAt), order by checkInAt desc.
  * - Unfiltered (both omitted): return recent records ordered by creation/submission time desc (createdAt, with fallback to checkInAt for legacy docs).
  * If Firestore/Google auth is unavailable, returns [] so the app can run.
+ *
+ * View Check-Ins unfiltered mode should use {@link listRecentCheckinsByCreatedAt} instead so a
+ * historical past entry created today is not missed by a checkInAt-window cap.
  */
 export async function listCheckinsByDateRange(
   startISO?: string,
@@ -469,7 +469,9 @@ export async function listCheckinsByDateRange(
     if (filteredMode) {
       result = docs.map((doc) => normalizeCheckin(doc.id, doc.data()));
     } else {
-      const sorted = [...docs].sort((a, b) => getCreationTime(b.data()) - getCreationTime(a.data()));
+      const sorted = [...docs].sort((a, b) =>
+        compareCheckinsByCreatedAtDesc(a.data(), b.data())
+      );
       result = sorted.map((doc) => normalizeCheckin(doc.id, doc.data()));
     }
     logInfo('checkins.list.complete', {
@@ -484,6 +486,47 @@ export async function listCheckinsByDateRange(
     if (isFirestoreUnavailableError(err)) {
       if (isProduction()) throw err;
       console.warn('Firestore unavailable (listCheckinsByDateRange), returning empty list:', (err as Error).message);
+      return [];
+    }
+    throw err;
+  }
+}
+
+/**
+ * Newest-entered check-ins across all business dates (room, food, beer).
+ * Ordered by createdAt desc so a past entry dated weeks ago still ranks at the top if it was just saved.
+ * Capped — does not load the full historical collection.
+ */
+export async function listRecentCheckinsByCreatedAt(
+  limit = VIEW_CHECKINS_RECENT_LIMIT
+): Promise<CheckIn[]> {
+  const started = Date.now();
+  const cappedLimit = Math.min(Math.max(1, limit), VIEW_CHECKINS_RECENT_LIMIT);
+  try {
+    const db = getAdminDb();
+    const snapshot = await db
+      .collection(CHECKINS_COLLECTION)
+      .orderBy('createdAt', 'desc')
+      .limit(cappedLimit)
+      .get();
+
+    const sorted = [...snapshot.docs].sort((a, b) =>
+      compareCheckinsByCreatedAtDesc(a.data(), b.data())
+    );
+    const result = sorted.map((doc) => normalizeCheckin(doc.id, doc.data()));
+    logInfo('checkins.recent-by-created.complete', {
+      docsReturned: result.length,
+      limit: cappedLimit,
+      durationMs: Date.now() - started,
+    });
+    return result;
+  } catch (err) {
+    if (isFirestoreUnavailableError(err)) {
+      if (isProduction()) throw err;
+      console.warn(
+        'Firestore unavailable (listRecentCheckinsByCreatedAt), returning empty list:',
+        (err as Error).message
+      );
       return [];
     }
     throw err;

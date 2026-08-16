@@ -1,7 +1,11 @@
 import { DateTime } from 'luxon';
 import { normalizeReceipt } from '@/lib/checkins/validation/room';
 import { isValidAdminLateRoomId, parseAdminLateRoomValue } from '@/lib/checkins/rooms';
-import { validatePaymentSplits, calculatePaymentSplitTotal } from '@/lib/checkins/roomPaymentSplits';
+import {
+  ADMIN_PAST_ENTRY_PAYMENT_SPLIT_OPTIONS,
+  calculatePaymentSplitTotal,
+  validatePaymentSplits,
+} from '@/lib/checkins/roomPaymentSplits';
 import type { RoomPaymentSplit } from '@/types';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -69,7 +73,7 @@ export function validatePastRoomCheckinAdmin(
     }
   }
 
-  const splitResult = validatePaymentSplits(raw.payment_splits);
+  const splitResult = validatePaymentSplits(raw.payment_splits, ADMIN_PAST_ENTRY_PAYMENT_SPLIT_OPTIONS);
   if (!splitResult.valid) {
     errors.payment_splits = 'Invalid payment breakdown';
   } else if (splitResult.splits) {

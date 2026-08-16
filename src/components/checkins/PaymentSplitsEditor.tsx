@@ -133,9 +133,11 @@ export default function PaymentSplitsEditor({
             roundMoney(validation.expectedTotal - validation.assignedTotal)
           ).toFixed(2),
         })
-      : validation.error
-        ? t(validation.error as TranslationKey)
-        : '');
+      : validation.error === 'err_payment_row_max' || validation.error === 'err_payment_total_max'
+        ? t(validation.error as TranslationKey, { max: maxAttr })
+        : validation.error
+          ? t(validation.error as TranslationKey)
+          : '');
 
   return (
     <div>

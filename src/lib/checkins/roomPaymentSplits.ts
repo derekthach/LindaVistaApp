@@ -19,6 +19,8 @@ const METHOD_LABEL_EN: Record<PaymentMethodValue, string> = {
 const COST_MAX = 1000;
 /** Food/beer line-item totals may reach 2000; payment rows must allow the same. */
 export const FOOD_BEER_PAYMENT_MAX = 2000;
+/** Admin Add Past Entry: per-row and combined collected maximum. */
+export const ADMIN_PAST_ENTRY_PAYMENT_MAX = 5000;
 
 export type PaymentSplitFormRow = { method: string; amount: string };
 
@@ -233,6 +235,12 @@ export function validatePaymentSplitsForExpectedTotal(
 export const FOOD_BEER_PAYMENT_SPLIT_OPTIONS: ValidatePaymentSplitsOptions = {
   maxRowAmount: FOOD_BEER_PAYMENT_MAX,
   maxTotal: FOOD_BEER_PAYMENT_MAX,
+};
+
+/** Admin Add Past Entry (room / food / beer): row and total collected up to $5000. */
+export const ADMIN_PAST_ENTRY_PAYMENT_SPLIT_OPTIONS: ValidatePaymentSplitsOptions = {
+  maxRowAmount: ADMIN_PAST_ENTRY_PAYMENT_MAX,
+  maxTotal: ADMIN_PAST_ENTRY_PAYMENT_MAX,
 };
 
 /** Normalized total for room check-in (split-based or legacy cost). */

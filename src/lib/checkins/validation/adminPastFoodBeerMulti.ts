@@ -4,7 +4,7 @@ import type { LineItem, RoomPaymentSplit } from '@/types';
 import { validateFoodBeerLineItemsRows } from '@/lib/checkins/validation';
 import {
   calculatePaymentSplitTotal,
-  FOOD_BEER_PAYMENT_SPLIT_OPTIONS,
+  ADMIN_PAST_ENTRY_PAYMENT_SPLIT_OPTIONS,
   roundMoney,
   validatePaymentSplitsForExpectedTotal,
 } from '@/lib/checkins/roomPaymentSplits';
@@ -28,8 +28,8 @@ export interface AdminPastFoodBeerMultiResult {
 
 /**
  * Admin Add Past Entry: food or beer with multiple catalog line items.
- * Same row rules as normal simple check-in (validateFoodBeerLineItemsRows).
  * Payment may be a multi-method breakdown whose total must equal line-item total.
+ * Amounts may be up to $5000 per row and $5000 combined (past-entry only).
  */
 export function validateAdminPastFoodBeerMulti(
   raw: Record<string, unknown>,
@@ -80,7 +80,10 @@ export function validateAdminPastFoodBeerMulti(
     return { valid: false, error: 'Invalid items data.' };
   }
 
-  const lineItemValidation = validateFoodBeerLineItemsRows(parsed);
+  const lineItemValidation = validateFoodBeerLineItemsRows(parsed, {
+    maxAmountPerRow: ADMIN_PAST_ENTRY_PAYMENT_SPLIT_OPTIONS.maxRowAmount,
+    maxTotal: ADMIN_PAST_ENTRY_PAYMENT_SPLIT_OPTIONS.maxTotal,
+  });
   if (lineItemValidation.errors.lineItems) {
     return { valid: false, error: 'At least one item row with item, quantity, and amount is required.' };
   }
@@ -114,7 +117,7 @@ export function validateAdminPastFoodBeerMulti(
   const splitResult = validatePaymentSplitsForExpectedTotal(
     raw.payment_splits,
     lineTotal,
-    FOOD_BEER_PAYMENT_SPLIT_OPTIONS
+    ADMIN_PAST_ENTRY_PAYMENT_SPLIT_OPTIONS
   );
   if (!splitResult.valid || !splitResult.splits?.length) {
     if (splitResult.error === 'err_payment_total_mismatch') {

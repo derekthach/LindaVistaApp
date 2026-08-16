@@ -1,6 +1,6 @@
 import { requireAuth } from '@/server/auth/session';
 import { DateTime } from 'luxon';
-import { listCheckinsByDateRange } from '@/lib/server/checkinsRepo';
+import { listCheckinsByDateRange, listRecentCheckinsByCreatedAt } from '@/lib/server/checkinsRepo';
 import AppLayout from '@/components/AppLayout';
 import CheckinsList from '@/components/CheckinsList';
 import LocalizedPageHeading from '@/components/LocalizedPageHeading';
@@ -28,7 +28,10 @@ export default async function CheckinsPage({
 
   const startISO = resolved.kind === 'all' ? undefined : resolved.startISO;
   const endISO = resolved.kind === 'all' ? undefined : resolved.endISO;
-  const checkins = await listCheckinsByDateRange(startISO, endISO);
+  const checkins =
+    resolved.kind === 'all'
+      ? await listRecentCheckinsByCreatedAt()
+      : await listCheckinsByDateRange(startISO, endISO);
   const initialDate = resolved.kind === 'day' ? resolved.dateISO : undefined;
 
   logInfo('checkins.page.complete', {

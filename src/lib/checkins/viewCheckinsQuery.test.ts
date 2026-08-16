@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveViewCheckinsQuery, wantsAllCheckins } from './viewCheckinsQuery';
+import { resolveViewCheckinsQuery, VIEW_CHECKINS_ALL_HREF, wantsAllCheckins } from './viewCheckinsQuery';
 
 describe('wantsAllCheckins', () => {
   it('accepts explicit all flags', () => {
@@ -53,5 +53,11 @@ describe('resolveViewCheckinsQuery', () => {
       startISO: '2026-07-01',
       endISO: '2026-07-01',
     });
+  });
+
+  it('treats all=1 with no date as unfiltered newest-created mode', () => {
+    expect(VIEW_CHECKINS_ALL_HREF).toBe('/checkins?all=1');
+    expect(resolveViewCheckinsQuery({ all: '1' }, today)).toEqual({ kind: 'all' });
+    expect(resolveViewCheckinsQuery({ all: '1', date: '' }, today)).toEqual({ kind: 'all' });
   });
 });

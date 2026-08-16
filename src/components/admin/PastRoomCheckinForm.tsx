@@ -17,6 +17,7 @@ import {
   paymentFormRowsToRaw,
   type PaymentSplitFormRow,
   validatePaymentSplits,
+  ADMIN_PAST_ENTRY_PAYMENT_SPLIT_OPTIONS,
 } from '@/lib/checkins/roomPaymentSplits';
 import { useTranslation } from '@/lib/i18n/useTranslation';
 
@@ -42,7 +43,7 @@ export default function PastRoomCheckinForm({ staffNames }: { staffNames: string
   const [note, setNote] = useState('');
 
   const splitValidation = useMemo(
-    () => validatePaymentSplits(paymentFormRowsToRaw(paymentRows)),
+    () => validatePaymentSplits(paymentFormRowsToRaw(paymentRows), ADMIN_PAST_ENTRY_PAYMENT_SPLIT_OPTIONS),
     [paymentRows]
   );
 
@@ -183,9 +184,11 @@ export default function PastRoomCheckinForm({ staffNames }: { staffNames: string
           value={paymentRows}
           onChange={setPaymentRows}
           validation={splitValidation}
+          validateOptions={ADMIN_PAST_ENTRY_PAYMENT_SPLIT_OPTIONS}
           showError={!splitValidation.valid}
           inputStyle={inputStyle}
           totalLabelKey="label_total_collected"
+          amountInputMax={ADMIN_PAST_ENTRY_PAYMENT_SPLIT_OPTIONS.maxRowAmount}
         />
 
         <label style={{ margin: 0 }}>

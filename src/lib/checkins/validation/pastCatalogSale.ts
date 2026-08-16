@@ -6,7 +6,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^\d{2}:\d{2}$/;
 const QUANTITY_MIN = 1;
 const QUANTITY_MAX = 50;
-const AMOUNT_MAX = 1000;
+const AMOUNT_MAX = 5000;
 const NOTES_MAX = 250;
 
 export interface PastCatalogSaleValidationResult {

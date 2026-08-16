@@ -34,6 +34,11 @@ const AMOUNT_MAX_PER_ROW = 1000;
 const TOTAL_AMOUNT_MAX = 2000;
 const NOTES_MAX_LENGTH = 250;
 
+export type FoodBeerLineItemAmountLimits = {
+  maxAmountPerRow?: number;
+  maxTotal?: number;
+};
+
 export interface SimpleCheckinFormValues {
   date: string;
   time: string;
@@ -45,6 +50,8 @@ export interface SimpleCheckinFormValues {
   payment_method?: string;
   /** Admin multi-payment; when present, total must equal line-item total. */
   payment_splits?: unknown;
+  /** Optional line-item amount caps (Admin Add Past Entry uses $5000). */
+  lineItemAmountLimits?: FoodBeerLineItemAmountLimits;
 }
 
 export interface ValidationResult {
@@ -56,10 +63,15 @@ export interface ValidationResult {
 }
 
 /** Food/beer item rows only (shared by simple check-in, past entry, admin updates). */
-export function validateFoodBeerLineItemsRows(lineItems: LineItem[] | undefined): {
+export function validateFoodBeerLineItemsRows(
+  lineItems: LineItem[] | undefined,
+  limits?: FoodBeerLineItemAmountLimits
+): {
   errors: Partial<Pick<ValidationResult['errors'], 'lineItems' | 'itemsTotal'>>;
   lineItemErrors: Record<number, { quantitySold?: string; amountCollected?: string; itemId?: string }>;
 } {
+  const maxAmountPerRow = limits?.maxAmountPerRow ?? AMOUNT_MAX_PER_ROW;
+  const maxTotal = limits?.maxTotal ?? TOTAL_AMOUNT_MAX;
   const errors: Partial<Pick<ValidationResult['errors'], 'lineItems' | 'itemsTotal'>> = {};
   const lineItemErrors: Record<number, { quantitySold?: string; amountCollected?: string; itemId?: string }> = {};
 
@@ -88,7 +100,7 @@ export function validateFoodBeerLineItemsRows(lineItems: LineItem[] | undefined)
           row.amountCollected = VALIDATION_CODES.amountRequired;
         } else if (a <= 0) {
           row.amountCollected = VALIDATION_CODES.amountPositive;
-        } else if (a > AMOUNT_MAX_PER_ROW) {
+        } else if (a > maxAmountPerRow) {
           row.amountCollected = VALIDATION_CODES.amountMax;
         } else {
           totalAmount += a;
@@ -98,7 +110,7 @@ export function validateFoodBeerLineItemsRows(lineItems: LineItem[] | undefined)
         lineItemErrors[index] = row;
       }
     });
-    if (totalAmount > TOTAL_AMOUNT_MAX) {
+    if (totalAmount > maxTotal) {
       errors.itemsTotal = VALIDATION_CODES.totalMax;
     }
   }
@@ -145,7 +157,7 @@ export function validateSimpleCheckin(values: SimpleCheckinFormValues): Validati
     errors.notes = VALIDATION_CODES.notesMax;
   }
 
-  const lineRes = validateFoodBeerLineItemsRows(values.lineItems);
+  const lineRes = validateFoodBeerLineItemsRows(values.lineItems, values.lineItemAmountLimits);
   if (lineRes.errors.lineItems) {
     errors.lineItems = lineRes.errors.lineItems;
   }

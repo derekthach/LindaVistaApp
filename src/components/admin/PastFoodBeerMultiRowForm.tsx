@@ -12,7 +12,8 @@ import { QuantitySoldInput } from '@/components/checkins/QuantitySoldInput';
 import PaymentSplitsEditor from '@/components/checkins/PaymentSplitsEditor';
 import {
   defaultPaymentSplitFormRow,
-  FOOD_BEER_PAYMENT_SPLIT_OPTIONS,
+  ADMIN_PAST_ENTRY_PAYMENT_MAX,
+  ADMIN_PAST_ENTRY_PAYMENT_SPLIT_OPTIONS,
   paymentFormRowsToRaw,
   type PaymentSplitFormRow,
   validatePaymentSplitsForExpectedTotal,
@@ -140,7 +141,7 @@ export default function PastFoodBeerMultiRowForm({
       validatePaymentSplitsForExpectedTotal(
         paymentFormRowsToRaw(paymentRows),
         totalAmountCollected,
-        FOOD_BEER_PAYMENT_SPLIT_OPTIONS
+        ADMIN_PAST_ENTRY_PAYMENT_SPLIT_OPTIONS
       ),
     [paymentRows, totalAmountCollected]
   );
@@ -159,6 +160,10 @@ export default function PastFoodBeerMultiRowForm({
       lineItems: lineItemsForValidation,
       notes: notes || undefined,
       payment_method: splitValidation.splits?.[0]?.method,
+      lineItemAmountLimits: {
+        maxAmountPerRow: ADMIN_PAST_ENTRY_PAYMENT_MAX,
+        maxTotal: ADMIN_PAST_ENTRY_PAYMENT_MAX,
+      },
     });
     const errors = { ...base.errors };
     if (!splitValidation.valid) {
@@ -190,6 +195,10 @@ export default function PastFoodBeerMultiRowForm({
         assigned: splitValidation.assignedTotal.toFixed(2),
       });
     }
+    if (code === 'amountMax') return t('past_entry_amount_max');
+    if (code === 'totalMax') return t('past_entry_total_max');
+    if (code === 'err_payment_row_max') return t('err_payment_row_max', { max: ADMIN_PAST_ENTRY_PAYMENT_MAX });
+    if (code === 'err_payment_total_max') return t('err_payment_total_max', { max: ADMIN_PAST_ENTRY_PAYMENT_MAX });
     return t(code as TranslationKey);
   };
 
@@ -368,7 +377,7 @@ export default function PastFoodBeerMultiRowForm({
                     type="number"
                     min={0.01}
                     step={0.01}
-                    max={1000}
+                    max={ADMIN_PAST_ENTRY_PAYMENT_MAX}
                     value={row.amountCollected === 0 ? '' : row.amountCollected}
                     onChange={(e) =>
                       updateRow(index, 'amountCollected', parseFloat(e.target.value) || 0)
@@ -433,11 +442,11 @@ export default function PastFoodBeerMultiRowForm({
           value={paymentRows}
           onChange={setPaymentRows}
           validation={splitValidation}
-          validateOptions={FOOD_BEER_PAYMENT_SPLIT_OPTIONS}
+          validateOptions={ADMIN_PAST_ENTRY_PAYMENT_SPLIT_OPTIONS}
           showError={submitAttempted && !splitValidation.valid}
           inputStyle={inputStyle}
           totalLabelKey="label_total_collected"
-          amountInputMax={FOOD_BEER_PAYMENT_SPLIT_OPTIONS.maxRowAmount}
+          amountInputMax={ADMIN_PAST_ENTRY_PAYMENT_MAX}
           expectedTotal={totalAmountCollected}
         />
 

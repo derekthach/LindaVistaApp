@@ -29,6 +29,7 @@ import {
   foodBeerLineRowsSummary,
   foodBeerLineRowsAmountTotal,
 } from '@/lib/checkins/lineItemsFromCheckin';
+import { VIEW_CHECKINS_ALL_HREF } from '@/lib/checkins/viewCheckinsQuery';
 
 function TrashIcon() {
   return (
@@ -345,7 +346,7 @@ export default function CheckinsList({
   initialCheckins: CheckIn[];
   initialDate?: string;
   role?: UserRole;
-  /** Explicit `?all=1` unfiltered (capped) history — not the default View Check-ins path. */
+  /** Explicit `?all=1` unfiltered newest-created view — not the default View Check-ins path. */
   viewingAll?: boolean;
 }) {
   const RECORDS_PER_PAGE = 10;
@@ -401,6 +402,11 @@ export default function CheckinsList({
   const isSpecificDateSelected = dateFilterActive;
   const canClearToAllHistory = dateFilterActive || !viewingAll;
 
+  const navigateToUnfilteredRecent = useCallback(() => {
+    setSelectedDate('');
+    router.replace(VIEW_CHECKINS_ALL_HREF);
+  }, [router]);
+
   const navigateToFilteredDate = useCallback(
     (iso: string) => {
       setSelectedDate(iso);
@@ -409,20 +415,25 @@ export default function CheckinsList({
     [router]
   );
 
+  const handleDateInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSelectedDate(value);
+    if (!value) {
+      navigateToUnfilteredRecent();
+    }
+  };
+
   const handleFilter = () => {
     const date = selectedDate.trim();
     if (!date) {
-      // Empty date field → today's PR day (same as default View Check-ins), not unbounded history.
-      router.push('/checkins');
+      navigateToUnfilteredRecent();
       return;
     }
     navigateToFilteredDate(date);
   };
 
   const handleClearFilters = () => {
-    // Opt-in to capped unfiltered history (was previously the accidental default).
-    setSelectedDate('');
-    router.replace('/checkins?all=1');
+    navigateToUnfilteredRecent();
   };
 
   const handleExport = () => {
@@ -895,7 +906,7 @@ export default function CheckinsList({
             <input
               type="date"
               value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
+              onChange={handleDateInputChange}
               style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #e5e7eb' }}
             />
           </label>
