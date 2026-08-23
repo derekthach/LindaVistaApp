@@ -1,23 +1,22 @@
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
-import { DateTime } from 'luxon';
 import { getAdminDb } from '@/lib/server/firebaseAdmin';
 import { isFirestoreUnavailableError, isProduction } from '@/lib/server/firestoreError';
 import { logInfo } from '@/lib/server/log';
 import {
-  calculateDayShiftSummaries,
+  calculateShiftSummary,
   getBusinessDateWindow,
+  getShiftWindow,
   SHIFT_IDS,
   shiftSummaryDocId,
   type RoomTurnoverRecord,
   type ShiftId,
   type ShiftSummary,
 } from '@/lib/shifts';
-import { listCheckinsByDateRange } from '@/lib/server/checkinsRepo';
+import { listCheckinsByDateRange, listCheckinsByInstantRange } from '@/lib/server/checkinsRepo';
 import type { CheckIn } from '@/types';
 
 const SHIFT_SUMMARIES_COLLECTION = 'shiftSummaries';
 const CHECKINS_COLLECTION = 'checkins';
-const ZONE = 'America/Puerto_Rico';
 
 /** Aligns with checkinsRepo.isRoomCheckinDocData / isRoomCheckinRecord. */
 function isRoomCheckinDocData(data: Record<string, unknown>): boolean {
@@ -113,25 +112,13 @@ export async function listRoomTurnoversForBusinessDate(
 }
 
 /**
- * Future Cron / server path: bounded check-in window for a completed shift.
- * Does not replace Admin UI reuse of already-loaded day records.
+ * Bounded check-in window for one completed shift: checkInAt in [shiftStart, shiftEnd).
  */
 export async function getShiftCheckinRecords(
   shiftStart: Date,
   shiftEnd: Date
 ): Promise<CheckIn[]> {
-  const startISO =
-    DateTime.fromJSDate(shiftStart, { zone: ZONE }).toISODate() ?? '';
-  const endISO =
-    DateTime.fromJSDate(new Date(shiftEnd.getTime() - 1), { zone: ZONE }).toISODate() ??
-    startISO;
-  const checkins = await listCheckinsByDateRange(startISO, endISO);
-  return checkins.filter((c) => {
-    const dt = DateTime.fromISO(`${c.date}T${c.time}`, { zone: ZONE });
-    if (!dt.isValid) return false;
-    const t = dt.toJSDate().getTime();
-    return t >= shiftStart.getTime() && t < shiftEnd.getTime();
-  });
+  return listCheckinsByInstantRange(shiftStart, shiftEnd);
 }
 
 /** Derive turnover records from already-normalized check-ins that carry ISO checkout fields. */
@@ -171,9 +158,52 @@ export async function saveShiftSummary(summary: ShiftSummary): Promise<void> {
   );
 }
 
+export type GenerateShiftSummaryForPeriodInput = {
+  businessDate: string;
+  shift: ShiftId;
+  /**
+   * Optional preloaded day (or larger) check-ins — skips the shift-bounded checkInAt query.
+   * Used by Admin full-day regenerate for read efficiency.
+   */
+  checkins?: CheckIn[];
+  /** Optional preloaded turnovers — skips the shift-bounded cleanedAt query. */
+  turnovers?: RoomTurnoverRecord[];
+};
+
+/**
+ * Shared Shift Summary generation used by Admin and Vercel Cron.
+ * Without preloaded data: ONE bounded checkInAt query + ONE bounded cleanedAt query for the shift window.
+ * Then calculateShiftSummary() + saveShiftSummary() (deterministic doc id — idempotent).
+ */
+export async function generateAndSaveShiftSummaryForPeriod(
+  input: GenerateShiftSummaryForPeriodInput
+): Promise<ShiftSummary> {
+  const { businessDate, shift } = input;
+  const window = getShiftWindow(businessDate, shift);
+
+  const [checkins, turnovers] = await Promise.all([
+    input.checkins != null
+      ? Promise.resolve(input.checkins)
+      : listCheckinsByInstantRange(window.shiftStart, window.shiftEnd),
+    input.turnovers != null
+      ? Promise.resolve(input.turnovers)
+      : listRoomTurnoversByCleanedAtRange(window.shiftStart, window.shiftEnd),
+  ]);
+
+  const summary = calculateShiftSummary({
+    businessDate,
+    shift,
+    checkins,
+    turnovers,
+  });
+  await saveShiftSummary(summary);
+  return { ...summary, generatedAt: new Date() };
+}
+
 /**
  * Admin / test: compute all three shifts for a business date and upsert
- * shiftSummaries/{date}_{shift}. Does not run on normal Admin page render.
+ * shiftSummaries/{date}_{shift}. Uses one day-level check-in + turnover fetch,
+ * then the shared per-shift calculate + save path (no Cron HTTP).
  */
 export async function generateAndSaveShiftSummariesForBusinessDate(
   businessDate: string
@@ -182,11 +212,18 @@ export async function generateAndSaveShiftSummariesForBusinessDate(
     listCheckinsByDateRange(businessDate, businessDate),
     listRoomTurnoversForBusinessDate(businessDate),
   ]);
-  const summaries = calculateDayShiftSummaries(businessDate, checkins, turnovers);
-  for (const summary of summaries) {
-    await saveShiftSummary(summary);
+  const results: ShiftSummary[] = [];
+  for (const shift of SHIFT_IDS) {
+    results.push(
+      await generateAndSaveShiftSummaryForPeriod({
+        businessDate,
+        shift,
+        checkins,
+        turnovers,
+      })
+    );
   }
-  return summaries.map((s) => ({ ...s, generatedAt: new Date() }));
+  return results;
 }
 
 export async function getPersistedShiftSummary(

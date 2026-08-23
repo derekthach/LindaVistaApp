@@ -8,8 +8,8 @@ import {
   calculateDailySummary,
   calculateDayShiftSummaries,
   formatIncompleteDailySummary,
+  getShiftDisplayLabel,
   isCompleteDailySummary,
-  shiftDisplayLabel,
   type RoomTurnoverRecord,
   type ShiftSummary,
 } from '@/lib/shifts';
@@ -224,7 +224,7 @@ export default function ShiftSummariesPanel({
             }}
           >
             <div style={{ fontWeight: 600, marginBottom: 6, color: '#111827' }}>
-              {shiftDisplayLabel(summary.shift)}
+              {getShiftDisplayLabel(summary.shift)}
             </div>
             <div
               style={{

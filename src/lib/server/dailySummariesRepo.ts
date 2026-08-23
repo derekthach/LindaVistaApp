@@ -1,15 +1,18 @@
-import { FieldValue } from 'firebase-admin/firestore';
-import { getAdminDb } from '@/lib/server/firebaseAdmin';
-import { HttpError } from '@/lib/server/httpError';
-import { logInfo } from '@/lib/server/log';
-import { getPersistedShiftSummariesForBusinessDate } from '@/lib/server/shiftSummariesRepo';
 import {
   calculateDailySummary,
   dailySummaryDocId,
   formatMissingShiftSummariesError,
   isCompleteDailySummary,
+  SHIFT_IDS,
   type DailySummary,
+  type ShiftId,
+  type ShiftSummary,
 } from '@/lib/shifts';
+import { FieldValue } from 'firebase-admin/firestore';
+import { getAdminDb } from '@/lib/server/firebaseAdmin';
+import { HttpError } from '@/lib/server/httpError';
+import { logInfo } from '@/lib/server/log';
+import { getPersistedShiftSummary } from '@/lib/server/shiftSummariesRepo';
 
 const DAILY_SUMMARIES_COLLECTION = 'dailySummaries';
 
@@ -63,14 +66,30 @@ export async function getPersistedDailySummary(businessDate: string): Promise<Da
 }
 
 /**
- * Prefer reading the three persisted Shift Summary docs — does not reread `/checkins`.
- * Fails explicitly when any Shift Summary document is missing.
+ * Prefer reading persisted Shift Summary docs — does not reread `/checkins`.
+ * Pass `knownSummaries` to skip re-fetching docs already in memory (e.g. Evening Cron).
  */
 export async function generateAndSaveDailySummaryForBusinessDate(
-  businessDate: string
+  businessDate: string,
+  knownSummaries?: Partial<Record<ShiftId, ShiftSummary>>
 ): Promise<DailySummary> {
   const started = Date.now();
-  const { summaries, missingShifts } = await getPersistedShiftSummariesForBusinessDate(businessDate);
+
+  const rows = await Promise.all(
+    SHIFT_IDS.map(async (shift) => {
+      const known = knownSummaries?.[shift];
+      if (known) return known;
+      return getPersistedShiftSummary(businessDate, shift);
+    })
+  );
+
+  const summaries: ShiftSummary[] = [];
+  const missingShifts: ShiftId[] = [];
+  for (let i = 0; i < SHIFT_IDS.length; i++) {
+    const row = rows[i];
+    if (row) summaries.push(row);
+    else missingShifts.push(SHIFT_IDS[i]!);
+  }
 
   if (missingShifts.length > 0) {
     throw new HttpError(409, 'MISSING_SHIFT_SUMMARIES', {

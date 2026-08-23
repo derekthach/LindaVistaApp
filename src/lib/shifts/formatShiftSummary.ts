@@ -1,15 +1,28 @@
 import { DateTime } from 'luxon';
-import { SHIFT_DEFINITIONS, SHIFT_TIMEZONE, type ShiftId } from './definitions';
+import {
+  getShiftDisplayLabel,
+  getShiftDisplayTitle,
+  SHIFT_TIMEZONE,
+  type ShiftId,
+} from './definitions';
 import type { ShiftSummary } from './types';
 
-/** Human-readable block for Admin UI / future management messages. */
+/**
+ * Human-readable block for Admin / future Photon / management messages.
+ * Uses operating-hours labels — not "Day Shift" / "Overnight Shift".
+ *
+ * @example
+ * 8:00 AM – 4:00 PM Shift
+ * August 23, 2026
+ *
+ * Revenue: $2,180
+ * Cars: 14
+ * Rooms Turned Over: 9
+ */
 export function formatShiftSummary(summary: ShiftSummary, locale = 'en-US'): string {
-  const def = SHIFT_DEFINITIONS[summary.shift];
   const dateLabel = DateTime.fromISO(summary.businessDate, { zone: SHIFT_TIMEZONE }).toFormat(
     'MMMM d, yyyy'
   );
-  const startLabel = formatClock(summary.shiftStart);
-  const endLabel = formatClock(summary.shiftEnd);
   const revenue = new Intl.NumberFormat(locale, {
     style: 'currency',
     currency: 'USD',
@@ -18,9 +31,8 @@ export function formatShiftSummary(summary: ShiftSummary, locale = 'en-US'): str
   }).format(summary.totalRevenue);
 
   return [
-    `${def.labelEn} Shift`,
+    getShiftDisplayTitle(summary.shift),
     dateLabel,
-    `${startLabel} – ${endLabel}`,
     '',
     `Revenue: ${revenue}`,
     `Cars: ${summary.totalCars}`,
@@ -28,10 +40,9 @@ export function formatShiftSummary(summary: ShiftSummary, locale = 'en-US'): str
   ].join('\n');
 }
 
+/** @deprecated Prefer {@link getShiftDisplayLabel} */
 export function shiftDisplayLabel(shift: ShiftId): string {
-  return SHIFT_DEFINITIONS[shift].timeRangeLabelEn;
+  return getShiftDisplayLabel(shift);
 }
 
-function formatClock(d: Date): string {
-  return DateTime.fromJSDate(d, { zone: SHIFT_TIMEZONE }).toFormat('h:mm a');
-}
+export { getShiftDisplayLabel, getShiftDisplayTitle };

@@ -429,6 +429,41 @@ const UNFILTERED_LIMIT = 3000;
 export const VIEW_CHECKINS_RECENT_LIMIT = 100;
 
 /**
+ * Bounded check-in query: `checkInAt` in half-open [start, end).
+ * Used by Shift Summary Cron (per-shift window) and day-range helpers.
+ */
+export async function listCheckinsByInstantRange(start: Date, end: Date): Promise<CheckIn[]> {
+  const started = Date.now();
+  try {
+    const db = getAdminDb();
+    const snapshot = await db
+      .collection(CHECKINS_COLLECTION)
+      .where('checkInAt', '>=', Timestamp.fromDate(start))
+      .where('checkInAt', '<', Timestamp.fromDate(end))
+      .orderBy('checkInAt', 'desc')
+      .get();
+    const result = snapshot.docs.map((doc) => normalizeCheckin(doc.id, doc.data()));
+    logInfo('checkins.listByInstantRange.complete', {
+      docsReturned: result.length,
+      start: start.toISOString(),
+      end: end.toISOString(),
+      durationMs: Date.now() - started,
+    });
+    return result;
+  } catch (err) {
+    if (isFirestoreUnavailableError(err)) {
+      if (isProduction()) throw err;
+      console.warn(
+        'Firestore unavailable (listCheckinsByInstantRange), returning empty list:',
+        (err as Error).message
+      );
+      return [];
+    }
+    throw err;
+  }
+}
+
+/**
  * List check-ins in a date range. Dates are YYYY-MM-DD and interpreted in America/Puerto_Rico.
  * - Filtered (startISO and endISO provided): filter by business date (checkInAt), order by checkInAt desc.
  * - Unfiltered (both omitted): return recent records ordered by creation/submission time desc (createdAt, with fallback to checkInAt for legacy docs).
@@ -443,42 +478,45 @@ export async function listCheckinsByDateRange(
 ): Promise<CheckIn[]> {
   const started = Date.now();
   try {
-    const db = getAdminDb();
-    const now = DateTime.now().setZone('America/Puerto_Rico');
     const filteredMode = startISO != null && startISO !== '' && endISO != null && endISO !== '';
 
-    const start = startISO
-      ? Timestamp.fromDate(startOfDayISO(startISO))
-      : Timestamp.fromDate(new Date(0));
-    const endExclusive = endISO
-      ? Timestamp.fromDate(endExclusiveISO(endISO))
-      : Timestamp.fromDate(now.plus({ years: 1 }).toJSDate());
+    if (filteredMode) {
+      const result = await listCheckinsByInstantRange(
+        startOfDayISO(startISO!),
+        endExclusiveISO(endISO!)
+      );
+      logInfo('checkins.list.complete', {
+        docsReturned: result.length,
+        startISO: startISO ?? null,
+        endISO: endISO ?? null,
+        filteredMode: true,
+        durationMs: Date.now() - started,
+      });
+      return result;
+    }
 
-    let query = db
+    const db = getAdminDb();
+    const now = DateTime.now().setZone('America/Puerto_Rico');
+    const start = Timestamp.fromDate(new Date(0));
+    const endExclusive = Timestamp.fromDate(now.plus({ years: 1 }).toJSDate());
+
+    const snapshot = await db
       .collection(CHECKINS_COLLECTION)
       .where('checkInAt', '>=', start)
       .where('checkInAt', '<', endExclusive)
-      .orderBy('checkInAt', 'desc');
-    if (!filteredMode) {
-      query = query.limit(UNFILTERED_LIMIT);
-    }
-    const snapshot = await query.get();
+      .orderBy('checkInAt', 'desc')
+      .limit(UNFILTERED_LIMIT)
+      .get();
 
-    const docs = snapshot.docs;
-    let result: CheckIn[];
-    if (filteredMode) {
-      result = docs.map((doc) => normalizeCheckin(doc.id, doc.data()));
-    } else {
-      const sorted = [...docs].sort((a, b) =>
-        compareCheckinsByCreatedAtDesc(a.data(), b.data())
-      );
-      result = sorted.map((doc) => normalizeCheckin(doc.id, doc.data()));
-    }
+    const sorted = [...snapshot.docs].sort((a, b) =>
+      compareCheckinsByCreatedAtDesc(a.data(), b.data())
+    );
+    const result = sorted.map((doc) => normalizeCheckin(doc.id, doc.data()));
     logInfo('checkins.list.complete', {
       docsReturned: result.length,
-      startISO: startISO ?? null,
-      endISO: endISO ?? null,
-      filteredMode,
+      startISO: null,
+      endISO: null,
+      filteredMode: false,
       durationMs: Date.now() - started,
     });
     return result;

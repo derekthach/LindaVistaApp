@@ -31,23 +31,38 @@ export const SHIFT_DEFINITIONS: Record<ShiftId, ShiftDefinition> = {
     startMinutes: 0,
     endMinutes: 8 * 60,
     labelEn: 'Overnight',
-    timeRangeLabelEn: '12 AM – 8 AM',
+    timeRangeLabelEn: '12:00 AM – 8:00 AM',
   },
   day: {
     id: 'day',
     startMinutes: 8 * 60,
     endMinutes: 16 * 60,
     labelEn: 'Day',
-    timeRangeLabelEn: '8 AM – 4 PM',
+    timeRangeLabelEn: '8:00 AM – 4:00 PM',
   },
   evening: {
     id: 'evening',
     startMinutes: 16 * 60,
     endMinutes: 24 * 60,
     labelEn: 'Evening',
-    timeRangeLabelEn: '4 PM – 12 AM',
+    timeRangeLabelEn: '4:00 PM – 12:00 AM',
   },
 };
+
+/**
+ * Human-facing shift label (operating hours). Canonical for Admin UI, Photon, logs.
+ * Internal ids remain overnight | day | evening.
+ *
+ * @example getShiftDisplayLabel('day') // "8:00 AM – 4:00 PM"
+ */
+export function getShiftDisplayLabel(shift: ShiftId): string {
+  return SHIFT_DEFINITIONS[shift].timeRangeLabelEn;
+}
+
+/** e.g. "8:00 AM – 4:00 PM Shift" — titles / future Photon lines. */
+export function getShiftDisplayTitle(shift: ShiftId): string {
+  return `${getShiftDisplayLabel(shift)} Shift`;
+}
 
 export type ShiftWindow = {
   businessDate: string;

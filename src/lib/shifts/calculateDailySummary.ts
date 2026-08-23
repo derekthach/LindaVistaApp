@@ -1,4 +1,4 @@
-import { SHIFT_IDS, SHIFT_TIMEZONE, type ShiftId } from './definitions';
+import { SHIFT_IDS, SHIFT_TIMEZONE, getShiftDisplayLabel, type ShiftId } from './definitions';
 import {
   buildShiftSummaryIds,
   type DailySummary,
@@ -67,16 +67,12 @@ export function isCompleteDailySummary(result: DailySummaryResult): result is Da
   return result.status === 'complete';
 }
 
-/** Human-readable missing-shift message for Admin / API errors. */
+/** Human-readable missing-shift message for Admin / API errors (operating-hours labels). */
 export function formatMissingShiftSummariesError(
   businessDate: string | null,
   missingShifts: ShiftId[]
 ): string {
-  const labels = missingShifts.map((s) => {
-    if (s === 'overnight') return 'Overnight';
-    if (s === 'day') return 'Day';
-    return 'Evening';
-  });
+  const labels = missingShifts.map((s) => getShiftDisplayLabel(s));
   const list =
     labels.length === 1
       ? `${labels[0]} Shift Summary`

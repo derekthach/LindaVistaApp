@@ -82,7 +82,7 @@ describe('calculateDailySummary', () => {
     if (result.status !== 'incomplete') return;
     expect(result.missingShifts).toEqual(['overnight', 'evening']);
     expect(formatMissingShiftSummariesError(result.businessDate, result.missingShifts)).toContain(
-      'Overnight and Evening Shift Summaries are missing'
+      '12:00 AM – 8:00 AM and 4:00 PM – 12:00 AM Shift Summaries are missing'
     );
   });
 

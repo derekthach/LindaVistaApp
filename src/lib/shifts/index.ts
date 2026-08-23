@@ -7,6 +7,8 @@ export {
   getShiftIdForTimeHHmm,
   getBusinessDateWindow,
   isInstantInHalfOpenRange,
+  getShiftDisplayLabel,
+  getShiftDisplayTitle,
   type ShiftId,
   type ShiftDefinition,
   type ShiftWindow,
@@ -24,7 +26,6 @@ export {
 } from './calculateShiftSummary';
 
 export { formatShiftSummary, shiftDisplayLabel } from './formatShiftSummary';
-
 export type {
   DailySummary,
   IncompleteDailySummary,
@@ -40,3 +41,9 @@ export {
 } from './calculateDailySummary';
 
 export { formatDailySummary, formatIncompleteDailySummary } from './formatDailySummary';
+
+export {
+  resolveCompletedShiftCronTarget,
+  isShiftId,
+  type CompletedShiftCronTarget,
+} from './cronTarget';
