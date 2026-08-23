@@ -5,7 +5,10 @@ import type { CheckIn } from '@/types';
 import Button from '@/components/Button';
 import { useLanguage } from '@/components/LanguageToggle';
 import {
+  calculateDailySummary,
   calculateDayShiftSummaries,
+  formatIncompleteDailySummary,
+  isCompleteDailySummary,
   shiftDisplayLabel,
   type RoomTurnoverRecord,
   type ShiftSummary,
@@ -42,9 +45,9 @@ function formatRevenue(amount: number): string {
 }
 
 /**
- * Shift Summaries for the selected View Check-Ins day.
- * Revenue/cars: derived from already-loaded day check-ins (no extra fetch).
- * Turnovers: from SSR-bounded cleanedAt window passed as props.
+ * Daily + Shift Summaries for the selected View Check-Ins day.
+ * Daily metrics aggregate in-memory Shift Summaries — 0 additional Firestore reads for display.
+ * Persist actions are explicit Admin generate only.
  */
 export default function ShiftSummariesPanel({
   businessDate,
@@ -58,7 +61,8 @@ export default function ShiftSummariesPanel({
   isAdmin: boolean;
 }) {
   const { t } = useLanguage();
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [isGeneratingShifts, setIsGeneratingShifts] = useState(false);
+  const [isGeneratingDaily, setIsGeneratingDaily] = useState(false);
   const [generateMessage, setGenerateMessage] = useState<string | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
 
@@ -66,8 +70,10 @@ export default function ShiftSummariesPanel({
     return calculateDayShiftSummaries(businessDate, checkins, deserializeTurnovers(turnovers));
   }, [businessDate, checkins, turnovers]);
 
-  const handleGenerate = async () => {
-    setIsGenerating(true);
+  const dailyResult = useMemo(() => calculateDailySummary(summaries), [summaries]);
+
+  const handleGenerateShifts = async () => {
+    setIsGeneratingShifts(true);
     setGenerateMessage(null);
     setGenerateError(null);
     try {
@@ -77,39 +83,136 @@ export default function ShiftSummariesPanel({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ businessDate }),
       });
-      const data = (await res.json().catch(() => ({}))) as { error?: string; ok?: boolean };
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        message?: string;
+        ok?: boolean;
+      };
       if (!res.ok) {
-        setGenerateError(data.error ?? t('shift_summaries_generate_error'));
+        setGenerateError(data.message ?? data.error ?? t('shift_summaries_generate_error'));
         return;
       }
       setGenerateMessage(t('shift_summaries_generate_success'));
     } catch {
       setGenerateError(t('shift_summaries_generate_error'));
     } finally {
-      setIsGenerating(false);
+      setIsGeneratingShifts(false);
     }
   };
 
+  const handleGenerateDaily = async () => {
+    setIsGeneratingDaily(true);
+    setGenerateMessage(null);
+    setGenerateError(null);
+    try {
+      const res = await fetch('/api/admin/daily-summaries/generate', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ businessDate }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        message?: string;
+        code?: string;
+        ok?: boolean;
+      };
+      if (!res.ok) {
+        setGenerateError(data.message ?? data.error ?? t('daily_summary_generate_error'));
+        return;
+      }
+      setGenerateMessage(t('daily_summary_generate_success'));
+    } catch {
+      setGenerateError(t('daily_summary_generate_error'));
+    } finally {
+      setIsGeneratingDaily(false);
+    }
+  };
+
+  const busy = isGeneratingShifts || isGeneratingDaily;
+
   return (
-    <div className="card" style={{ display: 'grid', gap: 12, padding: 16 }}>
-      <div
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12,
-        }}
-      >
-        <strong style={{ fontSize: 15 }}>{t('shift_summaries_heading')}</strong>
-        {isAdmin && (
-          <Button variant="secondary" onClick={handleGenerate} disabled={isGenerating}>
-            {isGenerating ? t('shift_summaries_generating') : t('shift_summaries_generate')}
-          </Button>
+    <div className="card" style={{ display: 'grid', gap: 16, padding: 16 }}>
+      <div style={{ display: 'grid', gap: 10 }}>
+        <strong style={{ fontSize: 15 }}>{t('daily_summary_heading')}</strong>
+        {isCompleteDailySummary(dailyResult) ? (
+          <div
+            style={{
+              padding: '12px 14px',
+              backgroundColor: '#f3f4f6',
+              borderRadius: 8,
+              border: '1px solid #e5e7eb',
+            }}
+          >
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#4b5563', marginBottom: 8 }}>
+              {t('daily_summary_complete')}
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '8px 20px',
+                fontSize: 14,
+                color: '#111827',
+                lineHeight: 1.6,
+              }}
+            >
+              <span>
+                <strong>{t('shift_summaries_revenue')}</strong>
+                <br />
+                {formatRevenue(dailyResult.totalRevenue)}
+              </span>
+              <span>
+                <strong>{t('shift_summaries_cars')}</strong>
+                <br />
+                {dailyResult.totalCars}
+              </span>
+              <span>
+                <strong>{t('shift_summaries_rooms_turned_over')}</strong>
+                <br />
+                {dailyResult.roomsTurnedOver}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div
+            style={{
+              padding: '12px 14px',
+              backgroundColor: '#fffbeb',
+              borderRadius: 8,
+              border: '1px solid #fcd34d',
+              fontSize: 13,
+              color: '#92400e',
+            }}
+          >
+            {t('daily_summary_incomplete')}: {formatIncompleteDailySummary(dailyResult)}
+          </div>
         )}
       </div>
 
       <div style={{ display: 'grid', gap: 10 }}>
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+          }}
+        >
+          <strong style={{ fontSize: 15 }}>{t('shift_breakdown_heading')}</strong>
+          {isAdmin && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              <Button variant="secondary" onClick={handleGenerateShifts} disabled={busy}>
+                {isGeneratingShifts ? t('shift_summaries_generating') : t('shift_summaries_generate')}
+              </Button>
+              <Button variant="secondary" onClick={handleGenerateDaily} disabled={busy}>
+                {isGeneratingDaily ? t('daily_summary_generating') : t('daily_summary_generate')}
+              </Button>
+            </div>
+          )}
+        </div>
+
         {summaries.map((summary) => (
           <div
             key={summary.shift}

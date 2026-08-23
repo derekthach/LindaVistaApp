@@ -218,6 +218,27 @@ export async function getPersistedShiftSummary(
   };
 }
 
+/**
+ * Load overnight/day/evening persisted docs for one business date (exactly 3 document gets).
+ * Missing docs return as null slots — callers must not treat null as zero activity.
+ */
+export async function getPersistedShiftSummariesForBusinessDate(businessDate: string): Promise<{
+  summaries: ShiftSummary[];
+  missingShifts: ShiftId[];
+}> {
+  const results = await Promise.all(
+    SHIFT_IDS.map((shift) => getPersistedShiftSummary(businessDate, shift))
+  );
+  const summaries: ShiftSummary[] = [];
+  const missingShifts: ShiftId[] = [];
+  for (let i = 0; i < SHIFT_IDS.length; i++) {
+    const row = results[i];
+    if (row) summaries.push(row);
+    else missingShifts.push(SHIFT_IDS[i]!);
+  }
+  return { summaries, missingShifts };
+}
+
 function timestampToDate(raw: unknown): Date | undefined {
   if (raw == null) return undefined;
   if (typeof (raw as { toDate?: () => Date }).toDate === 'function') {
