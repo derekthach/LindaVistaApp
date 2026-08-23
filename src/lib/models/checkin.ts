@@ -110,14 +110,24 @@ export function normalizeCheckin(id: string, data: Record<string, unknown>): Che
   const noteRaw = (data.note ?? data.notes) as string | undefined;
   const note = typeof noteRaw === 'string' && noteRaw.trim() ? noteRaw.trim() : undefined;
 
-  const formatCheckoutTs = (raw: unknown): string | undefined => {
+  const timestampToDate = (raw: unknown): Date | undefined => {
     if (raw == null) return undefined;
     try {
-      const ts =
-        typeof (raw as { toDate?: () => Date }).toDate === 'function'
-          ? (raw as { toDate: () => Date }).toDate()
-          : null;
-      if (!ts) return undefined;
+      if (typeof (raw as { toDate?: () => Date }).toDate === 'function') {
+        const d = (raw as { toDate: () => Date }).toDate();
+        return d instanceof Date && !Number.isNaN(d.getTime()) ? d : undefined;
+      }
+      if (raw instanceof Date && !Number.isNaN(raw.getTime())) return raw;
+      return undefined;
+    } catch {
+      return undefined;
+    }
+  };
+
+  const formatCheckoutTs = (raw: unknown): string | undefined => {
+    const ts = timestampToDate(raw);
+    if (!ts) return undefined;
+    try {
       const dt = DateTime.fromJSDate(ts, { zone: 'America/Puerto_Rico' });
       if (!dt.isValid) return undefined;
       const datePart = dt.toFormat('MMM d, yyyy');
@@ -128,9 +138,17 @@ export function normalizeCheckin(id: string, data: Record<string, unknown>): Che
     }
   };
 
+  const formatCheckoutIso = (raw: unknown): string | undefined => {
+    const ts = timestampToDate(raw);
+    if (!ts) return undefined;
+    return ts.toISOString();
+  };
+
   let is_checked_out: boolean | undefined;
   let checked_out_at: string | undefined;
   let cleaned_at: string | undefined;
+  let checked_out_at_iso: string | undefined;
+  let cleaned_at_iso: string | undefined;
   let checked_out_by: string | undefined;
   let cleaned_by: string | undefined;
   if (isRoom && !isPastEntry) {
@@ -138,6 +156,8 @@ export function normalizeCheckin(id: string, data: Record<string, unknown>): Che
       is_checked_out = true;
       checked_out_at = formatCheckoutTs(data.checkedOutAt);
       cleaned_at = formatCheckoutTs(data.cleanedAt ?? data.checkedOutAt);
+      checked_out_at_iso = formatCheckoutIso(data.checkedOutAt);
+      cleaned_at_iso = formatCheckoutIso(data.cleanedAt ?? data.checkedOutAt);
       checked_out_by =
         typeof data.checkedOutBy === 'string' && data.checkedOutBy.trim()
           ? data.checkedOutBy.trim()
@@ -213,6 +233,8 @@ export function normalizeCheckin(id: string, data: Record<string, unknown>): Che
             ? {
                 checked_out_at,
                 cleaned_at,
+                ...(checked_out_at_iso ? { checked_out_at_iso } : {}),
+                ...(cleaned_at_iso ? { cleaned_at_iso } : {}),
                 checked_out_by,
                 cleaned_by,
               }

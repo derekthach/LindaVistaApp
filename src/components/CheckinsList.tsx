@@ -30,6 +30,9 @@ import {
   foodBeerLineRowsAmountTotal,
 } from '@/lib/checkins/lineItemsFromCheckin';
 import { VIEW_CHECKINS_ALL_HREF } from '@/lib/checkins/viewCheckinsQuery';
+import ShiftSummariesPanel, {
+  type SerializedRoomTurnover,
+} from '@/components/checkins/ShiftSummariesPanel';
 
 function TrashIcon() {
   return (
@@ -340,11 +343,14 @@ function DetailsPanel({ checkin, t }: { checkin: CheckIn; t: (key: TranslationKe
 export default function CheckinsList({
   initialCheckins,
   initialDate,
+  initialTurnovers = [],
   role,
   viewingAll = false,
 }: {
   initialCheckins: CheckIn[];
   initialDate?: string;
+  /** Bounded cleanedAt turnovers for the selected business date (SSR). */
+  initialTurnovers?: SerializedRoomTurnover[];
   role?: UserRole;
   /** Explicit `?all=1` unfiltered newest-created view — not the default View Check-ins path. */
   viewingAll?: boolean;
@@ -1026,6 +1032,14 @@ export default function CheckinsList({
           </div>
         )}
       </div>
+      {dateFilterActive && initialDate && (
+        <ShiftSummariesPanel
+          businessDate={initialDate}
+          checkins={initialCheckins}
+          turnovers={initialTurnovers}
+          isAdmin={isAdmin}
+        />
+      )}
       {showPagination && (
         <div
           className="card"
