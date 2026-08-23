@@ -43,7 +43,6 @@ export {
 export { formatDailySummary, formatIncompleteDailySummary } from './formatDailySummary';
 
 export {
-  resolveCompletedShiftCronTarget,
+  getPreviousPuertoRicoBusinessDate,
   isShiftId,
-  type CompletedShiftCronTarget,
 } from './cronTarget';
