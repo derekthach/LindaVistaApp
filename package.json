@@ -29,7 +29,8 @@
     "next": "^16.1.5",
     "react": "^19",
     "react-chartjs-2": "^5.3.1",
-    "react-dom": "^19"
+    "react-dom": "^19",
+    "spectrum-ts": "^12.8.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",

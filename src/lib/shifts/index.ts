@@ -41,6 +41,7 @@ export {
 } from './calculateDailySummary';
 
 export { formatDailySummary, formatIncompleteDailySummary } from './formatDailySummary';
+export { formatDailyManagementMessage } from './formatDailyManagementMessage';
 
 export {
   getPreviousPuertoRicoBusinessDate,
