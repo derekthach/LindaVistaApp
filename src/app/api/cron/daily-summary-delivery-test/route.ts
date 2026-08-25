@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireCronAuthorization } from '@/lib/server/cronAuth';
-import { deliverPersistedDailySummaryToDerek } from '@/lib/server/photon/deliverPersistedDailySummary';
+import { deliverPersistedDailySummaryToActiveRecipients } from '@/lib/server/photon/deliverPersistedDailySummary';
+import { hasFailedManagementDelivery } from '@/lib/server/photon/sendDailyManagementMessage';
 import { HttpError, toErrorResponse } from '@/lib/server/httpError';
 import { logError } from '@/lib/server/log';
 
@@ -9,9 +10,9 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 /**
- * Secure manual delivery of an already-persisted Daily Summary to Derek only.
+ * Secure manual delivery of an already-persisted Daily Summary to all active recipients
+ * (Derek + Dad). Formats once; independent per-recipient idempotency.
  * Reads dailySummaries/{businessDate} + 3 shiftSummaries docs — no raw check-ins.
- * Honors Derek delivery idempotency (skips if already sent).
  *
  * Auth: Authorization: Bearer <CRON_SECRET>
  * Query: ?businessDate=YYYY-MM-DD
@@ -27,18 +28,22 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const result = await deliverPersistedDailySummaryToDerek(businessDate);
+    const result = await deliverPersistedDailySummaryToActiveRecipients(businessDate);
+    const deliveries = result.deliveries.map((d) => ({
+      recipientKey: d.recipientKey,
+      status: d.status,
+      skipReason: d.skipReason,
+      durationMs: d.durationMs,
+      ...(d.error ? { error: d.error } : {}),
+    }));
+    const anyFailed = hasFailedManagementDelivery(result.deliveries);
+    const allOk = result.deliveries.every((d) => d.status === 'sent' || d.status === 'skipped');
+
     return NextResponse.json({
-      success: result.delivery.status === 'sent' || result.delivery.status === 'skipped',
+      success: allOk && !anyFailed,
       businessDate: result.businessDate,
       messagePreviewLength: result.messagePreviewLength,
-      delivery: {
-        recipientKey: result.delivery.recipientKey,
-        status: result.delivery.status,
-        skipReason: result.delivery.skipReason,
-        durationMs: result.delivery.durationMs,
-        ...(result.delivery.error ? { error: result.delivery.error } : {}),
-      },
+      deliveries,
       requestId,
     });
   } catch (err) {
@@ -52,7 +57,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        recipientKey: 'derek',
         ...body,
       },
       { status }
