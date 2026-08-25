@@ -26,10 +26,38 @@ function orderedShifts(shiftSummaries: ShiftSummary[]): ShiftSummary[] {
   return SHIFT_IDS.map((id) => byShift.get(id)).filter(Boolean) as ShiftSummary[];
 }
 
+/** Singular/plural for turnover count in the management iMessage. */
+export function formatTurnoverCountLabel(count: number): string {
+  const n = Math.trunc(Number(count) || 0);
+  return n === 1 ? '1 turnover' : `${n} turnovers`;
+}
+
+/**
+ * User-facing shift header for the management iMessage (emoji + hours).
+ * Internal ids overnight|day|evening stay unchanged.
+ *
+ * Plain text only — Photon delivery uses dm.send(string), which does not
+ * render Markdown (`**bold**` would appear literally in iMessage).
+ */
+export function getShiftManagementMessageHeader(shift: ShiftId): string {
+  const hours = getShiftDisplayLabel(shift);
+  switch (shift) {
+    case 'overnight':
+      return `🌙 ${hours}`;
+    case 'day':
+      return `☀️ ${hours}`;
+    case 'evening':
+      return `🌆 ${hours}`;
+  }
+}
+
 /**
  * Pure formatter: persisted Daily + Shift Summary metrics → management iMessage text.
  * Does not recalculate revenue/cars/turnovers.
  * Human-readable shift hours only (never overnight/day/evening labels).
+ *
+ * Note: Spectrum is called with a plain string (not markdown()), so this output
+ * must not include Markdown markers like **bold**.
  */
 export function formatDailyManagementMessage(
   dailySummary: DailySummary,
@@ -38,20 +66,22 @@ export function formatDailyManagementMessage(
 ): string {
   const dateLabel = formatBusinessDateLabel(dailySummary.businessDate);
   const lines: string[] = [
-    `Linda Vista — ${dateLabel}`,
+    '🏨 Linda Vista — Daily Summary',
+    `📅 ${dateLabel}`,
     '',
-    'DAILY SUMMARY',
-    `Revenue: ${formatUsd(dailySummary.totalRevenue, locale)}`,
-    `Cars: ${dailySummary.totalCars}`,
-    `Rooms Turned Over: ${dailySummary.roomsTurnedOver}`,
+    `💰 Revenue: ${formatUsd(dailySummary.totalRevenue, locale)}`,
+    `🚗 Cars: ${dailySummary.totalCars}`,
+    `🧹 Rooms Turned Over: ${dailySummary.roomsTurnedOver}`,
+    '',
+    '━━━━━━━━━━━━━━',
   ];
 
   for (const shift of orderedShifts(shiftSummaries)) {
     lines.push('');
-    lines.push(getShiftDisplayLabel(shift.shift));
-    lines.push(
-      `Revenue: ${formatUsd(shift.totalRevenue, locale)} · Cars: ${shift.totalCars} · Turnovers: ${shift.roomsTurnedOver}`
-    );
+    lines.push(getShiftManagementMessageHeader(shift.shift));
+    lines.push(`💵 ${formatUsd(shift.totalRevenue, locale)} revenue`);
+    lines.push(`🚗 ${shift.totalCars} cars`);
+    lines.push(`🧹 ${formatTurnoverCountLabel(shift.roomsTurnedOver)}`);
   }
 
   return lines.join('\n');

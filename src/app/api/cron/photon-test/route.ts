@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireCronAuthorization } from '@/lib/server/cronAuth';
-import { sendPhotonConnectivityTestToDerek } from '@/lib/server/photon/photonTest';
+import { sendPhotonConnectivityTest } from '@/lib/server/photon/photonTest';
+import { parseManagementRecipientKey } from '@/lib/server/photon/recipients';
 import { HttpError, toErrorResponse } from '@/lib/server/httpError';
 import { logError } from '@/lib/server/log';
 
@@ -10,16 +11,27 @@ export const maxDuration = 60;
 
 /**
  * Secure manual Photon connectivity test.
- * Sends one fixed test iMessage to DAILY_SUMMARY_DEREK_PHONE only.
+ * Query: ?recipient=derek|dad (default derek). Only allow-listed keys; no arbitrary phones.
+ * Sends one fixed test iMessage to that recipient only.
  * Does not generate summaries or mutate Daily Summary delivery state.
  *
  * Auth: Authorization: Bearer <CRON_SECRET>
  */
 export async function GET(request: NextRequest) {
   const requestId = crypto.randomUUID();
+  let recipientKey = parseManagementRecipientKey(request.nextUrl.searchParams.get('recipient'));
+  if (request.nextUrl.searchParams.get('recipient') == null) {
+    recipientKey = 'derek';
+  }
   try {
     requireCronAuthorization(request);
-    const result = await sendPhotonConnectivityTestToDerek();
+    if (!recipientKey) {
+      throw new HttpError(400, 'INVALID_PHOTON_TEST_RECIPIENT', {
+        message: 'Query param recipient must be derek or dad',
+      });
+    }
+
+    const result = await sendPhotonConnectivityTest(recipientKey);
     return NextResponse.json({
       success: result.status === 'sent',
       recipientKey: result.recipientKey,
@@ -30,6 +42,7 @@ export async function GET(request: NextRequest) {
   } catch (err) {
     logError('api.cron.photon-test.error', {
       requestId,
+      recipientKey: recipientKey ?? null,
       message: err instanceof Error ? err.message : String(err),
     });
     const httpErr = err instanceof HttpError ? err : new HttpError(500, 'PHOTON_TEST_FAILED');
@@ -37,7 +50,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        recipientKey: 'derek',
+        recipientKey: recipientKey ?? null,
         ...body,
       },
       { status }

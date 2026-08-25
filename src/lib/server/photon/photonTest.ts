@@ -1,31 +1,46 @@
 /**
- * Manual Photon connectivity test — Derek only.
+ * Manual Photon connectivity test — allow-listed recipient keys only (derek | dad).
  * Does not touch Daily Summary docs or delivery state.
  */
 
 import { HttpError } from '@/lib/server/httpError';
 import { logError, logInfo } from '@/lib/server/log';
-import { getActiveRecipientPhone } from '@/lib/server/photon/recipients';
+import {
+  getConfiguredRecipientPhone,
+  isManagementRecipientKey,
+  managementRecipientEnvName,
+  type ManagementRecipientKey,
+} from '@/lib/server/photon/recipients';
 import { sendPhotonIMessageDm } from '@/lib/server/photon/sendIMessage';
 
-export const PHOTON_CONNECTIVITY_TEST_MESSAGE =
-  'Linda Vista Photon test — iMessage delivery is working.';
+export const PHOTON_CONNECTIVITY_TEST_MESSAGES: Record<ManagementRecipientKey, string> = {
+  derek: 'Linda Vista Photon test — iMessage delivery is working.',
+  dad: 'Linda Vista Photon test — daily business summaries are now enabled.',
+};
 
 export type PhotonTestResult = {
-  recipientKey: 'derek';
+  recipientKey: ManagementRecipientKey;
   status: 'sent' | 'failed';
   messageId?: string | null;
   durationMs: number;
   error?: string;
 };
 
-export async function sendPhotonConnectivityTestToDerek(): Promise<PhotonTestResult> {
+export async function sendPhotonConnectivityTest(
+  recipientKey: ManagementRecipientKey
+): Promise<PhotonTestResult> {
+  if (!isManagementRecipientKey(recipientKey)) {
+    throw new HttpError(400, 'INVALID_PHOTON_TEST_RECIPIENT', {
+      message: 'recipient must be derek or dad',
+    });
+  }
+
   const started = Date.now();
-  const recipientKey = 'derek' as const;
-  const phone = getActiveRecipientPhone(recipientKey);
+  const phone = getConfiguredRecipientPhone(recipientKey);
   if (!phone) {
-    const err = new HttpError(500, 'DAILY_SUMMARY_DEREK_PHONE_MISSING', {
-      message: 'DAILY_SUMMARY_DEREK_PHONE is not configured',
+    const envName = managementRecipientEnvName(recipientKey);
+    const err = new HttpError(500, `${envName}_MISSING`, {
+      message: `${envName} is not configured`,
     });
     logError('photon_test', {
       event: 'photon_test',
@@ -40,7 +55,7 @@ export async function sendPhotonConnectivityTestToDerek(): Promise<PhotonTestRes
   try {
     const sendResult = await sendPhotonIMessageDm({
       phone,
-      message: PHOTON_CONNECTIVITY_TEST_MESSAGE,
+      message: PHOTON_CONNECTIVITY_TEST_MESSAGES[recipientKey],
     });
     const result: PhotonTestResult = {
       recipientKey,
@@ -79,4 +94,9 @@ export async function sendPhotonConnectivityTestToDerek(): Promise<PhotonTestRes
       ? err
       : new HttpError(500, 'PHOTON_TEST_FAILED', { message: result.error });
   }
+}
+
+/** @deprecated Prefer sendPhotonConnectivityTest('derek') */
+export async function sendPhotonConnectivityTestToDerek(): Promise<PhotonTestResult> {
+  return sendPhotonConnectivityTest('derek');
 }

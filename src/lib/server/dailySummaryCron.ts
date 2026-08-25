@@ -7,12 +7,16 @@ import {
   toCompletedBusinessDayResponse,
 } from '@/lib/server/completedBusinessDay';
 import { formatDailyManagementMessage } from '@/lib/shifts/formatDailyManagementMessage';
-import { sendDailyManagementMessageToDerek } from '@/lib/server/photon/sendDailyManagementMessage';
+import {
+  hasFailedManagementDelivery,
+  sendDailyManagementMessagesToActiveRecipients,
+} from '@/lib/server/photon/sendDailyManagementMessage';
 
 /**
  * Once-daily Cron orchestration (~6 AM Puerto Rico).
  * Generates yesterday's three Shift Summaries + Daily Summary,
- * then delivers the management iMessage to Derek only (idempotent).
+ * formats the management message once, then delivers independently to each
+ * active recipient (Derek + Dad) with per-recipient idempotency.
  */
 export async function runDailySummaryCron(now: DateTime = DateTime.now()) {
   const startedAt = Date.now();
@@ -33,15 +37,22 @@ export async function runDailySummaryCron(now: DateTime = DateTime.now()) {
     }
 
     const message = formatDailyManagementMessage(result.dailySummary, result.shiftSummaries);
-    const delivery = await sendDailyManagementMessageToDerek({
+    const deliveries = await sendDailyManagementMessagesToActiveRecipients({
       businessDate,
       message,
     });
 
     const durationMs = Date.now() - startedAt;
+    const deliverySummary = deliveries.map((d) => ({
+      recipientKey: d.recipientKey,
+      status: d.status,
+      skipReason: d.skipReason,
+      durationMs: d.durationMs,
+      ...(d.error ? { error: d.error } : {}),
+    }));
 
-    // Summary stays persisted even when messaging fails. Non-2xx lets Cron retry delivery.
-    if (delivery.status === 'failed') {
+    // Summaries stay persisted even when messaging fails. Non-2xx lets Cron retry failed recipients only.
+    if (hasFailedManagementDelivery(deliveries)) {
       logError('daily_summary_cron', {
         event: 'daily_summary_cron',
         phase: 'delivery_failure',
@@ -49,14 +60,13 @@ export async function runDailySummaryCron(now: DateTime = DateTime.now()) {
         status: 'delivery_failure',
         shiftSummariesGenerated: 3,
         dailySummaryGenerated: true,
-        deliveryStatus: 'failed',
+        deliveries: deliverySummary,
         durationMs,
-        error: delivery.error,
       });
       throw new HttpError(502, 'DAILY_SUMMARY_DELIVERY_FAILED', {
-        message: 'Daily Summary persisted but Derek iMessage delivery failed',
+        message: 'Daily Summary persisted but one or more iMessage deliveries failed',
         businessDate,
-        deliveryError: delivery.error,
+        deliveries: deliverySummary,
       });
     }
 
@@ -70,7 +80,7 @@ export async function runDailySummaryCron(now: DateTime = DateTime.now()) {
       totalRevenue: result.dailySummary.totalRevenue,
       totalCars: result.dailySummary.totalCars,
       roomsTurnedOver: result.dailySummary.roomsTurnedOver,
-      deliveryStatus: delivery.status,
+      deliveries: deliverySummary,
       durationMs,
       completedAt: new Date().toISOString(),
     });
@@ -78,12 +88,7 @@ export async function runDailySummaryCron(now: DateTime = DateTime.now()) {
     return {
       ...toCompletedBusinessDayResponse(result),
       durationMs,
-      delivery: {
-        recipientKey: delivery.recipientKey,
-        status: delivery.status,
-        skipReason: delivery.skipReason,
-        durationMs: delivery.durationMs,
-      },
+      deliveries: deliverySummary,
     };
   } catch (err) {
     logError('daily_summary_cron', {
