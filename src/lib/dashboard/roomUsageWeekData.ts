@@ -1,6 +1,7 @@
 import { DateTime } from 'luxon';
 import type { CheckIn, RoomUsageData } from '@/types';
 import { isRoomCheckinRecord } from '@/lib/checkins/roomCheckinRecord';
+import { getEntryCount } from '@/lib/checkins/entryCount';
 import {
   getMotelBusinessWeekBoundsFromStartIso,
   getMotelBusinessWeekStart,
@@ -37,7 +38,7 @@ export function deriveRoomUsageForWeekFromCheckins(
     if (!isRoomCheckinRecord(c)) continue;
     const roomId = c.room_id;
     if (!isValidRoomId(roomId)) continue;
-    byRoom.set(roomId, (byRoom.get(roomId) ?? 0) + 1);
+    byRoom.set(roomId, (byRoom.get(roomId) ?? 0) + getEntryCount(c));
   }
 
   const sorted = [...byRoom.entries()]

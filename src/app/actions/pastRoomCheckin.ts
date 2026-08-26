@@ -22,6 +22,7 @@ export async function submitPastRoomCheckinAction(
     receipt_number: formData.get('receipt_number'),
     payment_splits: formData.get('payment_splits'),
     note: formData.get('note'),
+    receipts_captured: formData.get('receipts_captured'),
   };
 
   let staffAllowlist: string[];
@@ -48,6 +49,9 @@ export async function submitPastRoomCheckinAction(
       receipt_number: validation.receipt_number,
       payment_splits: validation.payment_splits,
       note: typeof raw.note === 'string' ? raw.note : undefined,
+      ...(validation.receipts_captured != null
+        ? { receipts_captured: validation.receipts_captured }
+        : {}),
       adminUsername: session.username?.trim() || 'admin',
       adminUserId: session.userId?.trim() || undefined,
     });

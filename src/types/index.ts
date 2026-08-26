@@ -96,6 +96,11 @@ export interface CheckIn {
   cleaned_by?: string;
   /** Admin-added historical room stay: counts in reports but excluded from occupancy/checkout/cleaning. */
   is_past_entry?: boolean;
+  /**
+   * Admin Add Past Entry only: how many physical receipts this one Firestore doc represents.
+   * Absent/invalid → analytics treat as 1. Never multiply revenue by this value.
+   */
+  receipts_captured?: number;
   /** Firestore `source` when set (e.g. admin_past_room_checkin, admin_past_entry). */
   past_entry_source?: string;
   /** When the admin saved this record (America/Puerto_Rico display string). */

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, type CSSProperties } from 'react';
 import { Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -14,6 +14,14 @@ import {
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
 
+const chartFrameStyle: CSSProperties = {
+  position: 'relative',
+  width: '100%',
+  height: '100%',
+  minHeight: 0,
+  overflow: 'hidden',
+};
+
 function valueAxisMaxFromData(data: number[]): number | undefined {
   if (data.length === 0) return undefined;
   const peak = Math.max(...data);
@@ -26,7 +34,7 @@ function horizontalBarValueLabelsPlugin(): Plugin<'bar'> {
     id: 'horizontalBarValueLabels',
     afterDatasetsDraw(chart) {
       if (chart.options.indexAxis !== 'y') return;
-      const { ctx } = chart;
+      const { ctx, chartArea } = chart;
       ctx.save();
       ctx.fillStyle = '#374151';
       ctx.font = '12px system-ui, sans-serif';
@@ -38,7 +46,13 @@ function horizontalBarValueLabelsPlugin(): Plugin<'bar'> {
           const value = typeof raw === 'number' ? raw : Number(raw);
           if (!Number.isFinite(value)) return;
           const props = element.getProps(['x', 'y'], true);
-          ctx.fillText(String(value), props.x + 6, props.y);
+          const label = String(value);
+          const textWidth = ctx.measureText(label).width;
+          let x = props.x + 6;
+          if (chartArea && x + textWidth > chartArea.right) {
+            x = Math.max(chartArea.left, chartArea.right - textWidth - 2);
+          }
+          ctx.fillText(label, x, props.y);
         });
       });
       ctx.restore();
@@ -74,38 +88,40 @@ export default function BarChart({
     valueAxisMax ?? (horizontal ? valueAxisMaxFromData(data) : undefined);
 
   return (
-    <Bar
-      plugins={plugins}
-      data={{
-        labels,
-        datasets: [
-          {
-            label,
-            data,
-            backgroundColor: color.replace('1)', '0.5)'),
-            borderColor: color,
-            borderWidth: 1.5,
+    <div style={chartFrameStyle}>
+      <Bar
+        plugins={plugins}
+        data={{
+          labels,
+          datasets: [
+            {
+              label,
+              data,
+              backgroundColor: color.replace('1)', '0.5)'),
+              borderColor: color,
+              borderWidth: 1.5,
+            },
+          ],
+        }}
+        options={{
+          responsive: true,
+          maintainAspectRatio: false,
+          indexAxis: horizontal ? 'y' : 'x',
+          layout: {
+            padding: showValueLabels && horizontal ? { right: 28 } : undefined,
           },
-        ],
-      }}
-      options={{
-        responsive: true,
-        maintainAspectRatio: false,
-        indexAxis: horizontal ? 'y' : 'x',
-        layout: {
-          padding: showValueLabels && horizontal ? { right: 28 } : undefined,
-        },
-        plugins: {
-          legend: { display: false },
-        },
-        scales: {
-          [horizontal ? 'x' : 'y']: {
-            beginAtZero: true,
-            max: resolvedValueMax,
-            ticks: { precision: 0 },
+          plugins: {
+            legend: { display: false },
           },
-        },
-      }}
-    />
+          scales: {
+            [horizontal ? 'x' : 'y']: {
+              beginAtZero: true,
+              max: resolvedValueMax,
+              ticks: { precision: 0 },
+            },
+          },
+        }}
+      />
+    </div>
   );
 }

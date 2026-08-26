@@ -1,6 +1,7 @@
 import { DateTime } from 'luxon';
 import type { CheckIn, SummaryMetrics } from '@/types';
 import { isRoomCheckinRecord } from '@/lib/checkins/roomCheckinRecord';
+import { getEntryCount } from '@/lib/checkins/entryCount';
 import { getMotelBusinessWeekStart } from '@/lib/dates/motelBusinessWeek';
 
 const ZONE = 'America/Puerto_Rico';
@@ -63,11 +64,11 @@ export function computeWeeklySamePointTotals(
   for (const c of checkins) {
     if (isCheckinInWindow(c, zone, weekStart, now)) {
       revCur += c.cost;
-      if (isRoomCheckinRecord(c)) carsCur += 1;
+      if (isRoomCheckinRecord(c)) carsCur += getEntryCount(c);
     }
     if (isCheckinInWindow(c, zone, prevWeekStart, prevEnd)) {
       revPrev += c.cost;
-      if (isRoomCheckinRecord(c)) carsPrev += 1;
+      if (isRoomCheckinRecord(c)) carsPrev += getEntryCount(c);
     }
   }
 
@@ -109,11 +110,11 @@ export function computeTodaySamePointTotals(
   for (const c of checkins) {
     if (isCheckinInWindow(c, zone, todayStart, z)) {
       revToday += c.cost;
-      if (isRoomCheckinRecord(c)) carsToday += 1;
+      if (isRoomCheckinRecord(c)) carsToday += getEntryCount(c);
     }
     if (isCheckinInWindow(c, zone, yesterdayStart, yesterdayEnd)) {
       revYest += c.cost;
-      if (isRoomCheckinRecord(c)) carsYest += 1;
+      if (isRoomCheckinRecord(c)) carsYest += getEntryCount(c);
     }
   }
 

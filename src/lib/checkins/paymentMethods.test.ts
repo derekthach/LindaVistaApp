@@ -31,7 +31,7 @@ describe('getCheckInPaymentMethodValues', () => {
     expect(
       getCheckInPaymentMethodValues({
         payment_method: 'paypal',
-        payment_splits: [{ method: 'nope', amount: 10 }],
+        payment_splits: [{ method: 'nope' as 'cash', amount: 10 }],
       })
     ).toEqual(['paypal']);
   });

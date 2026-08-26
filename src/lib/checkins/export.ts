@@ -10,6 +10,7 @@ import {
 } from '@/lib/checkins/roomPaymentSplits';
 import { hasStoredPaymentMethodSingle } from '@/lib/checkins/paymentMethods';
 import { formatTime } from '@/lib/utils/formatTime';
+import { getEntryCount } from '@/lib/checkins/entryCount';
 
 export type ExportRow = Record<string, string | number | null>;
 
@@ -68,6 +69,7 @@ function blankRow(
     cost: '',
     paymentBreakdown: '',
     notes: '',
+    receiptsCaptured: '',
     roomTotal: roomTotal ?? '',
     foodTotal: foodTotal ?? '',
     beerTotal: beerTotal ?? '',
@@ -101,6 +103,7 @@ export function buildCheckinsExportRows(options: {
         cost: Number(c.cost),
         paymentBreakdown: roomPaymentBreakdownCsv(c),
         notes: c.note ?? '',
+        receiptsCaptured: getEntryCount(c),
         roomTotal: '',
         foodTotal: '',
         beerTotal: '',
@@ -129,6 +132,7 @@ export function buildCheckinsExportRows(options: {
         cost: Number(c.cost),
         paymentBreakdown: roomPaymentBreakdownCsv(c),
         notes: c.note ?? '',
+        receiptsCaptured: getEntryCount(c),
         roomTotal: '',
         foodTotal: '',
         beerTotal: '',
@@ -174,6 +178,7 @@ export const EXPORT_COLUMNS = [
   'Cost',
   'Payment Breakdown',
   'Notes',
+  'Receipts Captured',
   'Room Total',
   'Food Total',
   'Beer Total',
@@ -192,6 +197,7 @@ const EXPORT_KEYS: (keyof ExportRow)[] = [
   'cost',
   'paymentBreakdown',
   'notes',
+  'receiptsCaptured',
   'roomTotal',
   'foodTotal',
   'beerTotal',

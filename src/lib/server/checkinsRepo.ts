@@ -37,6 +37,7 @@ import { HttpError } from '@/lib/server/httpError';
 import { dedupeActiveRoomStaySnapshots } from '@/lib/server/activeRoomStayDedupe';
 import { logInfo } from './log';
 import { isRoomCheckinRecord } from '@/lib/checkins/roomCheckinRecord';
+import { getEntryCount, parseReceiptsCapturedInput } from '@/lib/checkins/entryCount';
 import { deriveMotelWeekTrendComparisonFromCheckins } from '@/lib/dashboard/motelWeekTrendData';
 import { deriveSummaryMetricsFromCheckins } from '@/lib/dashboard/summaryMetrics';
 import { deriveRoomUsageForWeekFromCheckins } from '@/lib/dashboard/roomUsageWeekData';
@@ -185,6 +186,8 @@ export interface CreatePastRoomCheckinInput {
   receipt_number: string;
   payment_splits: RoomPaymentSplit[];
   note?: string;
+  /** Optional; omit or undefined → analytics treat as 1. */
+  receipts_captured?: number;
   adminUsername: string;
   adminUserId?: string;
 }
@@ -236,6 +239,9 @@ export async function createPastRoomCheckin(data: CreatePastRoomCheckinInput): P
   };
   if (data.adminUserId?.trim()) {
     doc.createdByUid = data.adminUserId.trim();
+  }
+  if (data.receipts_captured != null) {
+    doc.receiptsCaptured = data.receipts_captured;
   }
 
   const ref = await db.collection(CHECKINS_COLLECTION).add(doc);
@@ -308,6 +314,8 @@ export interface CreatePastFoodBeverageCheckinInput {
   payment_method: string;
   payment_splits: RoomPaymentSplit[];
   notes?: string;
+  /** Optional; omit or undefined → analytics treat as 1. */
+  receipts_captured?: number;
   adminUsername: string;
   adminUserId?: string;
 }
@@ -362,6 +370,9 @@ async function createPastFoodOrBeerCheckin(
   };
   if (data.adminUserId?.trim()) {
     doc.createdByUid = data.adminUserId.trim();
+  }
+  if (data.receipts_captured != null) {
+    doc.receiptsCaptured = data.receipts_captured;
   }
 
   const ref = await checkinsRef.add(doc);
@@ -748,6 +759,14 @@ export async function adminApplyCheckinPatch(
     }
     const padded = normalizeReceipt(String(rawRoom.receipt_number ?? ''));
     if (padded === null) throw new Error('Invalid receipt number');
+
+    let receiptsCapturedPatch: number | null | undefined;
+    if (data.isPastEntry === true && 'receipts_captured' in body) {
+      const parsed = parseReceiptsCapturedInput(body.receipts_captured);
+      if (!parsed.ok) throw new Error('Invalid receipts captured value');
+      receiptsCapturedPatch = parsed.value ?? null;
+    }
+
     await updateCheckin(
       id,
       {
@@ -758,6 +777,9 @@ export async function adminApplyCheckinPatch(
         check_in_date: checkInDate,
         check_in_time: checkInTime,
         note: typeof body.note === 'string' ? String(body.note).trim() : undefined,
+        ...(receiptsCapturedPatch !== undefined
+          ? { receipts_captured: receiptsCapturedPatch }
+          : {}),
       },
       editedBy
     );
@@ -797,6 +819,14 @@ export async function adminApplyCheckinPatch(
   }
   const paymentMethod =
     validation.payment_splits?.[0]?.method ?? String(rawFb.payment_method ?? '').trim();
+
+  let receiptsCapturedPatch: number | null | undefined;
+  if (data.isPastEntry === true && 'receipts_captured' in body) {
+    const parsed = parseReceiptsCapturedInput(body.receipts_captured);
+    if (!parsed.ok) throw new Error('Invalid receipts captured value');
+    receiptsCapturedPatch = parsed.value ?? null;
+  }
+
   await updateCheckinFoodBeer(
     id,
     {
@@ -807,6 +837,9 @@ export async function adminApplyCheckinPatch(
       check_in_date: checkInDate,
       check_in_time: checkInTime,
       ...(typeof body.note === 'string' ? { note: String(body.note).trim() } : {}),
+      ...(receiptsCapturedPatch !== undefined
+        ? { receipts_captured: receiptsCapturedPatch }
+        : {}),
     },
     editedBy
   );
@@ -822,6 +855,11 @@ export interface UpdateCheckinInput {
   check_in_time?: string;
   /** When defined — including `''` — persists trimmed note. Omit for legacy callers (no note change). */
   note?: string;
+  /**
+   * Past entry only. `number` sets receiptsCaptured; `null` clears the field (count defaults to 1).
+   * Omit to leave unchanged.
+   */
+  receipts_captured?: number | null;
 }
 
 /**
@@ -875,6 +913,15 @@ export async function updateCheckin(
   const noteAfter =
     payload.note !== undefined ? String(payload.note).trim() : noteBefore;
 
+  const receiptsBefore =
+    typeof data.receiptsCaptured === 'number' && Number.isInteger(data.receiptsCaptured)
+      ? data.receiptsCaptured
+      : null;
+  const receiptsAfterSpecified = payload.receipts_captured !== undefined;
+  const receiptsAfter = receiptsAfterSpecified
+    ? payload.receipts_captured
+    : receiptsBefore;
+
   const before: Record<string, unknown> = {
     receiptNumber: data.receiptNumber ?? '',
     staffName: data.staffName ?? '',
@@ -883,6 +930,7 @@ export async function updateCheckin(
     totalCollected: getRoomCollectedTotalFromDoc(data),
     checkInAt: beforeCheckInIso,
     note: noteBefore,
+    receiptsCaptured: receiptsBefore,
   };
   let afterCheckInIso = beforeCheckInIso;
   if (newCheckInAt && typeof newCheckInAt.toDate === 'function') {
@@ -897,6 +945,7 @@ export async function updateCheckin(
     totalCollected: totalAfter,
     checkInAt: afterCheckInIso,
     note: noteAfter,
+    receiptsCaptured: receiptsAfter,
   };
 
   const changedFields: string[] = [];
@@ -916,6 +965,9 @@ export async function updateCheckin(
   }
   if (String(before.note) !== String(after.note)) {
     changedFields.push('note');
+  }
+  if (receiptsAfterSpecified && receiptsBefore !== receiptsAfter) {
+    changedFields.push('receiptsCaptured');
   }
 
   if (changedFields.length === 0) {
@@ -939,6 +991,10 @@ export async function updateCheckin(
   }
   if (isPastEntry && changedFields.includes('staffName')) {
     updateData.employeeNameSnapshot = payload.staff_name;
+  }
+  if (isPastEntry && receiptsAfterSpecified) {
+    updateData.receiptsCaptured =
+      receiptsAfter == null ? FieldValue.delete() : receiptsAfter;
   }
 
   await ref.update(updateData);
@@ -998,6 +1054,8 @@ export interface UpdateCheckinFoodBeerInput {
   check_in_time?: string;
   /** When defined (including ''); omit to preserve existing note unchanged. */
   note?: string;
+  /** Past entry only. `number` sets; `null` clears; omit leaves unchanged. */
+  receipts_captured?: number | null;
 }
 
 /**
@@ -1066,6 +1124,16 @@ export async function updateCheckinFoodBeer(
   const noteAfter =
     payload.note !== undefined ? String(payload.note).trim() : noteBefore;
 
+  const isPastEntry = data.isPastEntry === true;
+  const receiptsBefore =
+    typeof data.receiptsCaptured === 'number' && Number.isInteger(data.receiptsCaptured)
+      ? data.receiptsCaptured
+      : null;
+  const receiptsAfterSpecified = payload.receipts_captured !== undefined;
+  const receiptsAfter = receiptsAfterSpecified
+    ? payload.receipts_captured
+    : receiptsBefore;
+
   const beforeCheckInIso =
     beforeTs && typeof beforeTs.toDate === 'function'
       ? DateTime.fromJSDate(beforeTs.toDate(), { zone: ZONE }).toISO() ?? ''
@@ -1084,6 +1152,7 @@ export async function updateCheckinFoodBeer(
     quantity: auditQuantityTotal(auditBeforeLines),
     amountCollected: auditAmountTotal(auditBeforeLines),
     paymentMethod: beforePaymentAudit,
+    receiptsCaptured: receiptsBefore,
   };
   const after: Record<string, unknown> = {
     checkInAt: afterCheckInIso,
@@ -1093,6 +1162,7 @@ export async function updateCheckinFoodBeer(
     quantity: auditQuantityTotal(lineItems),
     amountCollected: auditAmountTotal(lineItems),
     paymentMethod: afterPaymentAudit,
+    receiptsCaptured: receiptsAfter,
   };
   const changedFields: string[] = [];
   if (newCheckInAt && typeof beforeTs?.toMillis === 'function') {
@@ -1111,6 +1181,9 @@ export async function updateCheckinFoodBeer(
   if (Number(before.quantity) !== Number(after.quantity)) changedFields.push('quantity');
   if (Number(before.amountCollected) !== Number(after.amountCollected)) changedFields.push('amountCollected');
   if (String(before.paymentMethod) !== String(after.paymentMethod)) changedFields.push('paymentMethod');
+  if (receiptsAfterSpecified && receiptsBefore !== receiptsAfter) {
+    changedFields.push('receiptsCaptured');
+  }
 
   if (changedFields.length === 0) {
     return;
@@ -1131,6 +1204,10 @@ export async function updateCheckinFoodBeer(
   }
   if (changedFields.includes('checkInAt') && newCheckInAt) {
     updateData.checkInAt = newCheckInAt;
+  }
+  if (isPastEntry && receiptsAfterSpecified) {
+    updateData.receiptsCaptured =
+      receiptsAfter == null ? FieldValue.delete() : receiptsAfter;
   }
 
   await ref.update(updateData);
@@ -1425,9 +1502,10 @@ export async function getRoomUsageTop15(): Promise<RoomUsageData> {
   const checkins = await listCheckinsByDateRange();
   const byRoom = new Map<number | string, number>();
   for (const c of checkins) {
+    if (!isRoomCheckinRecord(c)) continue;
     const rid = c.room_id;
     if (rid == null || rid === '' || (typeof rid === 'number' && rid <= 0)) continue;
-    byRoom.set(rid, (byRoom.get(rid) ?? 0) + 1);
+    byRoom.set(rid, (byRoom.get(rid) ?? 0) + getEntryCount(c));
   }
   const sorted = [...byRoom.entries()]
     .sort((a, b) => b[1] - a[1])
@@ -1489,8 +1567,14 @@ export async function getMonthlyComparison(
   const currentRevenue = currentCheckins.reduce((sum, c) => sum + c.cost, 0);
   const prevRevenue = prevCheckins.reduce((sum, c) => sum + c.cost, 0);
 
-  const currentRoomCount = currentCheckins.filter(isRoomCheckinRecord).length;
-  const prevRoomCount = prevCheckins.filter(isRoomCheckinRecord).length;
+  const currentRoomCount = currentCheckins.reduce(
+    (sum, c) => sum + (isRoomCheckinRecord(c) ? getEntryCount(c) : 0),
+    0
+  );
+  const prevRoomCount = prevCheckins.reduce(
+    (sum, c) => sum + (isRoomCheckinRecord(c) ? getEntryCount(c) : 0),
+    0
+  );
 
   const years = [year, year - 1].map((y) => y.toString());
 
@@ -1553,7 +1637,7 @@ export async function getEmployeeRoomActivityForMonth(params: {
   for (const c of checkInList) {
     if (!isRoomCheckinRecord(c)) continue;
     const name = (c.staff_name ?? '').trim() || 'Unknown';
-    byStaff.set(name, (byStaff.get(name) ?? 0) + 1);
+    byStaff.set(name, (byStaff.get(name) ?? 0) + getEntryCount(c));
   }
   const check_ins = sortAndLimitStaffCounts(byStaff);
 

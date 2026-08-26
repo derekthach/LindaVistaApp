@@ -8,6 +8,7 @@ import {
   parsePaymentSplitsFromFirestore,
   roundMoney,
 } from '@/lib/checkins/roomPaymentSplits';
+import { normalizeStoredReceiptsCaptured } from '@/lib/checkins/entryCount';
 
 export type { CheckIn };
 
@@ -42,6 +43,8 @@ export interface CheckinDoc {
   createdByUsername?: string;
   createdByUid?: string;
   isPastEntry?: boolean;
+  /** Admin past entry: underlying physical receipt count (Firestore: receiptsCaptured). */
+  receiptsCaptured?: number;
   source?: string;
   requiresCheckout?: boolean;
   requiresCleaning?: boolean;
@@ -76,6 +79,7 @@ export function normalizeCheckin(id: string, data: Record<string, unknown>): Che
 
   const isRoom = checkInType === 'room';
   const isPastEntry = data.isPastEntry === true;
+  const receiptsCaptured = normalizeStoredReceiptsCaptured(data.receiptsCaptured);
   const receiptNumber =
     (data.receiptNumber as string) ?? (data.receiptNo as string) ?? '';
   const staffName =
@@ -254,5 +258,6 @@ export function normalizeCheckin(id: string, data: Record<string, unknown>): Che
           ...(past_entry_system_created_at ? { past_entry_system_created_at } : {}),
         }
       : {}),
+    ...(receiptsCaptured != null ? { receipts_captured: receiptsCaptured } : {}),
   };
 }

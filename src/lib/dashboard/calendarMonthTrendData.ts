@@ -1,6 +1,7 @@
 import { DateTime } from 'luxon';
 import type { CalendarMonthRoomTrendData, CheckIn } from '@/types';
 import { isRoomCheckinRecord } from '@/lib/checkins/roomCheckinRecord';
+import { getEntryCount } from '@/lib/checkins/entryCount';
 
 function roundMoney(n: number): number {
   return Math.round(n * 100) / 100;
@@ -44,7 +45,7 @@ export function deriveCalendarMonthRoomTrendFromCheckins(
     let rev = 0;
     for (const c of byIso.get(iso) ?? []) {
       if (!isRoomCheckinRecord(c)) continue;
-      rooms += 1;
+      rooms += getEntryCount(c);
       rev += Number(c.cost) || 0;
     }
     roomCheckins.push(rooms);
@@ -65,7 +66,7 @@ export function deriveCalendarMonthRoomTrendFromCheckins(
     let revPrev = 0;
     for (const c of byIso.get(prevIso) ?? []) {
       if (!isRoomCheckinRecord(c)) continue;
-      roomsPrev += 1;
+      roomsPrev += getEntryCount(c);
       revPrev += Number(c.cost) || 0;
     }
     roomCheckinsPrevMonth.push(roomsPrev);

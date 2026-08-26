@@ -11,6 +11,7 @@ import type {
   SummaryMetrics,
 } from '@/types';
 import { isRoomCheckinRecord } from '@/lib/checkins/roomCheckinRecord';
+import { getEntryCount } from '@/lib/checkins/entryCount';
 import { deriveCalendarMonthRoomTrendFromCheckins } from '@/lib/dashboard/calendarMonthTrendData';
 import { deriveRoomUsageForWeekFromCheckins } from '@/lib/dashboard/roomUsageWeekData';
 import { deriveMotelWeekTrendComparisonFromCheckins } from '@/lib/dashboard/motelWeekTrendData';
@@ -98,8 +99,14 @@ export function deriveMonthlyComparisonFromCheckins(
 
   const currentRevenue = currentList.reduce((sum, c) => sum + c.cost, 0);
   const prevRevenue = prevList.reduce((sum, c) => sum + c.cost, 0);
-  const currentRoomCount = currentList.filter(isRoomCheckinRecord).length;
-  const prevRoomCount = prevList.filter(isRoomCheckinRecord).length;
+  const currentRoomCount = currentList.reduce(
+    (sum, c) => sum + (isRoomCheckinRecord(c) ? getEntryCount(c) : 0),
+    0
+  );
+  const prevRoomCount = prevList.reduce(
+    (sum, c) => sum + (isRoomCheckinRecord(c) ? getEntryCount(c) : 0),
+    0
+  );
 
   const years = [year, year - 1].map((y) => y.toString());
 
@@ -131,7 +138,7 @@ export function deriveEmployeeCheckInsFromCheckins(
     if (c.date < startISO || c.date > endISO) continue;
     if (!isRoomCheckinRecord(c)) continue;
     const name = (c.staff_name ?? '').trim() || 'Unknown';
-    byStaff.set(name, (byStaff.get(name) ?? 0) + 1);
+    byStaff.set(name, (byStaff.get(name) ?? 0) + getEntryCount(c));
   }
   return sortAndLimitStaffCounts(byStaff);
 }

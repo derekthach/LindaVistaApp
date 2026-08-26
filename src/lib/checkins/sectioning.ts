@@ -1,11 +1,14 @@
 import type { CheckIn } from '@/types';
 import { isRoomCheckinRecord } from '@/lib/checkins/roomCheckinRecord';
+import { getEntryCount } from '@/lib/checkins/entryCount';
 import {
   PAYMENT_METHODS,
   getPaymentMethodTranslationKey,
   hasStoredPaymentMethodSingle,
   type PaymentMethodValue,
 } from '@/lib/checkins/paymentMethods';
+
+export { getEntryCount } from '@/lib/checkins/entryCount';
 
 /** Parse "HH:mm" to minutes since midnight. Invalid => 0. */
 export function timeToMinutes(timeHHmm: string): number {
@@ -121,7 +124,7 @@ export function totalsToCents(checkins: CheckIn[]): SectionTotals {
     roomCents += Math.round(by.room * 100);
     foodCents += Math.round(by.food * 100);
     beerCents += Math.round(by.beer * 100);
-    if (countsAsCar(c)) carCount += 1;
+    if (countsAsCar(c)) carCount += getEntryCount(c);
   }
   return {
     roomCents,

@@ -19,6 +19,7 @@ import {
   getRoomPaymentBreakdownDisplayLocalized,
 } from '@/lib/checkins/roomPaymentSplits';
 import { getPaymentMethodTranslationKey, hasStoredPaymentMethodSingle } from '@/lib/checkins/paymentMethods';
+import { getEntryCount } from '@/lib/checkins/entryCount';
 import {
   formatGuestAwarePersonDisplay,
   formatStaffDisplayForCheckinsTable,
@@ -253,6 +254,12 @@ function DetailsPanel({ checkin, t }: { checkin: CheckIn; t: (key: TranslationKe
               </dd>
               <dt style={labelStyle}>{t('total_collected')}</dt>
               <dd style={{ margin: 0, ...valueStyle }}>${pay.total.toFixed(2)}</dd>
+              {isPastEntry ? (
+                <>
+                  <dt style={labelStyle}>{t('receipts_captured_label')}</dt>
+                  <dd style={{ margin: 0, ...valueStyle }}>{getEntryCount(checkin)}</dd>
+                </>
+              ) : null}
               <dt style={labelStyle}>{t('car_make')}</dt>
               <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.car_make)}</dd>
               <dt style={labelStyle}>{t('car_color')}</dt>
@@ -341,6 +348,12 @@ function DetailsPanel({ checkin, t }: { checkin: CheckIn; t: (key: TranslationKe
         <dd style={{ margin: 0, ...valueStyle }}>{itemsSummary}</dd>
         <dt style={labelStyle}>{t('total')}</dt>
         <dd style={{ margin: 0, ...valueStyle }}>${Number(checkin.cost).toFixed(2)}</dd>
+        {isPastFoodOrBeer ? (
+          <>
+            <dt style={labelStyle}>{t('receipts_captured_label')}</dt>
+            <dd style={{ margin: 0, ...valueStyle }}>{getEntryCount(checkin)}</dd>
+          </>
+        ) : null}
         <dt style={labelStyle}>{t('notes')}</dt>
         <dd style={{ margin: 0, ...valueStyle }}>{orDash(checkin.note)}</dd>
         {isPastFoodOrBeer ? (
@@ -556,6 +569,20 @@ export default function CheckinsList({
     if (draft.staff_name !== (checkin.staff_name ?? '')) {
       lines.push({ label: t('diff_label_staff'), from: checkin.staff_name ?? '', to: draft.staff_name });
     }
+    if (checkin.is_past_entry === true) {
+      const fromRc = checkin.receipts_captured != null ? String(checkin.receipts_captured) : '1';
+      const toRc =
+        draft.receipts_captured != null && draft.receipts_captured !== undefined
+          ? String(draft.receipts_captured)
+          : '1';
+      if (fromRc !== toRc) {
+        lines.push({
+          label: t('diff_label_receipts_captured'),
+          from: fromRc,
+          to: toRc,
+        });
+      }
+    }
 
     if (origKind === 'room') {
       const receiptFrom = formatReceiptNumber(checkin.receipt_number ?? '');
@@ -686,6 +713,9 @@ export default function CheckinsList({
           check_in_time: pendingUpdate.draft.check_in_time,
           note: pendingUpdate.draft.note,
           staff_name: pendingUpdate.draft.staff_name,
+          ...(pendingUpdate.checkin.is_past_entry === true
+            ? { receipts_captured: pendingUpdate.draft.receipts_captured ?? null }
+            : {}),
           ...(storedCheckInKind(pendingUpdate.checkin) === 'room'
             ? {
                 receipt_number: pendingUpdate.draft.receipt_number,

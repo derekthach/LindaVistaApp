@@ -1,5 +1,6 @@
 'use client';
 
+import type { CSSProperties } from 'react';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -14,6 +15,14 @@ import {
 import type { ChartDataset } from 'chart.js';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, Filler);
+
+const chartFrameStyle: CSSProperties = {
+  position: 'relative',
+  width: '100%',
+  height: '100%',
+  minHeight: 0,
+  overflow: 'hidden',
+};
 
 export default function LineChart({
   labels,
@@ -78,52 +87,54 @@ export default function LineChart({
   }
 
   return (
-    <Line
-      data={{
-        labels,
-        datasets,
-      }}
-      options={{
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        scales: {
-          ...(denseCategoryAxis
-            ? {
-                x: {
-                  ticks: {
-                    maxRotation: 45,
-                    autoSkip: true,
-                    maxTicksLimit: 16,
+    <div style={chartFrameStyle}>
+      <Line
+        data={{
+          labels,
+          datasets,
+        }}
+        options={{
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          scales: {
+            ...(denseCategoryAxis
+              ? {
+                  x: {
+                    ticks: {
+                      maxRotation: 45,
+                      autoSkip: true,
+                      maxTicksLimit: 16,
+                    },
                   },
-                },
-              }
-            : {}),
-          y: {
-            beginAtZero: true,
-            ticks: yAxisIntegersOnly ? { precision: 0 } : {},
-          },
-        },
-        plugins: {
-          legend: {
-            display: datasets.length > 1,
-            position: 'bottom',
-          },
-          tooltip: {
-            callbacks: {
-              label: (ctx) => {
-                const raw = ctx.parsed.y;
-                if (raw === undefined || raw === null) return `${ctx.dataset.label}: —`;
-                const v = Number(raw);
-                if (tooltipValueFormat) {
-                  return `${ctx.dataset.label}: ${tooltipValueFormat(v)}`;
                 }
-                return `${ctx.dataset.label}: ${v}`;
+              : {}),
+            y: {
+              beginAtZero: true,
+              ticks: yAxisIntegersOnly ? { precision: 0 } : {},
+            },
+          },
+          plugins: {
+            legend: {
+              display: datasets.length > 1,
+              position: 'bottom',
+            },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => {
+                  const raw = ctx.parsed.y;
+                  if (raw === undefined || raw === null) return `${ctx.dataset.label}: —`;
+                  const v = Number(raw);
+                  if (tooltipValueFormat) {
+                    return `${ctx.dataset.label}: ${tooltipValueFormat(v)}`;
+                  }
+                  return `${ctx.dataset.label}: ${v}`;
+                },
               },
             },
           },
-        },
-      }}
-    />
+        }}
+      />
+    </div>
   );
 }

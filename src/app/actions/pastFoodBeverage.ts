@@ -22,6 +22,7 @@ export async function submitPastFoodBeverageAction(
     lineItems: formData.get('lineItems'),
     payment_splits: formData.get('payment_splits'),
     notes: formData.get('notes'),
+    receipts_captured: formData.get('receipts_captured'),
   };
 
   let staffAllowlist: string[];
@@ -45,6 +46,9 @@ export async function submitPastFoodBeverageAction(
       payment_method: validation.payment_method!,
       payment_splits: validation.payment_splits,
       notes: validation.notes,
+      ...(validation.receipts_captured != null
+        ? { receipts_captured: validation.receipts_captured }
+        : {}),
       adminUsername: session.username?.trim() || 'admin',
       adminUserId: session.userId?.trim() || undefined,
     });

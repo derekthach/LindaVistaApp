@@ -50,6 +50,29 @@ describe('countsAsCar / section totals', () => {
     const t = totalsToCents(checkins);
     expect(t.carCount).toBe(4);
   });
+
+  it('weights room/car counts by receipts_captured without multiplying revenue', () => {
+    const checkins: CheckIn[] = [
+      baseRoom({ receipt_number: '1', cost: 65 }),
+      baseRoom({
+        receipt_number: '2',
+        cost: 975,
+        is_past_entry: true,
+        receipts_captured: 15,
+      }),
+      baseRoom({
+        checkInType: 'food',
+        cost: 300,
+        is_past_entry: true,
+        receipts_captured: 12,
+      }),
+    ];
+    const totals = totalsToCents(checkins);
+    expect(totals.carCount).toBe(16);
+    expect(totals.roomCents).toBe(104000);
+    expect(totals.foodCents).toBe(30000);
+    expect(totals.totalCents).toBe(134000);
+  });
 });
 
 describe('paymentMethodTotalsToCents', () => {

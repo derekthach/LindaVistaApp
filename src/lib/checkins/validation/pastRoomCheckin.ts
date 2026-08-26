@@ -7,19 +7,21 @@ import {
   validatePaymentSplits,
 } from '@/lib/checkins/roomPaymentSplits';
 import type { RoomPaymentSplit } from '@/types';
+import { parseReceiptsCapturedInput } from '@/lib/checkins/entryCount';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^\d{2}:\d{2}$/;
 
 export interface PastRoomCheckinValidationResult {
   valid: boolean;
-  errors: Partial<Record<'room_id' | 'check_in_date' | 'check_in_time' | 'staff_name' | 'receipt_number' | 'payment_splits' | 'total', string>>;
+  errors: Partial<Record<'room_id' | 'check_in_date' | 'check_in_time' | 'staff_name' | 'receipt_number' | 'payment_splits' | 'total' | 'receipts_captured', string>>;
   room_id?: number | string;
   check_in_date?: string;
   check_in_time?: string;
   staff_name?: string;
   receipt_number?: string;
   payment_splits?: RoomPaymentSplit[];
+  receipts_captured?: number;
 }
 
 /**
@@ -83,6 +85,11 @@ export function validatePastRoomCheckinAdmin(
     }
   }
 
+  const receiptsParsed = parseReceiptsCapturedInput(raw.receipts_captured);
+  if (!receiptsParsed.ok) {
+    errors.receipts_captured = 'Enter a whole number from 1 to 100, or leave blank';
+  }
+
   const valid = Object.keys(errors).length === 0;
   const normalizedReceipt = normalizeReceipt(String(raw.receipt_number ?? '').trim());
   return {
@@ -96,6 +103,9 @@ export function validatePastRoomCheckinAdmin(
           staff_name: staff,
           receipt_number: normalizedReceipt,
           payment_splits: splitResult.splits,
+          ...(receiptsParsed.ok && receiptsParsed.value != null
+            ? { receipts_captured: receiptsParsed.value }
+            : {}),
         }
       : {}),
   };

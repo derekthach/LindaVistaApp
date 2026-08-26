@@ -37,6 +37,11 @@ import {
 } from '@/lib/checkins/roomPaymentSplits';
 import { validateSimpleCheckin } from '@/lib/checkins/validation';
 import { lineItemsFromCheckinRecord } from '@/lib/checkins/lineItemsFromCheckin';
+import {
+  parseReceiptsCapturedInput,
+  RECEIPTS_CAPTURED_MAX,
+  RECEIPTS_CAPTURED_MIN,
+} from '@/lib/checkins/entryCount';
 
 const QUANTITY_MIN = 1;
 const QUANTITY_MAX = 50;
@@ -66,6 +71,8 @@ export interface EditCheckinDraft {
   quantity?: number;
   amountCollected?: number;
   payment_method?: string;
+  /** Past entry only: underlying receipt quantity (`null` clears → analytics treat as 1). */
+  receipts_captured?: number | null;
 }
 
 interface EditCheckinModalProps {
@@ -120,6 +127,7 @@ export default function EditCheckinModal({
   const [room_id, setRoomId] = useState<number | string>(1);
   const [paymentRows, setPaymentRows] = useState<PaymentSplitFormRow[]>([defaultPaymentSplitFormRow()]);
   const [lineRows, setLineRows] = useState<LineItem[]>([initialFoodBeerRow()]);
+  const [receiptsCaptured, setReceiptsCaptured] = useState('');
 
   useEffect(() => {
     if (checkin) {
@@ -132,6 +140,11 @@ export default function EditCheckinModal({
       setReceiptNumber(formatReceiptNumber(checkin.receipt_number ?? ''));
       setStaffName(checkin.staff_name ?? '');
       setRoomId(checkin.room_id ?? 1);
+      setReceiptsCaptured(
+        checkin.is_past_entry && checkin.receipts_captured != null
+          ? String(checkin.receipts_captured)
+          : ''
+      );
 
       setPaymentRows(
         paymentStateToFormRows(
@@ -303,12 +316,24 @@ export default function EditCheckinModal({
     !effectiveIsRoom &&
     (currentFoodLineJson !== initialFoodLineJson || currentSplitsJson !== initialSplitsJson);
 
+  const receiptsParsed = useMemo(
+    () =>
+      checkin?.is_past_entry
+        ? parseReceiptsCapturedInput(receiptsCaptured)
+        : ({ ok: true, value: undefined } as const),
+    [checkin?.is_past_entry, receiptsCaptured]
+  );
+  const receiptsCapturedOk = receiptsParsed.ok;
+  const initialReceiptsCapturedStr =
+    checkin?.is_past_entry && checkin.receipts_captured != null ? String(checkin.receipts_captured) : '';
+
   const derivedHasChanges =
     !!checkin &&
     (editDate !== (checkin.date ?? '') ||
       editTimeHm !== timeHmStored(checkin) ||
       note.trim() !== (checkin.note?.trim() ?? '') ||
       staff_name !== (checkin.staff_name ?? '') ||
+      (checkin.is_past_entry === true && receiptsCaptured !== initialReceiptsCapturedStr) ||
       hasChangesRoomSpecific ||
       hasChangesFoodBeerSpecific);
 
@@ -321,10 +346,16 @@ export default function EditCheckinModal({
     receiptNormalized !== null &&
     staffValid &&
     splitsValid &&
+    receiptsCapturedOk &&
     (checkin?.is_past_entry ? isValidAdminLateRoomId(room_id) : isValidRoomId(room_id)) &&
     dateTimeOk;
   const formValidFoodBeer =
-    !effectiveIsRoom && foodBeerValidation.valid && staffValid && dateTimeOk && splitsValid;
+    !effectiveIsRoom &&
+    foodBeerValidation.valid &&
+    staffValid &&
+    dateTimeOk &&
+    splitsValid &&
+    receiptsCapturedOk;
   const formValid = effectiveIsRoom ? formValidRoom : formValidFoodBeer;
   const canSave = formValid && derivedHasChanges && !saveDisabled;
 
@@ -333,6 +364,10 @@ export default function EditCheckinModal({
     if (!canSave || !checkin) return;
 
     const noteTrim = note.trim();
+    const pastReceiptsPayload =
+      checkin.is_past_entry === true && receiptsParsed.ok
+        ? { receipts_captured: receiptsParsed.value ?? null }
+        : {};
 
     if (effectiveIsRoom && splitValidation.splits && receiptNormalized) {
       onSave({
@@ -344,6 +379,7 @@ export default function EditCheckinModal({
         staff_name,
         room_id,
         payment_splits: splitValidation.splits,
+        ...pastReceiptsPayload,
       });
     } else if (!effectiveIsRoom && splitValidation.splits) {
       const linePayload: LineItem[] = lineRows
@@ -363,6 +399,7 @@ export default function EditCheckinModal({
         lineItems: linePayload,
         payment_method: splitValidation.splits[0].method,
         payment_splits: splitValidation.splits,
+        ...pastReceiptsPayload,
       });
     }
   };
@@ -514,6 +551,32 @@ export default function EditCheckinModal({
               ))}
             </select>
           </label>
+
+          {checkin?.is_past_entry === true ? (
+            <label>
+              <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>
+                {t('receipts_captured_label')}
+              </div>
+              <input
+                value={receiptsCaptured}
+                onChange={(e) => setReceiptsCaptured(e.target.value.replace(/[^\d]/g, '').slice(0, 3))}
+                style={inputStyle}
+                inputMode="numeric"
+                min={RECEIPTS_CAPTURED_MIN}
+                max={RECEIPTS_CAPTURED_MAX}
+                placeholder="1"
+              />
+              {!receiptsCapturedOk ? (
+                <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 4 }}>
+                  {t('err_receipts_captured_invalid')}
+                </div>
+              ) : (
+                <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4, lineHeight: 1.35 }}>
+                  {t('receipts_captured_hint')}
+                </div>
+              )}
+            </label>
+          ) : null}
 
           {effectiveIsRoom ? (
             <>

@@ -9,6 +9,7 @@ import {
   validatePaymentSplitsForExpectedTotal,
 } from '@/lib/checkins/roomPaymentSplits';
 import { parseLineItemsFromUnknown, normalizeSubmittedFoodBeerLineItems } from '@/lib/checkins/lineItemsPayload';
+import { parseReceiptsCapturedInput } from '@/lib/checkins/entryCount';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^\d{2}:\d{2}$/;
@@ -24,6 +25,7 @@ export interface AdminPastFoodBeerMultiResult {
   payment_method?: string;
   payment_splits?: RoomPaymentSplit[];
   notes?: string;
+  receipts_captured?: number;
 }
 
 /**
@@ -141,6 +143,11 @@ export function validateAdminPastFoodBeerMulti(
     return { valid: false, error: 'Invalid payment breakdown' };
   }
 
+  const receiptsParsed = parseReceiptsCapturedInput(raw.receipts_captured);
+  if (!receiptsParsed.ok) {
+    return { valid: false, error: 'Enter a whole number from 1 to 100 for receipts captured, or leave blank' };
+  }
+
   return {
     valid: true,
     date: dateStr,
@@ -150,5 +157,6 @@ export function validateAdminPastFoodBeerMulti(
     payment_method: splitResult.splits[0].method,
     payment_splits: splitResult.splits,
     notes,
+    ...(receiptsParsed.value != null ? { receipts_captured: receiptsParsed.value } : {}),
   };
 }

@@ -102,6 +102,24 @@ function trendChartXLabels(
   return data.dates;
 }
 
+/** Chart cards: fixed outer height, header natural size, chart fills the rest without overflowing. */
+const chartCardStyle: CSSProperties = {
+  height: 360,
+  display: 'flex',
+  flexDirection: 'column',
+  overflow: 'hidden',
+  minWidth: 0,
+};
+
+const chartBodyStyle: CSSProperties = {
+  flex: 1,
+  minHeight: 0,
+  minWidth: 0,
+  marginTop: 8,
+  overflow: 'hidden',
+  position: 'relative',
+};
+
 export default function DashboardCharts() {
   const { t, language } = useTranslation();
   const [metrics, setMetrics] = useState<SummaryMetrics>(DEFAULT_METRICS);
@@ -245,12 +263,12 @@ export default function DashboardCharts() {
       <section>
         <h2 style={{ marginBottom: 12 }}>{t('trend_analytics')}</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
-          <div className="card" style={{ height: 320 }}>
+          <div className="card" style={chartCardStyle}>
             <div>
               <h3 style={{ marginBottom: 4 }}>{t('chart_room_checkins_7d')}</h3>
               <div style={{ fontSize: 12, color: '#9ca3af' }}>{t('metric_motel_week_subcaption')}</div>
             </div>
-            <div style={{ height: 220, marginTop: 8 }}>
+            <div style={chartBodyStyle}>
               {showTrendCharts ? (
                 <LineChart
                   labels={trendLabels}
@@ -266,12 +284,12 @@ export default function DashboardCharts() {
               )}
             </div>
           </div>
-          <div className="card" style={{ height: 320 }}>
+          <div className="card" style={chartCardStyle}>
             <div>
               <h3 style={{ marginBottom: 4 }}>{t('chart_revenue_7d')}</h3>
               <div style={{ fontSize: 12, color: '#9ca3af' }}>{t('metric_motel_week_subcaption')}</div>
             </div>
-            <div style={{ height: 220, marginTop: 8 }}>
+            <div style={chartBodyStyle}>
               {showTrendCharts ? (
                 <LineChart
                   labels={trendLabels}
@@ -292,12 +310,12 @@ export default function DashboardCharts() {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, marginTop: 16 }}>
-          <div className="card" style={{ height: 320 }}>
+          <div className="card" style={chartCardStyle}>
             <div>
               <h3 style={{ marginBottom: 4 }}>{t('chart_room_checkins_calendar_month')}</h3>
               <div style={{ fontSize: 12, color: '#9ca3af' }}>{t('chart_room_checkins_calendar_month_sub')}</div>
             </div>
-            <div style={{ height: 220, marginTop: 8 }}>
+            <div style={chartBodyStyle}>
               {showCalendarMonthCharts ? (
                 <LineChart
                   labels={calendarMonthLabels}
@@ -316,12 +334,12 @@ export default function DashboardCharts() {
               )}
             </div>
           </div>
-          <div className="card" style={{ height: 320 }}>
+          <div className="card" style={chartCardStyle}>
             <div>
               <h3 style={{ marginBottom: 4 }}>{t('chart_revenue_calendar_month')}</h3>
               <div style={{ fontSize: 12, color: '#9ca3af' }}>{t('chart_revenue_calendar_month_sub')}</div>
             </div>
-            <div style={{ height: 220, marginTop: 8 }}>
+            <div style={chartBodyStyle}>
               {showCalendarMonthCharts ? (
                 <LineChart
                   labels={calendarMonthLabels}
@@ -348,7 +366,7 @@ export default function DashboardCharts() {
       <section>
         <h2 style={{ marginBottom: 12 }}>{t('detailed_analytics')}</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
-          <div className="card" style={{ height: 360 }}>
+          <div className="card" style={{ ...chartCardStyle, height: 400 }}>
             <div
               style={{
                 display: 'flex',
@@ -356,7 +374,7 @@ export default function DashboardCharts() {
                 alignItems: 'flex-start',
                 gap: 8,
                 flexWrap: 'wrap',
-                marginBottom: 12,
+                flexShrink: 0,
               }}
             >
               <div>
@@ -379,7 +397,7 @@ export default function DashboardCharts() {
                 </button>
               </div>
             </div>
-            <div style={{ height: 280 }}>
+            <div style={chartBodyStyle}>
               {bundleLoading ? (
                 <p style={{ color: '#6b7280', padding: 24 }}>{t('loading')}</p>
               ) : roomUsage && roomUsage.room_numbers.length > 0 ? (
@@ -401,9 +419,9 @@ export default function DashboardCharts() {
               )}
             </div>
           </div>
-          <div className="card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-              <h3>{t('chart_monthly_revenue')}</h3>
+          <div className="card" style={{ ...chartCardStyle, height: 'auto', minHeight: 360, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
+              <h3 style={{ margin: 0 }}>{t('chart_monthly_revenue')}</h3>
               <div style={{ display: 'flex', gap: 8 }}>
                 <select value={month} onChange={(e) => setMonth(parseInt(e.target.value, 10))}>
                   {MONTH_KEY_SUFFIXES.map((suffix, i) => (
@@ -423,7 +441,7 @@ export default function DashboardCharts() {
             </div>
 
             {displayMonthly && (
-              <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
+              <div style={{ marginTop: 16, display: 'grid', gap: 12, minWidth: 0 }}>
                 <div className="card" style={{ background: '#f0fdf4' }}>
                   <strong>
                     {displayMonthly.current_month.name} {displayMonthly.current_month.year}
@@ -459,12 +477,14 @@ export default function DashboardCharts() {
             marginTop: 12,
           }}
         >
-          <div className="card" style={{ minHeight: 360 }}>
-            <h3 style={{ margin: '0 0 12px' }}>{t('chart_checkins_by_staff')}</h3>
-            <p style={{ margin: '0 0 12px', fontSize: 13, color: '#6b7280' }}>
-              {t('chart_checkins_by_staff_help')}
-            </p>
-            <div style={{ height: 280 }}>
+          <div className="card" style={chartCardStyle}>
+            <div style={{ flexShrink: 0 }}>
+              <h3 style={{ margin: '0 0 12px' }}>{t('chart_checkins_by_staff')}</h3>
+              <p style={{ margin: '0 0 4px', fontSize: 13, color: '#6b7280' }}>
+                {t('chart_checkins_by_staff_help')}
+              </p>
+            </div>
+            <div style={chartBodyStyle}>
               {bundleLoading ? (
                 <p style={{ color: '#6b7280', padding: 24 }}>{t('loading')}</p>
               ) : employeeActivity && employeeActivity.check_ins.labels.length > 0 ? (
@@ -480,12 +500,14 @@ export default function DashboardCharts() {
               )}
             </div>
           </div>
-          <div className="card" style={{ minHeight: 360 }}>
-            <h3 style={{ margin: '0 0 12px' }}>{t('chart_cleanups_by_staff')}</h3>
-            <p style={{ margin: '0 0 12px', fontSize: 13, color: '#6b7280' }}>
-              {t('chart_cleanups_by_staff_help')}
-            </p>
-            <div style={{ height: 280 }}>
+          <div className="card" style={chartCardStyle}>
+            <div style={{ flexShrink: 0 }}>
+              <h3 style={{ margin: '0 0 12px' }}>{t('chart_cleanups_by_staff')}</h3>
+              <p style={{ margin: '0 0 4px', fontSize: 13, color: '#6b7280' }}>
+                {t('chart_cleanups_by_staff_help')}
+              </p>
+            </div>
+            <div style={chartBodyStyle}>
               {bundleLoading ? (
                 <p style={{ color: '#6b7280', padding: 24 }}>{t('loading')}</p>
               ) : employeeActivity && employeeActivity.cleanups.labels.length > 0 ? (

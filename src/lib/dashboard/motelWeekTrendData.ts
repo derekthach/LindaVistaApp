@@ -1,6 +1,7 @@
 import { DateTime } from 'luxon';
 import type { CheckIn, DashboardData } from '@/types';
 import { isRoomCheckinRecord } from '@/lib/checkins/roomCheckinRecord';
+import { getEntryCount } from '@/lib/checkins/entryCount';
 import { getMotelBusinessWeekStart } from '@/lib/dates/motelBusinessWeek';
 
 const ZONE = 'America/Puerto_Rico';
@@ -44,7 +45,7 @@ export function deriveMotelWeekTrendComparisonFromCheckins(
     let pRoom = 0;
     let pRev = 0;
     for (const c of byIso.get(isoPrev) ?? []) {
-      if (isRoomCheckinRecord(c)) pRoom += 1;
+      if (isRoomCheckinRecord(c)) pRoom += getEntryCount(c);
       pRev += c.cost;
     }
     checkinsPrev.push(pRoom);
@@ -54,7 +55,7 @@ export function deriveMotelWeekTrendComparisonFromCheckins(
     let cRev = 0;
     if (isoCur <= todayISO) {
       for (const c of byIso.get(isoCur) ?? []) {
-        if (isRoomCheckinRecord(c)) cRoom += 1;
+        if (isRoomCheckinRecord(c)) cRoom += getEntryCount(c);
         cRev += c.cost;
       }
     }
