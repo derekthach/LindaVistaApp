@@ -1,7 +1,6 @@
 import { requireAuth } from '@/server/auth/session';
 import { DateTime } from 'luxon';
 import { listCheckinsByDateRange, listRecentCheckinsByCreatedAt } from '@/lib/server/checkinsRepo';
-import { listRoomTurnoversForBusinessDate } from '@/lib/server/shiftSummariesRepo';
 import AppLayout from '@/components/AppLayout';
 import CheckinsList from '@/components/CheckinsList';
 import LocalizedPageHeading from '@/components/LocalizedPageHeading';
@@ -31,24 +30,16 @@ export default async function CheckinsPage({
   const endISO = resolved.kind === 'all' ? undefined : resolved.endISO;
   const isDay = resolved.kind === 'day';
 
-  const [checkins, turnoversRaw] = await Promise.all([
+  const checkins =
     resolved.kind === 'all'
-      ? listRecentCheckinsByCreatedAt()
-      : listCheckinsByDateRange(startISO, endISO),
-    isDay ? listRoomTurnoversForBusinessDate(resolved.dateISO) : Promise.resolve([]),
-  ]);
+      ? await listRecentCheckinsByCreatedAt()
+      : await listCheckinsByDateRange(startISO, endISO);
 
   const initialDate = isDay ? resolved.dateISO : undefined;
-  const initialTurnovers = turnoversRaw.map((t) => ({
-    id: t.id,
-    checkedOutAt: t.checkedOutAt.toISOString(),
-    cleanedAt: t.cleanedAt.toISOString(),
-  }));
 
   logInfo('checkins.page.complete', {
     mode: resolved.kind,
     docsReturned: checkins.length,
-    turnoverDocsReturned: initialTurnovers.length,
     startISO: startISO ?? null,
     endISO: endISO ?? null,
   });
@@ -65,7 +56,6 @@ export default async function CheckinsPage({
         <CheckinsList
           initialCheckins={checkins}
           initialDate={initialDate}
-          initialTurnovers={initialTurnovers}
           role={session.role}
           viewingAll={resolved.kind === 'all'}
         />

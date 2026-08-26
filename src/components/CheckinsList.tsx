@@ -30,9 +30,7 @@ import {
   foodBeerLineRowsAmountTotal,
 } from '@/lib/checkins/lineItemsFromCheckin';
 import { VIEW_CHECKINS_ALL_HREF } from '@/lib/checkins/viewCheckinsQuery';
-import ShiftSummariesPanel, {
-  type SerializedRoomTurnover,
-} from '@/components/checkins/ShiftSummariesPanel';
+import PaymentMethodTags from '@/components/checkins/PaymentMethodTags';
 
 function TrashIcon() {
   return (
@@ -78,10 +76,28 @@ function centsToCurrency(cents: number): string {
 function renderTotalsBreakdown(totals: SectionTotals, t: (key: TranslationKey) => string) {
   const carCount = totals.carCount ?? 0;
   return (
-    <span style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
-      {t('list_totals_cars')}: {carCount} | {t('list_totals_room')}: {centsToCurrency(totals.roomCents)} |{' '}
-      {t('list_totals_food')}: {centsToCurrency(totals.foodCents)} | {t('list_totals_beer')}:{' '}
-      {centsToCurrency(totals.beerCents)} |{' '}
+    <span
+      style={{
+        display: 'inline-flex',
+        flexWrap: 'wrap',
+        justifyContent: 'flex-end',
+        gap: '2px 10px',
+        fontSize: 12,
+        lineHeight: 1.5,
+      }}
+    >
+      <span>
+        {t('list_totals_cars')}: {carCount}
+      </span>
+      <span>
+        {t('list_totals_room')}: {centsToCurrency(totals.roomCents)}
+      </span>
+      <span>
+        {t('list_totals_food')}: {centsToCurrency(totals.foodCents)}
+      </span>
+      <span>
+        {t('list_totals_beer')}: {centsToCurrency(totals.beerCents)}
+      </span>
       <strong>
         {t('list_totals_label')}: {centsToCurrency(totals.totalCents)}
       </strong>
@@ -343,14 +359,11 @@ function DetailsPanel({ checkin, t }: { checkin: CheckIn; t: (key: TranslationKe
 export default function CheckinsList({
   initialCheckins,
   initialDate,
-  initialTurnovers = [],
   role,
   viewingAll = false,
 }: {
   initialCheckins: CheckIn[];
   initialDate?: string;
-  /** Bounded cleanedAt turnovers for the selected business date (SSR). */
-  initialTurnovers?: SerializedRoomTurnover[];
   role?: UserRole;
   /** Explicit `?all=1` unfiltered newest-created view — not the default View Check-ins path. */
   viewingAll?: boolean;
@@ -371,8 +384,7 @@ export default function CheckinsList({
   const [editStaffOptions, setEditStaffOptions] = useState<string[] | undefined>(undefined);
 
   const isAdmin = role === 'admin';
-  const colCount = 8;
-  const colCountForTotal = colCount - 1;
+  const colCount = 9;
   const toggleExpanded = (checkin: CheckIn) => {
     const id = stableCheckinRowId(checkin);
     setExpandedId((prev) => (prev === id ? null : id));
@@ -739,7 +751,15 @@ export default function CheckinsList({
     const rowId = stableCheckinRowId(checkin);
     const isExpanded = expandedId === rowId;
     return (
-      <td style={{ padding: 8, width: 112, textAlign: 'right', verticalAlign: 'middle' }}>
+      <td
+        style={{
+          padding: '8px 6px',
+          width: '1%',
+          whiteSpace: 'nowrap',
+          textAlign: 'right',
+          verticalAlign: 'middle',
+        }}
+      >
         <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', alignItems: 'center' }}>
           <button
             type="button"
@@ -794,13 +814,28 @@ export default function CheckinsList({
               {sectioned.buckets[idx].map((checkin) => (
                 <Fragment key={stableCheckinRowId(checkin)}>
                   <tr>
-                    <td style={{ padding: 8 }}>{receiptCell(checkin)}</td>
-                    <td style={{ padding: 8 }}>{checkin.date}</td>
-                    <td style={{ padding: 8 }}>{displayTime(checkin.time)}</td>
-                    <td style={{ padding: 8 }}>{typeCell(checkin, t)}</td>
-                    <td style={{ padding: 8 }}>{roomCell(checkin, t)}</td>
-                    <td style={{ padding: 8 }}>{formatStaffDisplayForCheckinsTable(checkin)}</td>
-                    <td style={{ padding: 8 }}>${Number(checkin.cost).toFixed(2)}</td>
+                    <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{receiptCell(checkin)}</td>
+                    <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{checkin.date}</td>
+                    <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{displayTime(checkin.time)}</td>
+                    <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{typeCell(checkin, t)}</td>
+                    <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{roomCell(checkin, t)}</td>
+                    <td
+                      style={{
+                        padding: '8px 6px',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                      title={formatStaffDisplayForCheckinsTable(checkin)}
+                    >
+                      {formatStaffDisplayForCheckinsTable(checkin)}
+                    </td>
+                    <td style={{ padding: '8px 6px', verticalAlign: 'middle' }}>
+                      <PaymentMethodTags checkin={checkin} t={t} />
+                    </td>
+                    <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>
+                      ${Number(checkin.cost).toFixed(2)}
+                    </td>
                     {renderActionsCell(checkin)}
                   </tr>
                   {expandedId === stableCheckinRowId(checkin) && (
@@ -820,30 +855,50 @@ export default function CheckinsList({
                 </Fragment>
               ))}
               <tr style={{ backgroundColor: '#f3f4f6' }}>
-                <td colSpan={colCountForTotal} style={{ padding: 8, textAlign: 'right', fontWeight: 500 }}>
-                  {t('list_section_total')}
-                </td>
-                <td style={{ padding: 8, fontWeight: 500 }}>
-                  {renderTotalsBreakdown(sectioned.sectionTotals[idx], t)}
+                <td colSpan={colCount} style={{ padding: '8px 10px', textAlign: 'right' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      justifyContent: 'flex-end',
+                      alignItems: 'baseline',
+                      gap: '4px 12px',
+                      maxWidth: '100%',
+                    }}
+                  >
+                    <span style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{t('list_section_total')}</span>
+                    {renderTotalsBreakdown(sectioned.sectionTotals[idx], t)}
+                  </div>
                 </td>
               </tr>
             </Fragment>
           ))}
           <tr style={{ backgroundColor: '#e5e7eb', fontWeight: 600 }}>
-            <td colSpan={colCountForTotal} style={{ padding: 8, textAlign: 'right' }}>
-              {t('list_day_total')}
+            <td colSpan={colCount} style={{ padding: '8px 10px', textAlign: 'right' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  justifyContent: 'flex-end',
+                  alignItems: 'baseline',
+                  gap: '4px 12px',
+                  maxWidth: '100%',
+                }}
+              >
+                <span style={{ whiteSpace: 'nowrap' }}>{t('list_day_total')}</span>
+                {renderTotalsBreakdown(sectioned.dayTotals, t)}
+              </div>
             </td>
-            <td style={{ padding: 8 }}>{renderTotalsBreakdown(sectioned.dayTotals, t)}</td>
           </tr>
           <tr style={{ backgroundColor: '#e5e7eb' }}>
-            <td colSpan={colCount} style={{ padding: '2px 8px 10px', textAlign: 'right' }}>
+            <td colSpan={colCount} style={{ padding: '2px 10px 10px', textAlign: 'right' }}>
               <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 4, color: '#4b5563' }}>
                 {t('employee_recent_payment_totals_heading')}
               </div>
               {dayPaymentTotals.length > 0 ? (
                 <div
                   style={{
-                    display: 'inline-flex',
+                    display: 'flex',
                     flexWrap: 'wrap',
                     justifyContent: 'flex-end',
                     gap: '4px 12px',
@@ -851,10 +906,11 @@ export default function CheckinsList({
                     lineHeight: 1.65,
                     fontWeight: 500,
                     color: '#1f2937',
+                    maxWidth: '100%',
                   }}
                 >
                   {dayPaymentTotals.map(({ method, cents }) => (
-                    <span key={method}>
+                    <span key={method} style={{ whiteSpace: 'nowrap' }}>
                       {method === 'unspecified'
                         ? t('employee_recent_payment_method_unspecified')
                         : t(getPaymentMethodTranslationKey(method) as TranslationKey)}
@@ -875,13 +931,28 @@ export default function CheckinsList({
     return visibleCheckins.map((checkin) => (
       <Fragment key={stableCheckinRowId(checkin)}>
         <tr>
-          <td style={{ padding: 8 }}>{receiptCell(checkin)}</td>
-          <td style={{ padding: 8 }}>{checkin.date}</td>
-          <td style={{ padding: 8 }}>{displayTime(checkin.time)}</td>
-          <td style={{ padding: 8 }}>{typeCell(checkin, t)}</td>
-          <td style={{ padding: 8 }}>{roomCell(checkin, t)}</td>
-          <td style={{ padding: 8 }}>{formatStaffDisplayForCheckinsTable(checkin)}</td>
-          <td style={{ padding: 8 }}>${Number(checkin.cost).toFixed(2)}</td>
+          <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{receiptCell(checkin)}</td>
+          <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{checkin.date}</td>
+          <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{displayTime(checkin.time)}</td>
+          <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{typeCell(checkin, t)}</td>
+          <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{roomCell(checkin, t)}</td>
+          <td
+            style={{
+              padding: '8px 6px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+            title={formatStaffDisplayForCheckinsTable(checkin)}
+          >
+            {formatStaffDisplayForCheckinsTable(checkin)}
+          </td>
+          <td style={{ padding: '8px 6px', verticalAlign: 'middle' }}>
+            <PaymentMethodTags checkin={checkin} t={t} />
+          </td>
+          <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>
+            ${Number(checkin.cost).toFixed(2)}
+          </td>
           {renderActionsCell(checkin)}
         </tr>
         {expandedId === stableCheckinRowId(checkin) && (
@@ -942,7 +1013,25 @@ export default function CheckinsList({
       )}
 
       <div className="card" style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <table
+          style={{
+            width: '100%',
+            borderCollapse: 'collapse',
+            tableLayout: 'fixed',
+            fontSize: 14,
+          }}
+        >
+          <colgroup>
+            <col style={{ width: '7%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '8%' }} />
+            <col style={{ width: '7%' }} />
+            <col style={{ width: '9%' }} />
+            <col style={{ width: '18%' }} />
+            <col style={{ width: '16%' }} />
+            <col style={{ width: '8%' }} />
+            <col style={{ width: '104px' }} />
+          </colgroup>
           <thead>
             <tr>
               {(
@@ -953,16 +1042,32 @@ export default function CheckinsList({
                   'table_type',
                   'table_room',
                   'table_staff',
+                  'payment_method',
                   'table_total',
                 ] as const
               ).map((h) => (
-                <th key={h} style={{ textAlign: 'left', padding: 8, borderBottom: '1px solid #e5e7eb' }}>
+                <th
+                  key={h}
+                  style={{
+                    textAlign: 'left',
+                    padding: '8px 6px',
+                    borderBottom: '1px solid #e5e7eb',
+                    fontWeight: 600,
+                    whiteSpace: h === 'payment_method' ? 'normal' : 'nowrap',
+                  }}
+                >
                   {t(h)}
                 </th>
               ))}
               <th
                 key="actions"
-                style={{ width: 112, padding: 8, borderBottom: '1px solid #e5e7eb', textAlign: 'right' }}
+                style={{
+                  width: '1%',
+                  padding: '8px 6px',
+                  borderBottom: '1px solid #e5e7eb',
+                  textAlign: 'right',
+                  whiteSpace: 'nowrap',
+                }}
               >
                 {t('table_actions')}
               </th>
@@ -1032,14 +1137,6 @@ export default function CheckinsList({
           </div>
         )}
       </div>
-      {dateFilterActive && initialDate && (
-        <ShiftSummariesPanel
-          businessDate={initialDate}
-          checkins={initialCheckins}
-          turnovers={initialTurnovers}
-          isAdmin={isAdmin}
-        />
-      )}
       {showPagination && (
         <div
           className="card"

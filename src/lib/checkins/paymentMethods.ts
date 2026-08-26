@@ -1,3 +1,5 @@
+import type { CheckIn, RoomPaymentSplit } from '@/types';
+
 /**
  * Canonical payment method values (stored in DB/Firestore).
  * Use getPaymentMethodLabel() for display; labels are in LanguageToggle.
@@ -40,4 +42,36 @@ export function getPaymentMethodTranslationKey(value: string): PaymentMethodValu
 export function hasStoredPaymentMethodSingle(value: string | undefined | null): boolean {
   const s = value != null ? String(value).trim().toLowerCase() : '';
   return s !== '' && (PAYMENT_METHODS as readonly string[]).includes(s);
+}
+
+/**
+ * Display-layer payment methods for a check-in (methods only, no amounts).
+ * Prefers `payment_splits` when present; otherwise legacy `payment_method`.
+ * Does not invent defaults for missing/invalid historical data.
+ */
+export function getCheckInPaymentMethodValues(
+  checkin: Pick<CheckIn, 'payment_method' | 'payment_splits'>
+): PaymentMethodValue[] {
+  const splits = checkin.payment_splits;
+  if (Array.isArray(splits) && splits.length > 0) {
+    const fromSplits = uniqueValidPaymentMethods(splits);
+    if (fromSplits.length > 0) return fromSplits;
+  }
+  if (hasStoredPaymentMethodSingle(checkin.payment_method)) {
+    return [getPaymentMethodTranslationKey(String(checkin.payment_method))];
+  }
+  return [];
+}
+
+function uniqueValidPaymentMethods(splits: RoomPaymentSplit[]): PaymentMethodValue[] {
+  const seen = new Set<PaymentMethodValue>();
+  const out: PaymentMethodValue[] = [];
+  for (const split of splits) {
+    if (!hasStoredPaymentMethodSingle(split?.method)) continue;
+    const method = getPaymentMethodTranslationKey(String(split.method));
+    if (seen.has(method)) continue;
+    seen.add(method);
+    out.push(method);
+  }
+  return out;
 }

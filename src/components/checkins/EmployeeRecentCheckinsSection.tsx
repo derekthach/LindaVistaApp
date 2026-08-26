@@ -19,6 +19,7 @@ import {
   formatStaffDisplayForCheckinsTable,
 } from '@/lib/checkins/staffDisplay';
 import EmployeeOperationalEditModal from '@/components/checkins/EmployeeOperationalEditModal';
+import PaymentMethodTags from '@/components/checkins/PaymentMethodTags';
 import { formatTime } from '@/lib/utils/formatTime';
 import { paymentMethodTotalsToCents, totalsToCents } from '@/lib/checkins/sectioning';
 import { EMPLOYEE_ENTRY_ACCESS_HOURS } from '@/lib/checkins/employeeAccess';
@@ -292,7 +293,7 @@ export default function EmployeeRecentCheckinsSection({
     router.refresh();
   };
 
-  const colCount = 5;
+  const colCount = 6;
 
   return (
     <>
@@ -326,27 +327,46 @@ export default function EmployeeRecentCheckinsSection({
         )}
         {!loading && checkins.length > 0 && (
           <div className="card" style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+            <table
+              style={{
+                width: '100%',
+                borderCollapse: 'collapse',
+                fontSize: 14,
+                tableLayout: 'fixed',
+              }}
+            >
+              <colgroup>
+                <col style={{ width: '16%' }} />
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '28%' }} />
+                <col style={{ width: '18%' }} />
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '160px' }} />
+              </colgroup>
               <thead>
                 <tr>
-                  <th style={{ textAlign: 'left', padding: 8, borderBottom: '1px solid #e5e7eb' }}>
+                  <th style={{ textAlign: 'left', padding: '8px 6px', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
                     {t('employee_recent_col_time')}
                   </th>
-                  <th style={{ textAlign: 'left', padding: 8, borderBottom: '1px solid #e5e7eb' }}>
+                  <th style={{ textAlign: 'left', padding: '8px 6px', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
                     {t('employee_recent_col_type')}
                   </th>
-                  <th style={{ textAlign: 'left', padding: 8, borderBottom: '1px solid #e5e7eb' }}>
+                  <th style={{ textAlign: 'left', padding: '8px 6px', borderBottom: '1px solid #e5e7eb' }}>
                     {t('employee_recent_col_summary')}
                   </th>
-                  <th style={{ textAlign: 'left', padding: 8, borderBottom: '1px solid #e5e7eb' }}>
+                  <th style={{ textAlign: 'left', padding: '8px 6px', borderBottom: '1px solid #e5e7eb' }}>
+                    {t('payment_method')}
+                  </th>
+                  <th style={{ textAlign: 'left', padding: '8px 6px', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
                     {t('employee_recent_col_total')}
                   </th>
                   <th
                     style={{
                       textAlign: 'right',
-                      padding: 8,
+                      padding: '8px 6px',
                       borderBottom: '1px solid #e5e7eb',
                       whiteSpace: 'nowrap',
+                      width: '1%',
                     }}
                   >
                     {t('employee_recent_col_actions')}
@@ -361,12 +381,40 @@ export default function EmployeeRecentCheckinsSection({
                   return (
                     <Fragment key={rowId}>
                       <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
-                        <td style={{ padding: 8, verticalAlign: 'middle' }}>{orDash(timeShown)}</td>
-                        <td style={{ padding: 8, verticalAlign: 'middle' }}>{typeCell(c, t)}</td>
-                        <td style={{ padding: 8, verticalAlign: 'middle', maxWidth: 220 }}>{summaryCell(c, t)}</td>
-                        <td style={{ padding: 8, verticalAlign: 'middle' }}>{roomTotalDisplay(c)}</td>
-                        <td style={{ padding: 8, textAlign: 'right', verticalAlign: 'middle' }}>
-                          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                        <td style={{ padding: '8px 6px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                          {orDash(timeShown)}
+                        </td>
+                        <td style={{ padding: '8px 6px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                          {typeCell(c, t)}
+                        </td>
+                        <td
+                          style={{
+                            padding: '8px 6px',
+                            verticalAlign: 'middle',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                          title={summaryCell(c, t)}
+                        >
+                          {summaryCell(c, t)}
+                        </td>
+                        <td style={{ padding: '8px 6px', verticalAlign: 'middle' }}>
+                          <PaymentMethodTags checkin={c} t={t} />
+                        </td>
+                        <td style={{ padding: '8px 6px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                          {roomTotalDisplay(c)}
+                        </td>
+                        <td
+                          style={{
+                            padding: '8px 6px',
+                            textAlign: 'right',
+                            verticalAlign: 'middle',
+                            width: '1%',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
                             <Button type="button" variant="ghost" onClick={() => toggleExpanded(c)}>
                               {expanded ? t('employee_recent_action_hide') : t('employee_recent_action_view')}
                             </Button>
