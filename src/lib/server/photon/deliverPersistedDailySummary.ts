@@ -1,6 +1,6 @@
 /**
  * Deliver a persisted Daily Summary to all active management recipients via Photon.
- * Reads only dailySummaries/{date} + shiftSummaries/{date}_* — no raw operational collections.
+ * Reads only dailySummaries/{date} + shiftSummaries/{date}_* — no raw check-ins.
  * Formats the message once; each recipient has independent delivery state.
  */
 
@@ -11,8 +11,13 @@ import { formatDailyManagementMessage } from '@/lib/shifts/formatDailyManagement
 import { formatMissingShiftSummariesError } from '@/lib/shifts';
 import {
   sendDailyManagementMessagesToActiveRecipients,
+  sendManagementMessageToRecipient,
   type DailyManagementDeliveryResult,
 } from '@/lib/server/photon/sendDailyManagementMessage';
+import {
+  isManagementRecipientKey,
+  type ManagementRecipientKey,
+} from '@/lib/server/photon/recipients';
 
 export type DeliverPersistedDailySummaryResult = {
   businessDate: string;
@@ -20,9 +25,10 @@ export type DeliverPersistedDailySummaryResult = {
   deliveries: DailyManagementDeliveryResult[];
 };
 
-export async function deliverPersistedDailySummaryToActiveRecipients(
-  businessDate: string
-): Promise<DeliverPersistedDailySummaryResult> {
+async function loadFormattedPersistedDailySummary(businessDate: string): Promise<{
+  businessDate: string;
+  message: string;
+}> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(businessDate)) {
     throw new HttpError(400, 'INVALID_BUSINESS_DATE');
   }
@@ -44,7 +50,16 @@ export async function deliverPersistedDailySummaryToActiveRecipients(
     });
   }
 
-  const message = formatDailyManagementMessage(dailySummary, summaries);
+  return {
+    businessDate,
+    message: formatDailyManagementMessage(dailySummary, summaries),
+  };
+}
+
+export async function deliverPersistedDailySummaryToActiveRecipients(
+  businessDate: string
+): Promise<DeliverPersistedDailySummaryResult> {
+  const { message } = await loadFormattedPersistedDailySummary(businessDate);
   const deliveries = await sendDailyManagementMessagesToActiveRecipients({
     businessDate,
     message,
@@ -54,6 +69,36 @@ export async function deliverPersistedDailySummaryToActiveRecipients(
     businessDate,
     messagePreviewLength: message.length,
     deliveries,
+  };
+}
+
+/**
+ * Deliver a persisted Daily Summary to one allow-listed recipient only.
+ * Optional `force` re-sends even if that recipient was already marked sent.
+ */
+export async function deliverPersistedDailySummaryToRecipient(
+  businessDate: string,
+  recipientKey: ManagementRecipientKey,
+  options?: { force?: boolean }
+): Promise<DeliverPersistedDailySummaryResult> {
+  if (!isManagementRecipientKey(recipientKey)) {
+    throw new HttpError(400, 'INVALID_PHOTON_TEST_RECIPIENT', {
+      message: 'recipient must be derek or dad',
+    });
+  }
+
+  const { message } = await loadFormattedPersistedDailySummary(businessDate);
+  const delivery = await sendManagementMessageToRecipient({
+    businessDate,
+    message,
+    recipientKey,
+    force: options?.force,
+  });
+
+  return {
+    businessDate,
+    messagePreviewLength: message.length,
+    deliveries: [delivery],
   };
 }
 

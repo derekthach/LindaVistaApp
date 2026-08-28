@@ -52,8 +52,9 @@ export function getShiftManagementMessageHeader(shift: ShiftId): string {
 }
 
 /**
- * Pure formatter: persisted Daily + Shift Summary metrics → management iMessage text.
+ * Pure formatter: persisted Daily + Shift Summary metrics → management iMessage body.
  * Does not recalculate revenue/cars/turnovers.
+ * Does not include Thought of the Day — that is appended per recipient at send time.
  * Human-readable shift hours only (never overnight/day/evening labels).
  *
  * Note: Spectrum is called with a plain string (not markdown()), so this output

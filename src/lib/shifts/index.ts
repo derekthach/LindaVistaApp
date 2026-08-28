@@ -42,6 +42,12 @@ export {
 
 export { formatDailySummary, formatIncompleteDailySummary } from './formatDailySummary';
 export { formatDailyManagementMessage } from './formatDailyManagementMessage';
+export {
+  DAILY_THOUGHT_QUOTES,
+  getDailyQuote,
+  formatThoughtOfTheDaySection,
+  appendThoughtOfTheDay,
+} from './dailyThoughtQuotes';
 
 export {
   getPreviousPuertoRicoBusinessDate,

@@ -68,13 +68,16 @@ export async function getRecipientDeliveryState(
 /**
  * Atomically claim a delivery attempt so concurrent Cron invocations do not double-send.
  * Skips when already sent, or when another attempt is freshly in progress.
+ * When `force` is true, an existing `sent` claim is overridden (manual retest only).
  */
 export async function claimRecipientDelivery(
   businessDate: string,
-  recipientKey: ManagementRecipientKey
+  recipientKey: ManagementRecipientKey,
+  options?: { force?: boolean }
 ): Promise<ClaimDeliveryResult> {
   const db = getAdminDb();
   const ref = dailySummaryRef(db, businessDate);
+  const force = options?.force === true;
 
   return db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
@@ -85,11 +88,11 @@ export async function claimRecipientDelivery(
     const notificationDelivery = (data.notificationDelivery as Record<string, unknown>) ?? {};
     const current = parseDeliveryState(notificationDelivery[recipientKey]);
 
-    if (current?.status === 'sent') {
+    if (current?.status === 'sent' && !force) {
       return { action: 'skip', reason: 'already_sent' };
     }
 
-    if (current?.status === 'sending' && current.claimedAt) {
+    if (current?.status === 'sending' && current.claimedAt && !force) {
       const age = Date.now() - current.claimedAt.getTime();
       if (age >= 0 && age < SENDING_CLAIM_STALE_MS) {
         return { action: 'skip', reason: 'in_progress' };

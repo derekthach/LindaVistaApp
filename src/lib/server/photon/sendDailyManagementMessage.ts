@@ -21,6 +21,7 @@ import {
   withSpectrumApp,
   type PhotonSendResult,
 } from '@/lib/server/photon/sendIMessage';
+import { appendThoughtOfTheDay, getDailyQuote } from '@/lib/shifts/dailyThoughtQuotes';
 
 export type DailyManagementDeliveryStatus = 'sent' | 'failed' | 'skipped';
 
@@ -48,11 +49,12 @@ type ClaimedSend = {
 async function claimManagementRecipient(params: {
   businessDate: string;
   recipientKey: ManagementRecipientKey;
+  force?: boolean;
 }): Promise<
   | { kind: 'send'; slot: ClaimedSend }
   | { kind: 'done'; result: DailyManagementDeliveryResult }
 > {
-  const { businessDate, recipientKey } = params;
+  const { businessDate, recipientKey, force } = params;
   const started = Date.now();
 
   const phone = getActiveRecipientPhone(recipientKey);
@@ -77,7 +79,7 @@ async function claimManagementRecipient(params: {
 
   let claim;
   try {
-    claim = await claimRecipientDelivery(businessDate, recipientKey);
+    claim = await claimRecipientDelivery(businessDate, recipientKey, { force });
   } catch (err) {
     const errMessage = err instanceof Error ? err.message : String(err);
     const result: DailyManagementDeliveryResult = {
@@ -118,6 +120,15 @@ async function claimManagementRecipient(params: {
   return { kind: 'send', slot: { recipientKey, phone, started } };
 }
 
+/**
+ * Build the final per-recipient body: shared Daily Summary + recipient-specific quote.
+ * Quote selection uses businessDate + recipientKey (stable, no phone in selection seed).
+ */
+function messageForRecipient(baseMessage: string, businessDate: string, recipientKey: ManagementRecipientKey): string {
+  const quote = getDailyQuote(businessDate, recipientKey);
+  return appendThoughtOfTheDay(baseMessage, quote);
+}
+
 async function completeClaimedSend(params: {
   businessDate: string;
   message: string;
@@ -126,9 +137,10 @@ async function completeClaimedSend(params: {
 }): Promise<DailyManagementDeliveryResult> {
   const { businessDate, message, slot, sendDm } = params;
   const { recipientKey, phone, started } = slot;
+  const outboundMessage = messageForRecipient(message, businessDate, recipientKey);
 
   try {
-    const sendResult = await sendDm({ phone, message });
+    const sendResult = await sendDm({ phone, message: outboundMessage });
     await markRecipientDeliverySent({
       businessDate,
       recipientKey,
@@ -183,17 +195,21 @@ async function completeClaimedSend(params: {
 }
 
 /**
- * Send the already-formatted management message to one recipient.
+ * Send the already-formatted management message to one recipient
+ * (Thought of the Day is appended for that recipient only).
  * Opens its own Spectrum app (for single-recipient helpers / tests).
  */
 export async function sendManagementMessageToRecipient(params: {
   businessDate: string;
   message: string;
   recipientKey: ManagementRecipientKey;
+  /** Manual retest only — overrides already_sent / in_progress claims. */
+  force?: boolean;
 }): Promise<DailyManagementDeliveryResult> {
   const claimed = await claimManagementRecipient({
     businessDate: params.businessDate,
     recipientKey: params.recipientKey,
+    force: params.force,
   });
   if (claimed.kind === 'done') return claimed.result;
 
@@ -208,9 +224,9 @@ export async function sendManagementMessageToRecipient(params: {
 }
 
 /**
- * Format once upstream; deliver the same message to every active recipient.
+ * Format metrics once upstream; append a recipient-specific Thought of the Day at send time.
  * One Spectrum app per execution when at least one send is needed;
- * independent idempotency per recipient.
+ * independent idempotency (and quote) per recipient.
  */
 export async function sendDailyManagementMessagesToActiveRecipients(params: {
   businessDate: string;

@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireCronAuthorization } from '@/lib/server/cronAuth';
-import { deliverPersistedDailySummaryToActiveRecipients } from '@/lib/server/photon/deliverPersistedDailySummary';
+import {
+  deliverPersistedDailySummaryToActiveRecipients,
+  deliverPersistedDailySummaryToRecipient,
+} from '@/lib/server/photon/deliverPersistedDailySummary';
 import { hasFailedManagementDelivery } from '@/lib/server/photon/sendDailyManagementMessage';
+import { parseManagementRecipientKey } from '@/lib/server/photon/recipients';
 import { HttpError, toErrorResponse } from '@/lib/server/httpError';
 import { logError } from '@/lib/server/log';
 
@@ -10,12 +14,13 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 /**
- * Secure manual delivery of an already-persisted Daily Summary to all active recipients
- * (Derek + Dad). Formats once; independent per-recipient idempotency.
- * Reads dailySummaries/{businessDate} + 3 shiftSummaries docs — no raw check-ins.
+ * Secure manual delivery of an already-persisted Daily Summary.
+ * Default: all active recipients (Derek + Dad).
+ * Optional: ?recipient=derek|dad to send to one recipient only.
+ * Optional: ?force=1 to re-send even if that recipient was already marked sent.
  *
  * Auth: Authorization: Bearer <CRON_SECRET>
- * Query: ?businessDate=YYYY-MM-DD
+ * Query: ?businessDate=YYYY-MM-DD[&recipient=derek|dad][&force=1]
  */
 export async function GET(request: NextRequest) {
   const requestId = crypto.randomUUID();
@@ -28,7 +33,24 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const result = await deliverPersistedDailySummaryToActiveRecipients(businessDate);
+    const recipientRaw = request.nextUrl.searchParams.get('recipient');
+    const recipientKey =
+      recipientRaw == null || recipientRaw.trim() === ''
+        ? null
+        : parseManagementRecipientKey(recipientRaw);
+    if (recipientRaw != null && recipientRaw.trim() !== '' && !recipientKey) {
+      throw new HttpError(400, 'INVALID_PHOTON_TEST_RECIPIENT', {
+        message: 'Query param recipient must be derek or dad',
+      });
+    }
+
+    const forceParam = request.nextUrl.searchParams.get('force')?.trim().toLowerCase() ?? '';
+    const force = forceParam === '1' || forceParam === 'true' || forceParam === 'yes';
+
+    const result = recipientKey
+      ? await deliverPersistedDailySummaryToRecipient(businessDate, recipientKey, { force })
+      : await deliverPersistedDailySummaryToActiveRecipients(businessDate);
+
     const deliveries = result.deliveries.map((d) => ({
       recipientKey: d.recipientKey,
       status: d.status,
@@ -43,6 +65,8 @@ export async function GET(request: NextRequest) {
       success: allOk && !anyFailed,
       businessDate: result.businessDate,
       messagePreviewLength: result.messagePreviewLength,
+      recipientKey: recipientKey ?? 'all',
+      force,
       deliveries,
       requestId,
     });
