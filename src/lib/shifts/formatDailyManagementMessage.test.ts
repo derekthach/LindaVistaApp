@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formatQuoteOfTheDaySection,
+  getQuoteOfTheDay,
+} from '@/lib/motivationalQuotes';
+import {
   formatDailyManagementMessage,
   formatTurnoverCountLabel,
   getShiftManagementMessageHeader,
@@ -59,6 +63,7 @@ describe('formatDailyManagementMessage', () => {
   };
 
   it('matches the management iMessage visual structure (plain text, no Markdown)', () => {
+    const quote = getQuoteOfTheDay(daily.businessDate);
     const message = formatDailyManagementMessage(daily, [
       shift('evening', 0, 0, 1),
       shift('overnight', 863, 18, 0),
@@ -90,8 +95,23 @@ describe('formatDailyManagementMessage', () => {
         '💵 $0 revenue',
         '🚗 0 cars',
         '🧹 1 turnover',
+        '',
+        formatQuoteOfTheDaySection(quote),
       ].join('\n')
     );
+  });
+
+  it('appends Quote of the Day after operational metrics', () => {
+    const message = formatDailyManagementMessage(daily, [
+      shift('overnight', 0, 0, 0),
+      shift('day', 0, 0, 0),
+      shift('evening', 0, 0, 0),
+    ]);
+    const quoteIdx = message.indexOf('💡 Quote of the Day');
+    const revenueIdx = message.indexOf('💰 Revenue:');
+    expect(quoteIdx).toBeGreaterThan(revenueIdx);
+    expect(message).toContain('━━━━━━━━━━━━━━');
+    expect(message.trim().endsWith(getQuoteOfTheDay(daily.businessDate).author)).toBe(true);
   });
 
   it('formats currency with commas and formats the PR business date', () => {
@@ -113,9 +133,9 @@ describe('formatDailyManagementMessage', () => {
     expect(message).toContain('☀️ 8:00 AM – 4:00 PM');
     expect(message).toContain('🌆 4:00 PM – 12:00 AM');
     expect(message).toContain('━━━━━━━━━━━━━━');
+    expect(message).toContain('💡 Quote of the Day');
     expect(message).not.toContain('**');
     expect(message.toLowerCase()).not.toContain('overnight');
-    expect(message.toLowerCase()).not.toMatch(/\bday\b/);
     expect(message.toLowerCase()).not.toContain('evening');
   });
 

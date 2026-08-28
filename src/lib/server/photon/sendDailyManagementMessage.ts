@@ -21,7 +21,6 @@ import {
   withSpectrumApp,
   type PhotonSendResult,
 } from '@/lib/server/photon/sendIMessage';
-import { appendThoughtOfTheDay, getDailyQuote } from '@/lib/shifts/dailyThoughtQuotes';
 
 export type DailyManagementDeliveryStatus = 'sent' | 'failed' | 'skipped';
 
@@ -120,15 +119,6 @@ async function claimManagementRecipient(params: {
   return { kind: 'send', slot: { recipientKey, phone, started } };
 }
 
-/**
- * Build the final per-recipient body: shared Daily Summary + recipient-specific quote.
- * Quote selection uses businessDate + recipientKey (stable, no phone in selection seed).
- */
-function messageForRecipient(baseMessage: string, businessDate: string, recipientKey: ManagementRecipientKey): string {
-  const quote = getDailyQuote(businessDate, recipientKey);
-  return appendThoughtOfTheDay(baseMessage, quote);
-}
-
 async function completeClaimedSend(params: {
   businessDate: string;
   message: string;
@@ -137,10 +127,9 @@ async function completeClaimedSend(params: {
 }): Promise<DailyManagementDeliveryResult> {
   const { businessDate, message, slot, sendDm } = params;
   const { recipientKey, phone, started } = slot;
-  const outboundMessage = messageForRecipient(message, businessDate, recipientKey);
 
   try {
-    const sendResult = await sendDm({ phone, message: outboundMessage });
+    const sendResult = await sendDm({ phone, message });
     await markRecipientDeliverySent({
       businessDate,
       recipientKey,
@@ -196,7 +185,7 @@ async function completeClaimedSend(params: {
 
 /**
  * Send the already-formatted management message to one recipient
- * (Thought of the Day is appended for that recipient only).
+ * (includes Quote of the Day when present in the formatted body).
  * Opens its own Spectrum app (for single-recipient helpers / tests).
  */
 export async function sendManagementMessageToRecipient(params: {
@@ -224,9 +213,9 @@ export async function sendManagementMessageToRecipient(params: {
 }
 
 /**
- * Format metrics once upstream; append a recipient-specific Thought of the Day at send time.
- * One Spectrum app per execution when at least one send is needed;
- * independent idempotency (and quote) per recipient.
+ * Format metrics once upstream (including shared Quote of the Day); deliver the same
+ * message to every active recipient. One Spectrum app per execution when at least one
+ * send is needed; independent idempotency per recipient.
  */
 export async function sendDailyManagementMessagesToActiveRecipients(params: {
   businessDate: string;

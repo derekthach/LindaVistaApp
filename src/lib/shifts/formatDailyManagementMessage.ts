@@ -1,4 +1,8 @@
 import { DateTime } from 'luxon';
+import {
+  formatQuoteOfTheDaySection,
+  getQuoteOfTheDay,
+} from '@/lib/motivationalQuotes';
 import { getShiftDisplayLabel, SHIFT_IDS, SHIFT_TIMEZONE, type ShiftId } from './definitions';
 import type { DailySummary } from './dailyTypes';
 import type { ShiftSummary } from './types';
@@ -52,9 +56,8 @@ export function getShiftManagementMessageHeader(shift: ShiftId): string {
 }
 
 /**
- * Pure formatter: persisted Daily + Shift Summary metrics → management iMessage body.
+ * Pure formatter: persisted Daily + Shift Summary metrics → management iMessage text.
  * Does not recalculate revenue/cars/turnovers.
- * Does not include Thought of the Day — that is appended per recipient at send time.
  * Human-readable shift hours only (never overnight/day/evening labels).
  *
  * Note: Spectrum is called with a plain string (not markdown()), so this output
@@ -85,5 +88,13 @@ export function formatDailyManagementMessage(
     lines.push(`🧹 ${formatTurnoverCountLabel(shift.roomsTurnedOver)}`);
   }
 
-  return lines.join('\n');
+  const body = lines.join('\n');
+
+  // Quote is non-critical — never block the operational Daily Summary.
+  try {
+    const quote = getQuoteOfTheDay(dailySummary.businessDate);
+    return `${body}\n\n${formatQuoteOfTheDaySection(quote)}`;
+  } catch {
+    return body;
+  }
 }
