@@ -43,11 +43,12 @@ export {
 export { formatDailySummary, formatIncompleteDailySummary } from './formatDailySummary';
 export { formatDailyManagementMessage } from './formatDailyManagementMessage';
 export {
-  DAILY_THOUGHT_QUOTES,
-  getDailyQuote,
-  formatThoughtOfTheDaySection,
-  appendThoughtOfTheDay,
-} from './dailyThoughtQuotes';
+  motivationalQuotes,
+  getQuoteOfTheDay,
+  getQuoteIndexForBusinessDate,
+  formatQuoteOfTheDaySection,
+  type MotivationalQuote,
+} from '@/lib/motivationalQuotes';
 
 export {
   getPreviousPuertoRicoBusinessDate,
