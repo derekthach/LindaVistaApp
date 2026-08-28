@@ -782,12 +782,9 @@ export default function CheckinsList({
     const isExpanded = expandedId === rowId;
     return (
       <td
+        className="checkins-col-actions"
         style={{
           padding: '8px 6px',
-          width: '1%',
-          whiteSpace: 'nowrap',
-          textAlign: 'right',
-          verticalAlign: 'middle',
         }}
       >
         <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', alignItems: 'center' }}>
@@ -1005,19 +1002,20 @@ export default function CheckinsList({
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
-      <div className="card" style={{ display: 'grid', gap: 12 }}>
+      <div className="card checkins-filter-card" style={{ display: 'grid', gap: 12 }}>
         <strong>{t('list_filter_by_day')}</strong>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-          <label>
+        <div className="checkins-filter-row" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          <label style={{ flex: '1 1 200px', minWidth: 0 }}>
             <div>{t('date')}</div>
             <input
               type="date"
+              className="checkins-filter-date-input"
               value={selectedDate}
               onChange={handleDateInputChange}
-              style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #e5e7eb' }}
+              style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #e5e7eb', width: '100%' }}
             />
           </label>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div className="checkins-filter-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <Button variant="primary" onClick={handleFilter}>
               {t('list_filter')}
             </Button>
@@ -1042,15 +1040,9 @@ export default function CheckinsList({
         </div>
       )}
 
-      <div className="card" style={{ overflowX: 'auto' }}>
-        <table
-          style={{
-            width: '100%',
-            borderCollapse: 'collapse',
-            tableLayout: 'fixed',
-            fontSize: 14,
-          }}
-        >
+      <div className="card">
+        <div className="checkins-table-scroll">
+        <table className="checkins-table checkins-table--admin">
           <colgroup>
             <col style={{ width: '7%' }} />
             <col style={{ width: '10%' }} />
@@ -1079,26 +1071,13 @@ export default function CheckinsList({
                 <th
                   key={h}
                   style={{
-                    textAlign: 'left',
-                    padding: '8px 6px',
-                    borderBottom: '1px solid #e5e7eb',
-                    fontWeight: 600,
                     whiteSpace: h === 'payment_method' ? 'normal' : 'nowrap',
                   }}
                 >
                   {t(h)}
                 </th>
               ))}
-              <th
-                key="actions"
-                style={{
-                  width: '1%',
-                  padding: '8px 6px',
-                  borderBottom: '1px solid #e5e7eb',
-                  textAlign: 'right',
-                  whiteSpace: 'nowrap',
-                }}
-              >
+              <th key="actions" className="checkins-col-actions" style={{ whiteSpace: 'nowrap' }}>
                 {t('table_actions')}
               </th>
             </tr>
@@ -1115,6 +1094,7 @@ export default function CheckinsList({
             )}
           </tbody>
         </table>
+        </div>
         {!dateFilterActive && initialCheckins.length === 0 && (
           <div style={{ padding: 16 }}>{t('list_no_checkins')}</div>
         )}

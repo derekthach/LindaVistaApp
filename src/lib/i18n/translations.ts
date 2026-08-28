@@ -97,6 +97,8 @@ export const translations = {
     nav_employees: 'Employees',
     nav_view_checkins: 'View Check-Ins',
     nav_add_past_entry: 'Add Past Entry',
+    nav_open_menu: 'Open menu',
+    nav_close_menu: 'Close menu',
     past_entry_page_title: 'Add Past Entry',
     past_entry_page_subtitle:
       'Admin only — add historical room, food & beverage, or beer entries for reports and analytics.',
@@ -601,6 +603,8 @@ export const translations = {
     nav_employees: 'Empleados',
     nav_view_checkins: 'Ver registros',
     nav_add_past_entry: 'Agregar registro pasado',
+    nav_open_menu: 'Abrir menú',
+    nav_close_menu: 'Cerrar menú',
     past_entry_page_title: 'Agregar registro pasado',
     past_entry_page_subtitle:
       'Solo administración — agregue registros históricos de habitación, comida y bebida, o cerveza para reportes y análisis.',

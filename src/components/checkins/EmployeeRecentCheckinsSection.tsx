@@ -326,15 +326,9 @@ export default function EmployeeRecentCheckinsSection({
           </p>
         )}
         {!loading && checkins.length > 0 && (
-          <div className="card" style={{ overflowX: 'auto' }}>
-            <table
-              style={{
-                width: '100%',
-                borderCollapse: 'collapse',
-                fontSize: 14,
-                tableLayout: 'fixed',
-              }}
-            >
+          <div className="card">
+            <div className="checkins-table-scroll">
+            <table className="checkins-table checkins-table--employee">
               <colgroup>
                 <col style={{ width: '16%' }} />
                 <col style={{ width: '10%' }} />
@@ -345,30 +339,22 @@ export default function EmployeeRecentCheckinsSection({
               </colgroup>
               <thead>
                 <tr>
-                  <th style={{ textAlign: 'left', padding: '8px 6px', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
+                  <th style={{ whiteSpace: 'nowrap' }}>
                     {t('employee_recent_col_time')}
                   </th>
-                  <th style={{ textAlign: 'left', padding: '8px 6px', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
+                  <th style={{ whiteSpace: 'nowrap' }}>
                     {t('employee_recent_col_type')}
                   </th>
-                  <th style={{ textAlign: 'left', padding: '8px 6px', borderBottom: '1px solid #e5e7eb' }}>
+                  <th>
                     {t('employee_recent_col_summary')}
                   </th>
-                  <th style={{ textAlign: 'left', padding: '8px 6px', borderBottom: '1px solid #e5e7eb' }}>
+                  <th>
                     {t('payment_method')}
                   </th>
-                  <th style={{ textAlign: 'left', padding: '8px 6px', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
+                  <th style={{ whiteSpace: 'nowrap' }}>
                     {t('employee_recent_col_total')}
                   </th>
-                  <th
-                    style={{
-                      textAlign: 'right',
-                      padding: '8px 6px',
-                      borderBottom: '1px solid #e5e7eb',
-                      whiteSpace: 'nowrap',
-                      width: '1%',
-                    }}
-                  >
+                  <th className="checkins-col-actions" style={{ whiteSpace: 'nowrap' }}>
                     {t('employee_recent_col_actions')}
                   </th>
                 </tr>
@@ -405,15 +391,7 @@ export default function EmployeeRecentCheckinsSection({
                         <td style={{ padding: '8px 6px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
                           {roomTotalDisplay(c)}
                         </td>
-                        <td
-                          style={{
-                            padding: '8px 6px',
-                            textAlign: 'right',
-                            verticalAlign: 'middle',
-                            width: '1%',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
+                        <td className="checkins-col-actions" style={{ padding: '8px 6px', verticalAlign: 'middle' }}>
                           <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
                             <Button type="button" variant="ghost" onClick={() => toggleExpanded(c)}>
                               {expanded ? t('employee_recent_action_hide') : t('employee_recent_action_view')}
@@ -436,6 +414,7 @@ export default function EmployeeRecentCheckinsSection({
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         )}
         {!loading && !displayError && (

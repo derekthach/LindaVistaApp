@@ -16,12 +16,16 @@ export default function Sidebar({
   role,
   employeeGreetingName,
   employeeUsername,
+  mobileOpen = false,
+  onMobileClose,
 }: {
   role: UserRole;
   /** First-party name for “Hi {name}” (employees only). */
   employeeGreetingName?: string;
   /** Login username — when set with role employee, enables employee-only nav (excluding shared guest). */
   employeeUsername?: string;
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
 }) {
   const { t } = useTranslation();
   const pathname = usePathname();
@@ -69,6 +73,7 @@ export default function Sidebar({
 
   return (
     <aside
+      className={`app-sidebar${mobileOpen ? ' app-sidebar--open' : ''}`}
       style={{
         width: 240,
         background: '#166534',
@@ -97,17 +102,21 @@ export default function Sidebar({
 
       <nav style={{ display: 'grid', gap: 8, padding: 16 }}>
         {role === 'admin' && (
-          <Link href="/dashboard" prefetch={false} style={linkStyle('/dashboard')}>
+          <Link href="/dashboard" prefetch={false} style={linkStyle('/dashboard')} onClick={onMobileClose}>
             {t('nav_dashboard')}
           </Link>
         )}
-        <Link href="/checkins/new" style={linkStyle('/checkins/new')}>
+        <Link href="/checkins/new" style={linkStyle('/checkins/new')} onClick={onMobileClose}>
           {t('nav_checkin_checkout')}
         </Link>
         {role === 'employee' &&
           employeeUsername &&
           !isGuestEmployeeUsername(employeeUsername) && (
-            <Link href="/employee/recent-checkins" style={linkStyle('/employee/recent-checkins', true)}>
+            <Link
+              href="/employee/recent-checkins"
+              style={linkStyle('/employee/recent-checkins', true)}
+              onClick={onMobileClose}
+            >
               {t('nav_recent_checkins')}
             </Link>
           )}
@@ -122,6 +131,7 @@ export default function Sidebar({
               gap: 8,
               justifyContent: 'space-between',
             }}
+            onClick={onMobileClose}
             aria-label={
               pendingResetCount > 0
                 ? pendingResetCount === 1
@@ -152,12 +162,17 @@ export default function Sidebar({
           </Link>
         )}
         {role === 'admin' && (
-          <Link href={viewCheckinsHref} prefetch={false} style={linkStyle('/checkins', true)}>
+          <Link href={viewCheckinsHref} prefetch={false} style={linkStyle('/checkins', true)} onClick={onMobileClose}>
             {t('nav_view_checkins')}
           </Link>
         )}
         {role === 'admin' && (
-          <Link href="/admin/add-past-entry" prefetch={false} style={linkStyle('/admin/add-past-entry', true)}>
+          <Link
+            href="/admin/add-past-entry"
+            prefetch={false}
+            style={linkStyle('/admin/add-past-entry', true)}
+            onClick={onMobileClose}
+          >
             {t('nav_add_past_entry')}
           </Link>
         )}

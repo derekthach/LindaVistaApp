@@ -164,4 +164,234 @@ textarea {
   .checkins-day-nav .btn {
     width: 100%;
   }
+
+  .checkins-filter-card .checkins-filter-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .checkins-filter-card .checkins-filter-date-input {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .checkins-filter-card .checkins-filter-actions {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .checkins-filter-card .checkins-filter-actions .btn {
+    width: 100%;
+  }
+}
+
+/* App shell — sidebar collapses on mobile; content uses full viewport width */
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+  padding: 24px;
+}
+
+.app-main-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.app-mobile-nav-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #374151;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.app-mobile-nav-toggle:hover {
+  background: #f9fafb;
+}
+
+.app-sidebar-backdrop {
+  display: none;
+}
+
+.app-sidebar {
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .app-main {
+    padding: 16px;
+    width: 100%;
+  }
+
+  .app-mobile-nav-toggle {
+    display: inline-flex;
+  }
+
+  .app-sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: rgba(0, 0, 0, 0.4);
+  }
+
+  .app-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+  }
+
+  .app-sidebar--open {
+    transform: translateX(0);
+  }
+}
+
+/* Check-ins tables: horizontal scroll inside a dedicated container */
+.checkins-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.checkins-table-scroll .checkins-table {
+  max-width: none;
+}
+
+.checkins-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  table-layout: auto;
+}
+
+.checkins-table--admin {
+  min-width: 880px;
+}
+
+.checkins-table--employee {
+  min-width: 680px;
+}
+
+@media (min-width: 769px) {
+  .checkins-table--admin,
+  .checkins-table--employee {
+    table-layout: fixed;
+    min-width: 0;
+  }
+}
+
+.checkins-table--admin th:nth-child(1),
+.checkins-table--admin td:nth-child(1) {
+  min-width: 64px;
+}
+
+.checkins-table--admin th:nth-child(2),
+.checkins-table--admin td:nth-child(2) {
+  min-width: 90px;
+}
+
+.checkins-table--admin th:nth-child(3),
+.checkins-table--admin td:nth-child(3) {
+  min-width: 72px;
+}
+
+.checkins-table--admin th:nth-child(4),
+.checkins-table--admin td:nth-child(4) {
+  min-width: 72px;
+}
+
+.checkins-table--admin th:nth-child(5),
+.checkins-table--admin td:nth-child(5) {
+  min-width: 80px;
+}
+
+.checkins-table--admin th:nth-child(6),
+.checkins-table--admin td:nth-child(6) {
+  min-width: 120px;
+}
+
+.checkins-table--admin th:nth-child(7),
+.checkins-table--admin td:nth-child(7) {
+  min-width: 130px;
+}
+
+.checkins-table--admin th:nth-child(8),
+.checkins-table--admin td:nth-child(8) {
+  min-width: 72px;
+}
+
+.checkins-table--admin th:nth-child(9),
+.checkins-table--admin td:nth-child(9) {
+  min-width: 116px;
+}
+
+.checkins-table--employee th:nth-child(1),
+.checkins-table--employee td:nth-child(1) {
+  min-width: 130px;
+}
+
+.checkins-table--employee th:nth-child(2),
+.checkins-table--employee td:nth-child(2) {
+  min-width: 80px;
+}
+
+.checkins-table--employee th:nth-child(3),
+.checkins-table--employee td:nth-child(3) {
+  min-width: 140px;
+}
+
+.checkins-table--employee th:nth-child(4),
+.checkins-table--employee td:nth-child(4) {
+  min-width: 130px;
+}
+
+.checkins-table--employee th:nth-child(5),
+.checkins-table--employee td:nth-child(5) {
+  min-width: 72px;
+}
+
+.checkins-table--employee th:nth-child(6),
+.checkins-table--employee td:nth-child(6) {
+  min-width: 200px;
+}
+
+.checkins-table th {
+  text-align: left;
+  padding: 8px 6px;
+  border-bottom: 1px solid #e5e7eb;
+  font-weight: 600;
+}
+
+.checkins-table th.checkins-col-actions {
+  text-align: right;
+}
+
+.checkins-table td.checkins-col-actions {
+  text-align: right;
+  vertical-align: middle;
+  white-space: nowrap;
 }
