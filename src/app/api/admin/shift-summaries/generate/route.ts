@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
       throw new HttpError(400, 'INVALID_BUSINESS_DATE');
     }
 
-    const summaries = await generateAndSaveShiftSummariesForBusinessDate(businessDate);
+    const { summaries } = await generateAndSaveShiftSummariesForBusinessDate(businessDate);
     logInfo('api.admin.shift-summaries.generate.success', {
       requestId,
       businessDate,

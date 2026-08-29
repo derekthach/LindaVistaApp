@@ -7,12 +7,25 @@ import {
 } from './dailyTypes';
 import type { ShiftSummary } from './types';
 import { sumShiftMetrics } from './calculateShiftSummary';
+import type { SectionTotals } from '@/lib/checkins/sectioning';
+
+export type DailySummaryViewCheckinsInput = {
+  checkinCount: number;
+  viewCheckinsSections: [SectionTotals, SectionTotals, SectionTotals];
+  viewCheckinsDayTotals: SectionTotals;
+};
 
 /**
  * Aggregate three Shift Summaries into one Daily Summary.
  * Pure — no React, no Firestore. Does not treat missing shifts as zeros.
+ *
+ * `viewCheckins` must come from `buildSectionedData` on the same day's check-ins so
+ * Admin multi-day overview matches View Check-ins section/day totals exactly.
  */
-export function calculateDailySummary(shiftSummaries: ShiftSummary[]): DailySummaryResult {
+export function calculateDailySummary(
+  shiftSummaries: ShiftSummary[],
+  viewCheckins: DailySummaryViewCheckinsInput
+): DailySummaryResult {
   const byShift = new Map<ShiftId, ShiftSummary>();
   for (const s of shiftSummaries) {
     if (!s || !SHIFT_IDS.includes(s.shift)) continue;
@@ -41,8 +54,14 @@ export function calculateDailySummary(shiftSummaries: ShiftSummary[]): DailySumm
   const summary: DailySummary = {
     businessDate,
     totalRevenue: totals.totalRevenue,
+    roomCents: totals.roomCents,
+    foodCents: totals.foodCents,
+    beerCents: totals.beerCents,
     totalCars: totals.totalCars,
     roomsTurnedOver: totals.roomsTurnedOver,
+    checkinCount: viewCheckins.checkinCount,
+    viewCheckinsSections: viewCheckins.viewCheckinsSections,
+    viewCheckinsDayTotals: viewCheckins.viewCheckinsDayTotals,
     timezone: SHIFT_TIMEZONE,
     status: 'complete',
     shiftSummaryIds: buildShiftSummaryIds(businessDate),

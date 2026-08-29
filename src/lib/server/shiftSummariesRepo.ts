@@ -149,6 +149,9 @@ export async function saveShiftSummary(summary: ShiftSummary): Promise<void> {
       shiftStart: Timestamp.fromDate(summary.shiftStart),
       shiftEnd: Timestamp.fromDate(summary.shiftEnd),
       totalRevenue: summary.totalRevenue,
+      roomCents: summary.roomCents,
+      foodCents: summary.foodCents,
+      beerCents: summary.beerCents,
       totalCars: summary.totalCars,
       roomsTurnedOver: summary.roomsTurnedOver,
       timezone: summary.timezone,
@@ -207,14 +210,14 @@ export async function generateAndSaveShiftSummaryForPeriod(
  */
 export async function generateAndSaveShiftSummariesForBusinessDate(
   businessDate: string
-): Promise<ShiftSummary[]> {
+): Promise<{ summaries: ShiftSummary[]; checkins: CheckIn[] }> {
   const [checkins, turnovers] = await Promise.all([
     listCheckinsByDateRange(businessDate, businessDate),
     listRoomTurnoversForBusinessDate(businessDate),
   ]);
-  const results: ShiftSummary[] = [];
+  const summaries: ShiftSummary[] = [];
   for (const shift of SHIFT_IDS) {
-    results.push(
+    summaries.push(
       await generateAndSaveShiftSummaryForPeriod({
         businessDate,
         shift,
@@ -223,7 +226,7 @@ export async function generateAndSaveShiftSummariesForBusinessDate(
       })
     );
   }
-  return results;
+  return { summaries, checkins };
 }
 
 export async function getPersistedShiftSummary(
@@ -248,6 +251,9 @@ export async function getPersistedShiftSummary(
     shiftStart,
     shiftEnd,
     totalRevenue: Number(data.totalRevenue) || 0,
+    roomCents: Number(data.roomCents) || 0,
+    foodCents: Number(data.foodCents) || 0,
+    beerCents: Number(data.beerCents) || 0,
     totalCars: Number(data.totalCars) || 0,
     roomsTurnedOver: Number(data.roomsTurnedOver) || 0,
     timezone: 'America/Puerto_Rico',

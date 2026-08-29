@@ -13,6 +13,7 @@ import {
   type RoomTurnoverRecord,
   type ShiftSummary,
 } from '@/lib/shifts';
+import { buildSectionedData } from '@/lib/checkins/sectioning';
 
 export type SerializedRoomTurnover = {
   id: string;
@@ -70,7 +71,18 @@ export default function ShiftSummariesPanel({
     return calculateDayShiftSummaries(businessDate, checkins, deserializeTurnovers(turnovers));
   }, [businessDate, checkins, turnovers]);
 
-  const dailyResult = useMemo(() => calculateDailySummary(summaries), [summaries]);
+  const dailyResult = useMemo(() => {
+    const sectioned = buildSectionedData(checkins);
+    return calculateDailySummary(summaries, {
+      checkinCount: checkins.length,
+      viewCheckinsSections: [
+        sectioned.sectionTotals[0]!,
+        sectioned.sectionTotals[1]!,
+        sectioned.sectionTotals[2]!,
+      ],
+      viewCheckinsDayTotals: sectioned.dayTotals,
+    });
+  }, [summaries, checkins]);
 
   const handleGenerateShifts = async () => {
     setIsGeneratingShifts(true);

@@ -175,7 +175,15 @@ export async function createCheckin(
     return { id: newRef.id, receiptNumber, duplicate: false as const };
   });
 
+  if (!result.duplicate) {
+    await refreshSummariesForDates(data.date);
+  }
   return result.receiptNumber;
+}
+
+async function refreshSummariesForDates(...dates: Array<string | null | undefined>): Promise<void> {
+  const { refreshBusinessDaySummaries } = await import('@/lib/server/refreshBusinessDaySummaries');
+  await refreshBusinessDaySummaries(...dates);
 }
 
 export interface CreatePastRoomCheckinInput {
@@ -245,6 +253,7 @@ export async function createPastRoomCheckin(data: CreatePastRoomCheckinInput): P
   }
 
   const ref = await db.collection(CHECKINS_COLLECTION).add(doc);
+  await refreshSummariesForDates(data.check_in_date);
   return ref.id;
 }
 
@@ -304,6 +313,7 @@ export async function createSimpleCheckin(
   if (data.created_by_role) doc.createdByRole = data.created_by_role;
 
   await checkinsRef.add(doc);
+  await refreshSummariesForDates(data.date);
 }
 
 export interface CreatePastFoodBeverageCheckinInput {
@@ -376,12 +386,9 @@ async function createPastFoodOrBeerCheckin(
   }
 
   const ref = await checkinsRef.add(doc);
+  await refreshSummariesForDates(data.date);
   return ref.id;
 }
-
-/**
- * Admin-only historical food & beverage sale.
- */
 export async function createPastFoodBeverageCheckin(data: CreatePastFoodBeverageCheckinInput): Promise<string> {
   return createPastFoodOrBeerCheckin('food', data);
 }
@@ -585,7 +592,12 @@ export async function listRecentCheckinsByCreatedAt(
 export async function deleteCheckinById(id: string): Promise<void> {
   const db = getAdminDb();
   const ref = db.collection(CHECKINS_COLLECTION).doc(id);
+  const snap = await ref.get();
+  const businessDate = snap.exists
+    ? normalizeCheckin(id, snap.data() as Record<string, unknown>).date
+    : undefined;
   await ref.delete();
+  await refreshSummariesForDates(businessDate);
 }
 
 /**
@@ -736,6 +748,7 @@ export async function adminApplyCheckinPatch(
   }
 
   const docKind = normalizeFirestoreCheckInKind(data);
+  const previousBusinessDate = normalizeCheckin(id, data).date;
   const reqTypeRaw = body.checkInType;
   if (reqTypeRaw === 'room' || reqTypeRaw === 'food' || reqTypeRaw === 'beer') {
     if (reqTypeRaw !== docKind) {
@@ -783,6 +796,7 @@ export async function adminApplyCheckinPatch(
       },
       editedBy
     );
+    await refreshSummariesForDates(previousBusinessDate, checkInDate);
     return;
   }
 
@@ -843,6 +857,7 @@ export async function adminApplyCheckinPatch(
     },
     editedBy
   );
+  await refreshSummariesForDates(previousBusinessDate, checkInDate);
 }
 
 export interface UpdateCheckinInput {

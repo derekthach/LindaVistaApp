@@ -18,12 +18,16 @@ function shift(
   turnovers: number,
   businessDate = '2026-08-23'
 ): ShiftSummary {
+  const roomCents = Math.round(revenue * 100);
   return {
     businessDate,
     shift: id,
     shiftStart: new Date('2026-08-23T04:00:00.000Z'),
     shiftEnd: new Date('2026-08-23T12:00:00.000Z'),
     totalRevenue: revenue,
+    roomCents,
+    foodCents: 0,
+    beerCents: 0,
     totalCars: cars,
     roomsTurnedOver: turnovers,
     timezone: 'America/Puerto_Rico',
@@ -48,11 +52,18 @@ describe('getShiftManagementMessageHeader', () => {
 });
 
 describe('formatDailyManagementMessage', () => {
+  const z = { roomCents: 0, foodCents: 0, beerCents: 0, totalCents: 0, carCount: 0 };
   const daily: DailySummary = {
     businessDate: '2026-08-23',
     totalRevenue: 1041,
+    roomCents: 104100,
+    foodCents: 0,
+    beerCents: 0,
     totalCars: 22,
     roomsTurnedOver: 24,
+    checkinCount: 22,
+    viewCheckinsSections: [{ ...z }, { ...z }, { ...z }],
+    viewCheckinsDayTotals: { ...z, totalCents: 104100, carCount: 22 },
     timezone: 'America/Puerto_Rico',
     status: 'complete',
     shiftSummaryIds: {

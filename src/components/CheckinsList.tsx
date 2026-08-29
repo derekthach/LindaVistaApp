@@ -30,7 +30,12 @@ import {
   foodBeerLineRowsSummary,
   foodBeerLineRowsAmountTotal,
 } from '@/lib/checkins/lineItemsFromCheckin';
-import { VIEW_CHECKINS_ALL_HREF } from '@/lib/checkins/viewCheckinsQuery';
+import {
+  validateViewCheckinsDateRange,
+  viewCheckinsDateRangeErrorTranslationKey,
+  type ViewCheckinsDateRangeErrorCode,
+} from '@/lib/checkins/dateRangeFilter';
+import type { ViewCheckinsRangeOverview } from '@/lib/server/viewCheckinsRangeOverview';
 import PaymentMethodTags from '@/components/checkins/PaymentMethodTags';
 
 function TrashIcon() {
@@ -371,12 +376,25 @@ function DetailsPanel({ checkin, t }: { checkin: CheckIn; t: (key: TranslationKe
 
 export default function CheckinsList({
   initialCheckins,
-  initialDate,
+  initialStartDate,
+  initialEndDate,
+  todayISO,
+  rangeError: initialRangeError,
+  rangeOverview = null,
   role,
   viewingAll = false,
 }: {
   initialCheckins: CheckIn[];
-  initialDate?: string;
+  /** Applied Puerto Rico start date (YYYY-MM-DD). */
+  initialStartDate: string;
+  /** Applied Puerto Rico end date (YYYY-MM-DD). */
+  initialEndDate: string;
+  /** Today's calendar date in America/Puerto_Rico (server-computed). */
+  todayISO: string;
+  /** Server-side range validation failure — query was not executed. */
+  rangeError?: ViewCheckinsDateRangeErrorCode;
+  /** Multi-day summary-first overview (persisted daily summaries — no raw rows). */
+  rangeOverview?: ViewCheckinsRangeOverview | null;
   role?: UserRole;
   /** Explicit `?all=1` unfiltered newest-created view — not the default View Check-ins path. */
   viewingAll?: boolean;
@@ -384,7 +402,11 @@ export default function CheckinsList({
   const RECORDS_PER_PAGE = 10;
   const router = useRouter();
   const { t, language } = useLanguage();
-  const [selectedDate, setSelectedDate] = useState(initialDate ?? '');
+  const [selectedStartDate, setSelectedStartDate] = useState(initialStartDate);
+  const [selectedEndDate, setSelectedEndDate] = useState(initialEndDate);
+  const [filterValidationError, setFilterValidationError] = useState<ViewCheckinsDateRangeErrorCode | null>(
+    initialRangeError ?? null
+  );
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingCheckin, setEditingCheckin] = useState<CheckIn | null>(null);
@@ -395,6 +417,11 @@ export default function CheckinsList({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [editStaffOptions, setEditStaffOptions] = useState<string[] | undefined>(undefined);
+  /** Multi-day: only one day of raw records expanded at a time. */
+  const [expandedRecordsDate, setExpandedRecordsDate] = useState<string | null>(null);
+  const [dayRecordsCache, setDayRecordsCache] = useState<Record<string, CheckIn[]>>({});
+  const [loadingRecordsDate, setLoadingRecordsDate] = useState<string | null>(null);
+  const [recordsLoadError, setRecordsLoadError] = useState<string | null>(null);
 
   const isAdmin = role === 'admin';
   const colCount = 9;
@@ -404,12 +431,17 @@ export default function CheckinsList({
   };
 
   useEffect(() => {
-    setSelectedDate(initialDate ?? '');
-  }, [initialDate]);
+    setSelectedStartDate(initialStartDate);
+    setSelectedEndDate(initialEndDate);
+    setFilterValidationError(initialRangeError ?? null);
+    setExpandedRecordsDate(null);
+    setDayRecordsCache({});
+    setRecordsLoadError(null);
+  }, [initialStartDate, initialEndDate, initialRangeError, rangeOverview]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedDate, initialCheckins]);
+  }, [initialStartDate, initialEndDate, initialCheckins, rangeOverview]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -429,67 +461,102 @@ export default function CheckinsList({
     };
   }, [isAdmin]);
 
-  const dateFilterActive = Boolean(initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate));
-  const isSpecificDateSelected = dateFilterActive;
-  const canClearToAllHistory = dateFilterActive || !viewingAll;
+  const dateFilterActive =
+    !viewingAll &&
+    !initialRangeError &&
+    /^\d{4}-\d{2}-\d{2}$/.test(initialStartDate) &&
+    /^\d{4}-\d{2}-\d{2}$/.test(initialEndDate);
+  const isSingleDay = dateFilterActive && initialStartDate === initialEndDate;
+  const isMultiDay = dateFilterActive && initialStartDate !== initialEndDate && rangeOverview != null;
+  const isSpecificDateSelected = isSingleDay;
+  const canClearFilters =
+    viewingAll ||
+    initialStartDate !== todayISO ||
+    initialEndDate !== todayISO ||
+    Boolean(initialRangeError);
 
-  const navigateToUnfilteredRecent = useCallback(() => {
-    setSelectedDate('');
-    router.replace(VIEW_CHECKINS_ALL_HREF);
-  }, [router]);
-
-  const navigateToFilteredDate = useCallback(
-    (iso: string) => {
-      setSelectedDate(iso);
-      router.push(`/checkins?date=${encodeURIComponent(iso)}`);
+  const navigateToDateRange = useCallback(
+    (startISO: string, endISO: string) => {
+      setSelectedStartDate(startISO);
+      setSelectedEndDate(endISO);
+      setFilterValidationError(null);
+      if (startISO === endISO) {
+        router.push(`/checkins?date=${encodeURIComponent(startISO)}`);
+      } else {
+        router.push(
+          `/checkins?start_date=${encodeURIComponent(startISO)}&end_date=${encodeURIComponent(endISO)}`
+        );
+      }
     },
     [router]
   );
 
-  const handleDateInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setSelectedDate(value);
-    if (!value) {
-      navigateToUnfilteredRecent();
-    }
-  };
+  const navigateToToday = useCallback(() => {
+    navigateToDateRange(todayISO, todayISO);
+  }, [navigateToDateRange, todayISO]);
 
   const handleFilter = () => {
-    const date = selectedDate.trim();
-    if (!date) {
-      navigateToUnfilteredRecent();
+    const start = selectedStartDate.trim();
+    const end = selectedEndDate.trim();
+    const validation = validateViewCheckinsDateRange(start, end, todayISO);
+    if (!validation.ok) {
+      setFilterValidationError(validation.code);
       return;
     }
-    navigateToFilteredDate(date);
+    navigateToDateRange(validation.startISO, validation.endISO);
   };
 
   const handleClearFilters = () => {
-    navigateToUnfilteredRecent();
+    setFilterValidationError(null);
+    navigateToToday();
   };
 
   const handleExport = () => {
     const params = new URLSearchParams();
-    const date = dateFilterActive && initialDate ? initialDate : selectedDate.trim();
-    if (date) params.set('date', date);
+    if (dateFilterActive) {
+      if (isSingleDay) {
+        params.set('date', initialStartDate);
+      } else {
+        params.set('start_date', initialStartDate);
+        params.set('end_date', initialEndDate);
+      }
+    } else {
+      const start = selectedStartDate.trim();
+      const end = selectedEndDate.trim();
+      const validation = validateViewCheckinsDateRange(start, end, todayISO);
+      if (!validation.ok) {
+        setFilterValidationError(validation.code);
+        return;
+      }
+      if (validation.startISO === validation.endISO) {
+        params.set('date', validation.startISO);
+      } else {
+        params.set('start_date', validation.startISO);
+        params.set('end_date', validation.endISO);
+      }
+    }
     window.location.href = `/export?${params.toString()}`;
   };
 
   const goToPreviousDay = () => {
-    if (!initialDate) return;
-    const prev = addDaysToISODate(initialDate, -1);
-    if (prev) navigateToFilteredDate(prev);
+    if (!isSingleDay) return;
+    const prev = addDaysToISODate(initialStartDate, -1);
+    if (prev) navigateToDateRange(prev, prev);
   };
 
   const goToNextDay = () => {
-    if (!initialDate || isISODateTodayInPR(initialDate)) return;
-    const next = addDaysToISODate(initialDate, 1);
-    if (next) navigateToFilteredDate(next);
+    if (!isSingleDay || isISODateTodayInPR(initialStartDate)) return;
+    const next = addDaysToISODate(initialStartDate, 1);
+    if (next) navigateToDateRange(next, next);
   };
 
-  const isSelectedDateToday = () => (initialDate ? isISODateTodayInPR(initialDate) : false);
+  const isSelectedDateToday = () => (isSingleDay ? isISODateTodayInPR(initialStartDate) : false);
 
   const formatSelectedDateLabel = () =>
-    initialDate ? formatISODateLabel(initialDate, language) : '';
+    isSingleDay ? formatISODateLabel(initialStartDate, language) : '';
+
+  const formatRangeStartLabel = () => formatISODateLabel(initialStartDate, language);
+  const formatRangeEndLabel = () => formatISODateLabel(initialEndDate, language);
 
   const handleDeleteClick = (checkin: CheckIn) => {
     setErrorMessage(null);
@@ -508,6 +575,7 @@ export default function CheckinsList({
       }
       setPendingDelete(null);
       setSuccessMessage(t('success_checkin_deleted'));
+      if (pendingDelete.date) invalidateDayRecordsCache(pendingDelete.date);
       router.refresh();
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : t('error_delete_failed'));
@@ -742,6 +810,11 @@ export default function CheckinsList({
       setPendingUpdate(null);
       setEditingCheckin(null);
       setSuccessMessage(t('success_record_updated'));
+      const affectedDates = [
+        pendingUpdate.checkin.date,
+        pendingUpdate.draft.check_in_date,
+      ].filter(Boolean) as string[];
+      for (const d of [...new Set(affectedDates)]) invalidateDayRecordsCache(d);
       router.refresh();
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : t('error_update_failed'));
@@ -765,17 +838,66 @@ export default function CheckinsList({
   const showPagination = !isSpecificDateSelected && totalPages > 1;
 
   const sectioned = useMemo(() => {
-    if (!dateFilterActive || initialCheckins.length === 0) return null;
+    if (!isSingleDay || initialCheckins.length === 0) return null;
     return buildSectionedData(initialCheckins);
-  }, [dateFilterActive, initialCheckins]);
+  }, [isSingleDay, initialCheckins]);
 
   /** Same loaded day records as Day total — no extra fetch. */
   const dayPaymentTotals = useMemo(() => {
-    if (!dateFilterActive || initialCheckins.length === 0) return [];
+    if (!isSingleDay || initialCheckins.length === 0) return [];
     return paymentMethodTotalsToCents(initialCheckins);
-  }, [dateFilterActive, initialCheckins]);
+  }, [isSingleDay, initialCheckins]);
 
-  const filteredDayEmpty = dateFilterActive && initialCheckins.length === 0;
+  const filteredDayEmpty = isSingleDay && initialCheckins.length === 0;
+  const validationMessage = filterValidationError
+    ? t(viewCheckinsDateRangeErrorTranslationKey(filterValidationError))
+    : null;
+
+  const invalidateDayRecordsCache = useCallback((businessDate: string) => {
+    setDayRecordsCache((prev) => {
+      if (!(businessDate in prev)) return prev;
+      const next = { ...prev };
+      delete next[businessDate];
+      return next;
+    });
+  }, []);
+
+  const handleViewRecordsToggle = useCallback(
+    async (businessDate: string) => {
+      if (expandedRecordsDate === businessDate) {
+        setExpandedRecordsDate(null);
+        setRecordsLoadError(null);
+        return;
+      }
+
+      setRecordsLoadError(null);
+      setExpandedRecordsDate(businessDate);
+
+      if (dayRecordsCache[businessDate]) return;
+
+      setLoadingRecordsDate(businessDate);
+      try {
+        const res = await fetch(
+          `/api/admin/checkins/day-records?date=${encodeURIComponent(businessDate)}`,
+          { credentials: 'include' }
+        );
+        if (!res.ok) {
+          throw new Error(t('list_records_load_error'));
+        }
+        const data = (await res.json()) as { checkins?: CheckIn[] };
+        setDayRecordsCache((prev) => ({
+          ...prev,
+          [businessDate]: Array.isArray(data.checkins) ? data.checkins : [],
+        }));
+      } catch (err) {
+        setRecordsLoadError(err instanceof Error ? err.message : t('list_records_load_error'));
+        setExpandedRecordsDate(null);
+      } finally {
+        setLoadingRecordsDate(null);
+      }
+    },
+    [dayRecordsCache, expandedRecordsDate, t]
+  );
 
   const renderActionsCell = (checkin: CheckIn) => {
     const rowId = stableCheckinRowId(checkin);
@@ -827,102 +949,119 @@ export default function CheckinsList({
     );
   };
 
-  const tableBody = () => {
-    if (sectioned) {
-      return (
-        <>
-          {SECTION_BUCKET_KEYS.map((labelKey, idx) => (
-            <Fragment key={idx}>
-              <tr style={{ backgroundColor: '#f9fafb' }}>
-                <td colSpan={colCount} style={{ padding: 8, fontWeight: 600 }}>
-                  {t(labelKey)}
-                </td>
-              </tr>
-              {sectioned.buckets[idx].map((checkin) => (
-                <Fragment key={stableCheckinRowId(checkin)}>
-                  <tr>
-                    <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{receiptCell(checkin)}</td>
-                    <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{checkin.date}</td>
-                    <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{displayTime(checkin.time)}</td>
-                    <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{typeCell(checkin, t)}</td>
-                    <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{roomCell(checkin, t)}</td>
-                    <td
-                      style={{
-                        padding: '8px 6px',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                      title={formatStaffDisplayForCheckinsTable(checkin)}
-                    >
-                      {formatStaffDisplayForCheckinsTable(checkin)}
-                    </td>
-                    <td style={{ padding: '8px 6px', verticalAlign: 'middle' }}>
-                      <PaymentMethodTags checkin={checkin} t={t} />
-                    </td>
-                    <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>
-                      ${Number(checkin.cost).toFixed(2)}
-                    </td>
-                    {renderActionsCell(checkin)}
-                  </tr>
-                  {expandedId === stableCheckinRowId(checkin) && (
-                    <tr>
-                      <td colSpan={colCount} style={{ padding: 0, borderBottom: '1px solid #e5e7eb', verticalAlign: 'top' }}>
-                        <div className="checkin-expanded-grid">
-                          <div style={{ minWidth: 0 }}>
-                            <DetailsPanel checkin={checkin} t={t} />
-                          </div>
-                          <div style={{ minWidth: 0 }}>
-                            <EditHistoryPanel checkinId={checkin.id ?? ''} checkin={checkin} />
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              ))}
-              <tr style={{ backgroundColor: '#f3f4f6' }}>
-                <td colSpan={colCount} style={{ padding: '8px 10px', textAlign: 'right' }}>
-                  <div
-                    style={{
-                      display: 'flex',
-                      flexWrap: 'wrap',
-                      justifyContent: 'flex-end',
-                      alignItems: 'baseline',
-                      gap: '4px 12px',
-                      maxWidth: '100%',
-                    }}
-                  >
-                    <span style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{t('list_section_total')}</span>
-                    {renderTotalsBreakdown(sectioned.sectionTotals[idx], t)}
-                  </div>
-                </td>
-              </tr>
-            </Fragment>
-          ))}
-          <tr style={{ backgroundColor: '#e5e7eb', fontWeight: 600 }}>
-            <td colSpan={colCount} style={{ padding: '8px 10px', textAlign: 'right' }}>
-              <div
-                style={{
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  justifyContent: 'flex-end',
-                  alignItems: 'baseline',
-                  gap: '4px 12px',
-                  maxWidth: '100%',
-                }}
-              >
-                <span style={{ whiteSpace: 'nowrap' }}>{t('list_day_total')}</span>
-                {renderTotalsBreakdown(sectioned.dayTotals, t)}
+  const renderCheckinDataRows = (checkin: CheckIn) => (
+    <Fragment key={stableCheckinRowId(checkin)}>
+      <tr>
+        <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{receiptCell(checkin)}</td>
+        <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{checkin.date}</td>
+        <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{displayTime(checkin.time)}</td>
+        <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{typeCell(checkin, t)}</td>
+        <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{roomCell(checkin, t)}</td>
+        <td
+          style={{
+            padding: '8px 6px',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+          title={formatStaffDisplayForCheckinsTable(checkin)}
+        >
+          {formatStaffDisplayForCheckinsTable(checkin)}
+        </td>
+        <td style={{ padding: '8px 6px', verticalAlign: 'middle' }}>
+          <PaymentMethodTags checkin={checkin} t={t} />
+        </td>
+        <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>
+          ${Number(checkin.cost).toFixed(2)}
+        </td>
+        {renderActionsCell(checkin)}
+      </tr>
+      {expandedId === stableCheckinRowId(checkin) && (
+        <tr>
+          <td colSpan={colCount} style={{ padding: 0, borderBottom: '1px solid #e5e7eb', verticalAlign: 'top' }}>
+            <div className="checkin-expanded-grid">
+              <div style={{ minWidth: 0 }}>
+                <DetailsPanel checkin={checkin} t={t} />
               </div>
+              <div style={{ minWidth: 0 }}>
+                <EditHistoryPanel checkinId={checkin.id ?? ''} checkin={checkin} />
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
+    </Fragment>
+  );
+
+  const renderSectionedDayBody = (
+    daySectioned: NonNullable<typeof sectioned>,
+    options: {
+      dateISO?: string;
+      showPaymentTotals?: boolean;
+      paymentTotals?: ReturnType<typeof paymentMethodTotalsToCents>;
+    } = {}
+  ) => {
+    const { dateISO, showPaymentTotals = false, paymentTotals = [] } = options;
+    return (
+      <>
+        {dateISO && (
+          <tr style={{ backgroundColor: '#eef2ff' }}>
+            <td colSpan={colCount} style={{ padding: '10px 8px', fontWeight: 700, fontSize: 15, color: '#1e3a5f' }}>
+              {formatISODateLabel(dateISO, language)}
             </td>
           </tr>
+        )}
+        {SECTION_BUCKET_KEYS.map((labelKey, idx) => (
+          <Fragment key={`${dateISO ?? 'day'}-${idx}`}>
+            <tr style={{ backgroundColor: '#f9fafb' }}>
+              <td colSpan={colCount} style={{ padding: 8, fontWeight: 600 }}>
+                {t(labelKey)}
+              </td>
+            </tr>
+            {daySectioned.buckets[idx].map((checkin) => renderCheckinDataRows(checkin))}
+            <tr style={{ backgroundColor: '#f3f4f6' }}>
+              <td colSpan={colCount} style={{ padding: '8px 10px', textAlign: 'right' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    justifyContent: 'flex-end',
+                    alignItems: 'baseline',
+                    gap: '4px 12px',
+                    maxWidth: '100%',
+                  }}
+                >
+                  <span style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{t('list_section_total')}</span>
+                  {renderTotalsBreakdown(daySectioned.sectionTotals[idx], t)}
+                </div>
+              </td>
+            </tr>
+          </Fragment>
+        ))}
+        <tr style={{ backgroundColor: '#e5e7eb', fontWeight: 600 }}>
+          <td colSpan={colCount} style={{ padding: '8px 10px', textAlign: 'right' }}>
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                justifyContent: 'flex-end',
+                alignItems: 'baseline',
+                gap: '4px 12px',
+                maxWidth: '100%',
+              }}
+            >
+              <span style={{ whiteSpace: 'nowrap' }}>{t('list_day_total')}</span>
+              {renderTotalsBreakdown(daySectioned.dayTotals, t)}
+            </div>
+          </td>
+        </tr>
+        {showPaymentTotals && (
           <tr style={{ backgroundColor: '#e5e7eb' }}>
             <td colSpan={colCount} style={{ padding: '2px 10px 10px', textAlign: 'right' }}>
               <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 4, color: '#4b5563' }}>
                 {t('employee_recent_payment_totals_heading')}
               </div>
-              {dayPaymentTotals.length > 0 ? (
+              {paymentTotals.length > 0 ? (
                 <div
                   style={{
                     display: 'flex',
@@ -936,7 +1075,7 @@ export default function CheckinsList({
                     maxWidth: '100%',
                   }}
                 >
-                  {dayPaymentTotals.map(({ method, cents }) => (
+                  {paymentTotals.map(({ method, cents }) => (
                     <span key={method} style={{ whiteSpace: 'nowrap' }}>
                       {method === 'unspecified'
                         ? t('employee_recent_payment_method_unspecified')
@@ -952,74 +1091,57 @@ export default function CheckinsList({
               )}
             </td>
           </tr>
-        </>
-      );
-    }
-    return visibleCheckins.map((checkin) => (
-      <Fragment key={stableCheckinRowId(checkin)}>
-        <tr>
-          <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{receiptCell(checkin)}</td>
-          <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{checkin.date}</td>
-          <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{displayTime(checkin.time)}</td>
-          <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{typeCell(checkin, t)}</td>
-          <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>{roomCell(checkin, t)}</td>
-          <td
-            style={{
-              padding: '8px 6px',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-            title={formatStaffDisplayForCheckinsTable(checkin)}
-          >
-            {formatStaffDisplayForCheckinsTable(checkin)}
-          </td>
-          <td style={{ padding: '8px 6px', verticalAlign: 'middle' }}>
-            <PaymentMethodTags checkin={checkin} t={t} />
-          </td>
-          <td style={{ padding: '8px 6px', whiteSpace: 'nowrap' }}>
-            ${Number(checkin.cost).toFixed(2)}
-          </td>
-          {renderActionsCell(checkin)}
-        </tr>
-        {expandedId === stableCheckinRowId(checkin) && (
-          <tr>
-            <td colSpan={colCount} style={{ padding: 0, borderBottom: '1px solid #e5e7eb', verticalAlign: 'top' }}>
-              <div className="checkin-expanded-grid">
-                <div style={{ minWidth: 0 }}>
-                  <DetailsPanel checkin={checkin} t={t} />
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <EditHistoryPanel checkinId={checkin.id ?? ''} checkin={checkin} />
-                </div>
-              </div>
-            </td>
-          </tr>
         )}
-      </Fragment>
-    ));
+      </>
+    );
+  };
+
+  const tableBody = () => {
+    if (sectioned) {
+      return renderSectionedDayBody(sectioned, {
+        showPaymentTotals: true,
+        paymentTotals: dayPaymentTotals,
+      });
+    }
+    return visibleCheckins.map((checkin) => renderCheckinDataRows(checkin));
   };
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
-      <div className="card checkins-filter-card" style={{ display: 'grid', gap: 12 }}>
-        <strong>{t('list_filter_by_day')}</strong>
-        <div className="checkins-filter-row" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-          <label style={{ flex: '1 1 200px', minWidth: 0 }}>
-            <div>{t('date')}</div>
+      <div className="card checkins-filter-card">
+        <strong>{t('list_filter_by_date')}</strong>
+        <div className="checkins-filter-row">
+          <label className="checkins-filter-field">
+            <div>{t('list_start_date')}</div>
             <input
               type="date"
               className="checkins-filter-date-input"
-              value={selectedDate}
-              onChange={handleDateInputChange}
-              style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #e5e7eb', width: '100%' }}
+              value={selectedStartDate}
+              max={todayISO}
+              onChange={(e) => {
+                setSelectedStartDate(e.target.value);
+                setFilterValidationError(null);
+              }}
             />
           </label>
-          <div className="checkins-filter-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <label className="checkins-filter-field">
+            <div>{t('list_end_date')}</div>
+            <input
+              type="date"
+              className="checkins-filter-date-input"
+              value={selectedEndDate}
+              max={todayISO}
+              onChange={(e) => {
+                setSelectedEndDate(e.target.value);
+                setFilterValidationError(null);
+              }}
+            />
+          </label>
+          <div className="checkins-filter-actions">
             <Button variant="primary" onClick={handleFilter}>
               {t('list_filter')}
             </Button>
-            <Button variant="ghost" onClick={handleClearFilters} disabled={!canClearToAllHistory}>
+            <Button variant="ghost" onClick={handleClearFilters} disabled={!canClearFilters}>
               {t('list_clear_filters')}
             </Button>
             <Button variant="secondary" onClick={handleExport}>
@@ -1027,6 +1149,11 @@ export default function CheckinsList({
             </Button>
           </div>
         </div>
+        {validationMessage && (
+          <div role="alert" style={{ fontSize: 14, color: '#991b1b' }}>
+            {validationMessage}
+          </div>
+        )}
       </div>
 
       {errorMessage && (
@@ -1040,6 +1167,222 @@ export default function CheckinsList({
         </div>
       )}
 
+      {isMultiDay && rangeOverview && (
+        <>
+          <div
+            className="card"
+            style={{
+              backgroundColor: '#dbeafe',
+              fontWeight: 700,
+              padding: '12px 10px',
+              borderTop: '2px solid #93c5fd',
+              textAlign: 'right',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                justifyContent: 'flex-end',
+                alignItems: 'baseline',
+                gap: '4px 12px',
+                maxWidth: '100%',
+              }}
+            >
+              <span style={{ whiteSpace: 'nowrap', fontSize: 14 }}>{t('list_selected_range_total')}</span>
+              {renderTotalsBreakdown(rangeOverview.rangeTotals, t)}
+            </div>
+          </div>
+
+          <p style={{ margin: 0, textAlign: 'center', fontSize: 15, fontWeight: 500, color: '#374151' }}>
+            {t('list_showing_checkins_for_range', {
+              start: formatRangeStartLabel(),
+              end: formatRangeEndLabel(),
+            })}
+          </p>
+
+          {recordsLoadError && (
+            <div className="card" style={{ padding: 12, backgroundColor: '#fef2f2', color: '#991b1b' }}>
+              {recordsLoadError}
+            </div>
+          )}
+
+          {rangeOverview.days.map((day) => {
+            const isExpanded = expandedRecordsDate === day.businessDate;
+            const isLoading = loadingRecordsDate === day.businessDate;
+            const dayRows = dayRecordsCache[day.businessDate];
+            const daySectioned =
+              isExpanded && dayRows != null ? buildSectionedData(dayRows) : null;
+
+            const recordsToggle = (
+              <div>
+                <Button
+                  variant="secondary"
+                  onClick={() => void handleViewRecordsToggle(day.businessDate)}
+                  disabled={isLoading}
+                >
+                  {isLoading
+                    ? t('list_loading_records')
+                    : isExpanded
+                      ? t('list_hide_records')
+                      : t('list_view_records')}
+                </Button>
+              </div>
+            );
+
+            const renderShiftRecordsTable = (bucketRows: CheckIn[]) => (
+              <div className="checkins-table-scroll">
+                <table className="checkins-table checkins-table--admin">
+                  <colgroup>
+                    <col style={{ width: '7%' }} />
+                    <col style={{ width: '10%' }} />
+                    <col style={{ width: '8%' }} />
+                    <col style={{ width: '7%' }} />
+                    <col style={{ width: '9%' }} />
+                    <col style={{ width: '18%' }} />
+                    <col style={{ width: '16%' }} />
+                    <col style={{ width: '8%' }} />
+                    <col style={{ width: '104px' }} />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      {(
+                        [
+                          'table_receipt',
+                          'date',
+                          'time',
+                          'table_type',
+                          'table_room',
+                          'table_staff',
+                          'payment_method',
+                          'table_total',
+                        ] as const
+                      ).map((h) => (
+                        <th
+                          key={h}
+                          style={{
+                            whiteSpace: h === 'payment_method' ? 'normal' : 'nowrap',
+                          }}
+                        >
+                          {t(h)}
+                        </th>
+                      ))}
+                      <th className="checkins-col-actions" style={{ whiteSpace: 'nowrap' }}>
+                        {t('table_actions')}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>{bucketRows.map((checkin) => renderCheckinDataRows(checkin))}</tbody>
+                </table>
+              </div>
+            );
+
+            return (
+              <div key={day.businessDate} className="card" style={{ display: 'grid', gap: 12 }}>
+                <div
+                  style={{
+                    fontWeight: 700,
+                    fontSize: 16,
+                    color: '#1e3a5f',
+                    paddingBottom: 4,
+                    borderBottom: '1px solid #e5e7eb',
+                  }}
+                >
+                  {formatISODateLabel(day.businessDate, language)}
+                </div>
+
+                {day.empty ? (
+                  <p style={{ margin: 0, color: '#6b7280' }}>{t('list_day_no_checkins')}</p>
+                ) : (
+                  <>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontWeight: 600, marginBottom: 4 }}>{t('list_day_total')}</div>
+                      {renderTotalsBreakdown(day.dayTotals, t)}
+                    </div>
+
+                    {isExpanded ? (
+                      <>
+                        {recordsToggle}
+                        {SECTION_BUCKET_KEYS.map((labelKey, idx) => {
+                          const bucketRows = daySectioned?.buckets[idx] ?? [];
+                          const shiftTotals = day.sectionTotals[idx]!;
+                          return (
+                            <div
+                              key={labelKey}
+                              style={{
+                                display: 'grid',
+                                gap: 8,
+                                padding: '10px 0',
+                                borderTop: '1px solid #e5e7eb',
+                              }}
+                            >
+                              <div style={{ fontWeight: 700, fontSize: 14, color: '#1f2937' }}>
+                                {t(labelKey)}
+                              </div>
+                              {bucketRows.length === 0 ? (
+                                <p style={{ margin: 0, fontSize: 13, color: '#6b7280' }}>
+                                  {t('list_no_records_for_shift')}
+                                </p>
+                              ) : (
+                                renderShiftRecordsTable(bucketRows)
+                              )}
+                              <div
+                                style={{
+                                  padding: '8px 10px',
+                                  backgroundColor: '#f3f4f6',
+                                  borderRadius: 8,
+                                  textAlign: 'right',
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    display: 'flex',
+                                    flexWrap: 'wrap',
+                                    justifyContent: 'flex-end',
+                                    alignItems: 'baseline',
+                                    gap: '4px 12px',
+                                  }}
+                                >
+                                  <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                    {t('list_shift_total')}
+                                  </span>
+                                  {renderTotalsBreakdown(shiftTotals, t)}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </>
+                    ) : (
+                      <>
+                        {SECTION_BUCKET_KEYS.map((labelKey, idx) => (
+                          <div
+                            key={labelKey}
+                            style={{
+                              padding: '8px 10px',
+                              backgroundColor: '#f9fafb',
+                              borderRadius: 8,
+                              textAlign: 'right',
+                            }}
+                          >
+                            <div style={{ fontWeight: 600, marginBottom: 4, textAlign: 'left' }}>
+                              {t(labelKey)}
+                            </div>
+                            {renderTotalsBreakdown(day.sectionTotals[idx]!, t)}
+                          </div>
+                        ))}
+                        {recordsToggle}
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </>
+      )}
+
+      {!isMultiDay && (
       <div className="card">
         <div className="checkins-table-scroll">
         <table className="checkins-table checkins-table--admin">
@@ -1098,7 +1441,7 @@ export default function CheckinsList({
         {!dateFilterActive && initialCheckins.length === 0 && (
           <div style={{ padding: 16 }}>{t('list_no_checkins')}</div>
         )}
-        {dateFilterActive && (
+        {isSingleDay && (
           <div
             style={{
               display: 'flex',
@@ -1147,6 +1490,7 @@ export default function CheckinsList({
           </div>
         )}
       </div>
+      )}
       {showPagination && (
         <div
           className="card"

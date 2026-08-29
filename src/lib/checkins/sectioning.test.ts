@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { buildSectionedData, countsAsCar, paymentMethodTotalsToCents, totalsToCents } from './sectioning';
+import {
+  buildRangeSectionedData,
+  buildSectionedData,
+  countsAsCar,
+  paymentMethodTotalsToCents,
+  sumSectionTotals,
+  totalsToCents,
+} from './sectioning';
 import type { CheckIn } from '@/types';
 
 function baseRoom(over: Partial<CheckIn> = {}): CheckIn {
@@ -307,5 +314,67 @@ describe('paymentMethodTotalsToCents', () => {
       { method: 'ath_mobil', cents: 4000 },
       { method: 'venmo', cents: 500 },
     ]);
+  });
+});
+
+describe('buildRangeSectionedData / Selected Range Total', () => {
+  it('sums day totals exactly across a multi-day range (cents + cars)', () => {
+    const checkins: CheckIn[] = [
+      baseRoom({ date: '2026-08-20', receipt_number: '1', time: '02:00', cost: 10.1 }),
+      baseRoom({ date: '2026-08-20', receipt_number: '2', time: '10:00', cost: 20.2, checkInType: 'food' }),
+      baseRoom({ date: '2026-08-21', receipt_number: '3', time: '03:00', cost: 30.3 }),
+      baseRoom({
+        date: '2026-08-21',
+        receipt_number: '4',
+        time: '17:00',
+        cost: 5.05,
+        checkInType: 'beer',
+      }),
+    ];
+
+    const day20 = buildSectionedData(checkins.filter((c) => c.date === '2026-08-20'));
+    const day21 = buildSectionedData(checkins.filter((c) => c.date === '2026-08-21'));
+    const range = buildRangeSectionedData(checkins, ['2026-08-20', '2026-08-21']);
+
+    expect(range.days).toHaveLength(2);
+    expect(range.days[0]!.sectioned.dayTotals).toEqual(day20.dayTotals);
+    expect(range.days[1]!.sectioned.dayTotals).toEqual(day21.dayTotals);
+
+    const expected = sumSectionTotals([day20.dayTotals, day21.dayTotals]);
+    expect(range.rangeTotals).toEqual(expected);
+    expect(range.rangeTotals).toEqual(totalsToCents(checkins));
+
+    // $10.10 + $20.20 + $30.30 + $5.05 = $65.65
+    expect(range.rangeTotals.totalCents).toBe(6565);
+    expect(range.rangeTotals.roomCents).toBe(4040);
+    expect(range.rangeTotals.foodCents).toBe(2020);
+    expect(range.rangeTotals.beerCents).toBe(505);
+    expect(range.rangeTotals.carCount).toBe(2);
+  });
+
+  it('skips empty calendar dates without changing range totals', () => {
+    const checkins: CheckIn[] = [
+      baseRoom({ date: '2026-08-20', receipt_number: '1', cost: 50 }),
+      baseRoom({ date: '2026-08-22', receipt_number: '2', cost: 25 }),
+    ];
+    const range = buildRangeSectionedData(checkins, ['2026-08-20', '2026-08-21', '2026-08-22']);
+    expect(range.days.map((d) => d.dateISO)).toEqual(['2026-08-20', '2026-08-22']);
+    expect(range.rangeTotals.totalCents).toBe(7500);
+    expect(range.rangeTotals.carCount).toBe(2);
+  });
+
+  it('keeps a single day’s totals unchanged when more days are added to the range', () => {
+    const day20Only: CheckIn[] = [
+      baseRoom({ date: '2026-08-20', receipt_number: '1', time: '09:00', cost: 65 }),
+    ];
+    const withExtraDay: CheckIn[] = [
+      ...day20Only,
+      baseRoom({ date: '2026-08-21', receipt_number: '2', time: '09:00', cost: 40 }),
+    ];
+    const alone = buildSectionedData(day20Only).dayTotals;
+    const inRange = buildRangeSectionedData(withExtraDay, ['2026-08-20', '2026-08-21']).days.find(
+      (d) => d.dateISO === '2026-08-20'
+    )!.sectioned.dayTotals;
+    expect(inRange).toEqual(alone);
   });
 });

@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     const endISO = date ?? endDate;
 
     const checkins = await listCheckinsByDateRange(startISO, endISO);
-    const includeGrouping = Boolean(date);
+    const includeGrouping = Boolean(startISO && endISO && startISO === endISO);
     const exportRows = buildCheckinsExportRows({ checkins, includeGrouping });
     const csvContent = exportRowsToCsv(exportRows);
 

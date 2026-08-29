@@ -6,6 +6,11 @@
  * soft navigation keeps the admin shell mounted.
  */
 
+import {
+  validateViewCheckinsDateRange,
+  type ViewCheckinsDateRangeErrorCode,
+} from '@/lib/checkins/dateRangeFilter';
+
 export type ViewCheckinsSearchParams = {
   date?: string;
   start_date?: string;
@@ -17,7 +22,13 @@ export type ViewCheckinsSearchParams = {
 export type ViewCheckinsResolved =
   | { kind: 'day'; dateISO: string; startISO: string; endISO: string }
   | { kind: 'range'; startISO: string; endISO: string; dateISO?: undefined }
-  | { kind: 'all'; startISO?: undefined; endISO?: undefined; dateISO?: undefined };
+  | { kind: 'all'; startISO?: undefined; endISO?: undefined; dateISO?: undefined }
+  | {
+      kind: 'invalid';
+      startISO: string;
+      endISO: string;
+      error: ViewCheckinsDateRangeErrorCode;
+    };
 
 function isIsoDate(value: string | undefined): value is string {
   return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
@@ -31,25 +42,55 @@ export function wantsAllCheckins(params: ViewCheckinsSearchParams): boolean {
 /** Query string for Admin View Check-Ins with no date filter (newest entered first). */
 export const VIEW_CHECKINS_ALL_HREF = '/checkins?all=1';
 
+function resolveValidatedRange(
+  startISO: string,
+  endISO: string,
+  todayISO: string
+): ViewCheckinsResolved {
+  const validation = validateViewCheckinsDateRange(startISO, endISO, todayISO);
+  if (!validation.ok) {
+    return {
+      kind: 'invalid',
+      startISO,
+      endISO,
+      error: validation.code,
+    };
+  }
+  if (validation.startISO === validation.endISO) {
+    return {
+      kind: 'day',
+      dateISO: validation.startISO,
+      startISO: validation.startISO,
+      endISO: validation.endISO,
+    };
+  }
+  return {
+    kind: 'range',
+    startISO: validation.startISO,
+    endISO: validation.endISO,
+  };
+}
+
 /**
  * Default: Puerto Rico calendar day (in-place, no redirect).
  * Opt-in unfiltered view: `?all=1` — latest records by createdAt (capped; not a full history dump).
  * Explicit `date` or `start_date`+`end_date` preserved for navigation/export flows.
+ * Invalid ranges are returned as `kind: 'invalid'` so the page does not query Firestore.
  */
 export function resolveViewCheckinsQuery(
   params: ViewCheckinsSearchParams,
   todayISO: string
 ): ViewCheckinsResolved {
   if (isIsoDate(params.date)) {
-    return { kind: 'day', dateISO: params.date, startISO: params.date, endISO: params.date };
+    return resolveValidatedRange(params.date, params.date, todayISO);
   }
 
   if (isIsoDate(params.start_date) && isIsoDate(params.end_date)) {
-    return { kind: 'range', startISO: params.start_date, endISO: params.end_date };
+    return resolveValidatedRange(params.start_date, params.end_date, todayISO);
   }
 
   if (isIsoDate(params.start_date) && !params.end_date) {
-    return { kind: 'day', dateISO: params.start_date, startISO: params.start_date, endISO: params.start_date };
+    return resolveValidatedRange(params.start_date, params.start_date, todayISO);
   }
 
   if (wantsAllCheckins(params)) {

@@ -146,6 +146,40 @@ textarea {
   align-items: start;
 }
 
+/* View Check-ins date filter — desktop defaults (horizontal fields). */
+.checkins-filter-card {
+  display: grid;
+  gap: 12px;
+}
+
+.checkins-filter-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.checkins-filter-field {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.checkins-filter-date-input {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  box-sizing: border-box;
+}
+
+.checkins-filter-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 @media (max-width: 640px) {
   .checkin-expanded-grid {
     grid-template-columns: 1fr;
@@ -165,24 +199,35 @@ textarea {
     width: 100%;
   }
 
-  .checkins-filter-card .checkins-filter-row {
+  /* Compact filter — match day-summary card density (~12px gaps). */
+  .checkins-filter-card {
+    gap: 12px;
+  }
+
+  .checkins-filter-row {
     flex-direction: column;
     align-items: stretch;
+    gap: 12px;
   }
 
-  .checkins-filter-card .checkins-filter-date-input {
+  .checkins-filter-field {
+    flex: 0 0 auto;
     width: 100%;
-    max-width: 100%;
-    box-sizing: border-box;
   }
 
-  .checkins-filter-card .checkins-filter-actions {
+  .checkins-filter-field > div {
+    margin-bottom: 6px;
+  }
+
+  .checkins-filter-actions {
+    flex: 0 0 auto;
     flex-direction: column;
     align-items: stretch;
     width: 100%;
+    gap: 10px;
   }
 
-  .checkins-filter-card .checkins-filter-actions .btn {
+  .checkins-filter-actions .btn {
     width: 100%;
   }
 }

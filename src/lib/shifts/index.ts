@@ -32,12 +32,18 @@ export type {
   DailySummaryResult,
   DailySummaryDoc,
 } from './dailyTypes';
-export { dailySummaryDocId, buildShiftSummaryIds, toDailySummaryDoc } from './dailyTypes';
+export {
+  dailySummaryDocId,
+  buildShiftSummaryIds,
+  toDailySummaryDoc,
+  dailySummaryHasViewCheckinsBreakdown,
+} from './dailyTypes';
 
 export {
   calculateDailySummary,
   isCompleteDailySummary,
   formatMissingShiftSummariesError,
+  type DailySummaryViewCheckinsInput,
 } from './calculateDailySummary';
 
 export { formatDailySummary, formatIncompleteDailySummary } from './formatDailySummary';

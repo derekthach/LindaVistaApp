@@ -42,6 +42,48 @@ describe('resolveViewCheckinsQuery', () => {
     });
   });
 
+  it('treats equal start/end as a single day', () => {
+    expect(
+      resolveViewCheckinsQuery({ start_date: '2026-07-01', end_date: '2026-07-01' }, today)
+    ).toEqual({
+      kind: 'day',
+      dateISO: '2026-07-01',
+      startISO: '2026-07-01',
+      endISO: '2026-07-01',
+    });
+  });
+
+  it('rejects ranges longer than 7 days without querying', () => {
+    expect(
+      resolveViewCheckinsQuery({ start_date: '2026-07-01', end_date: '2026-07-08' }, today)
+    ).toEqual({
+      kind: 'invalid',
+      startISO: '2026-07-01',
+      endISO: '2026-07-08',
+      error: 'range_exceeds_max',
+    });
+  });
+
+  it('rejects end before start without querying', () => {
+    expect(
+      resolveViewCheckinsQuery({ start_date: '2026-07-05', end_date: '2026-07-01' }, today)
+    ).toEqual({
+      kind: 'invalid',
+      startISO: '2026-07-05',
+      endISO: '2026-07-01',
+      error: 'end_before_start',
+    });
+  });
+
+  it('rejects future dates without querying', () => {
+    expect(resolveViewCheckinsQuery({ date: '2026-08-15' }, today)).toEqual({
+      kind: 'invalid',
+      startISO: '2026-08-15',
+      endISO: '2026-08-15',
+      error: 'future_date',
+    });
+  });
+
   it('allows explicit all=1 history (not the default)', () => {
     expect(resolveViewCheckinsQuery({ all: '1' }, today)).toEqual({ kind: 'all' });
   });

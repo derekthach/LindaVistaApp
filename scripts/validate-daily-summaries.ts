@@ -13,6 +13,7 @@ import {
   isCompleteDailySummary,
   sumShiftMetrics,
 } from '../src/lib/shifts';
+import { buildSectionedData } from '../src/lib/checkins/sectioning';
 
 const ZONE = 'America/Puerto_Rico';
 
@@ -22,7 +23,16 @@ async function validateDate(businessDate: string) {
     listRoomTurnoversForBusinessDate(businessDate),
   ]);
   const shifts = calculateDayShiftSummaries(businessDate, checkins, turnovers);
-  const daily = calculateDailySummary(shifts);
+  const sectioned = buildSectionedData(checkins);
+  const daily = calculateDailySummary(shifts, {
+    checkinCount: checkins.length,
+    viewCheckinsSections: [
+      sectioned.sectionTotals[0]!,
+      sectioned.sectionTotals[1]!,
+      sectioned.sectionTotals[2]!,
+    ],
+    viewCheckinsDayTotals: sectioned.dayTotals,
+  });
   const summed = sumShiftMetrics(shifts);
 
   console.log(`\n=== ${businessDate} ===`);

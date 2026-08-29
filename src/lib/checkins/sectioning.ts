@@ -220,3 +220,67 @@ export function buildSectionedData(checkins: CheckIn[]): SectionedData {
   };
   return { sorted, buckets, sectionTotals, dayTotals };
 }
+
+const EMPTY_SECTION_TOTALS: SectionTotals = {
+  roomCents: 0,
+  foodCents: 0,
+  beerCents: 0,
+  totalCents: 0,
+  carCount: 0,
+};
+
+/** Sum SectionTotals in integer cents (and cars) — shared by day → range reconciliation. */
+export function sumSectionTotals(parts: SectionTotals[]): SectionTotals {
+  return parts.reduce(
+    (acc, t) => ({
+      roomCents: acc.roomCents + t.roomCents,
+      foodCents: acc.foodCents + t.foodCents,
+      beerCents: acc.beerCents + t.beerCents,
+      totalCents: acc.totalCents + t.totalCents,
+      carCount: acc.carCount + t.carCount,
+    }),
+    { ...EMPTY_SECTION_TOTALS }
+  );
+}
+
+export type DaySectionedData = {
+  dateISO: string;
+  sectioned: SectionedData;
+};
+
+export type RangeSectionedData = {
+  days: DaySectionedData[];
+  rangeTotals: SectionTotals;
+};
+
+/**
+ * Multi-day View Check-ins layout: Date → shift sections via {@link buildSectionedData}.
+ * Empty calendar dates are omitted (range total still equals sum of included day totals).
+ * `datesAscending` must be inclusive business dates in chronological order.
+ */
+export function buildRangeSectionedData(
+  checkins: CheckIn[],
+  datesAscending: string[]
+): RangeSectionedData {
+  const byDate = new Map<string, CheckIn[]>();
+  for (const dateISO of datesAscending) {
+    byDate.set(dateISO, []);
+  }
+  for (const c of checkins) {
+    const dateISO = String(c.date ?? '').trim();
+    const bucket = byDate.get(dateISO);
+    if (bucket) bucket.push(c);
+  }
+
+  const days: DaySectionedData[] = [];
+  for (const dateISO of datesAscending) {
+    const dayCheckins = byDate.get(dateISO) ?? [];
+    if (dayCheckins.length === 0) continue;
+    days.push({ dateISO, sectioned: buildSectionedData(dayCheckins) });
+  }
+
+  return {
+    days,
+    rangeTotals: sumSectionTotals(days.map((d) => d.sectioned.dayTotals)),
+  };
+}

@@ -43,6 +43,9 @@ export function calculateShiftSummary(input: CalculateShiftSummaryInput): ShiftS
     shift,
     shiftStart: window.shiftStart,
     shiftEnd: window.shiftEnd,
+    roomCents: money.roomCents,
+    foodCents: money.foodCents,
+    beerCents: money.beerCents,
     totalRevenue: money.totalCents / 100,
     totalCars: money.carCount,
     roomsTurnedOver,
@@ -91,15 +94,24 @@ export function countRoomsTurnedOverInWindow(
 /** Sum of three shift revenues / cars should match day totals when checkins are the full day set. */
 export function sumShiftMetrics(summaries: ShiftSummary[]): {
   totalRevenue: number;
+  roomCents: number;
+  foodCents: number;
+  beerCents: number;
   totalCars: number;
   roomsTurnedOver: number;
 } {
-  return summaries.reduce(
+  const summed = summaries.reduce(
     (acc, s) => ({
-      totalRevenue: acc.totalRevenue + s.totalRevenue,
+      roomCents: acc.roomCents + (s.roomCents ?? 0),
+      foodCents: acc.foodCents + (s.foodCents ?? 0),
+      beerCents: acc.beerCents + (s.beerCents ?? 0),
       totalCars: acc.totalCars + s.totalCars,
       roomsTurnedOver: acc.roomsTurnedOver + s.roomsTurnedOver,
     }),
-    { totalRevenue: 0, totalCars: 0, roomsTurnedOver: 0 }
+    { roomCents: 0, foodCents: 0, beerCents: 0, totalCars: 0, roomsTurnedOver: 0 }
   );
+  return {
+    ...summed,
+    totalRevenue: (summed.roomCents + summed.foodCents + summed.beerCents) / 100,
+  };
 }

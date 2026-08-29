@@ -2,6 +2,7 @@ import type { CheckIn } from '@/types';
 import {
   SECTION_LABELS,
   buildSectionedData,
+  timeToMinutes,
 } from './sectioning';
 import {
   formatPaymentBreakdownPipe,
@@ -18,6 +19,17 @@ const ROW_TYPE_DATA = 'data';
 const ROW_TYPE_SECTION_HEADER = 'section_header';
 const ROW_TYPE_SECTION_TOTAL = 'section_total';
 const ROW_TYPE_DAY_TOTAL = 'day_total';
+
+function sortCheckinsChronologically(checkins: CheckIn[]): CheckIn[] {
+  return [...checkins].sort((a, b) => {
+    const dateCmp = String(a.date ?? '').localeCompare(String(b.date ?? ''));
+    if (dateCmp !== 0) return dateCmp;
+    const minsA = timeToMinutes(a.time);
+    const minsB = timeToMinutes(b.time);
+    if (minsA !== minsB) return minsA - minsB;
+    return (a.receipt_number || '').localeCompare(b.receipt_number || '');
+  });
+}
 
 function roomCell(checkin: CheckIn): string {
   if (checkin.checkInType === 'food' || checkin.checkInType === 'beer') return '—';
@@ -90,7 +102,7 @@ export function buildCheckinsExportRows(options: {
   const rows: ExportRow[] = [];
 
   if (!includeGrouping || checkins.length === 0) {
-    for (const c of checkins) {
+    for (const c of sortCheckinsChronologically(checkins)) {
       rows.push({
         rowType: ROW_TYPE_DATA,
         receipt_number: c.receipt_number,
