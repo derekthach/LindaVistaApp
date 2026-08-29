@@ -3,7 +3,7 @@ import { SHIFT_TIMEZONE } from '@/lib/shifts/definitions';
 
 /**
  * Previous Puerto Rico calendar date (YYYY-MM-DD).
- * Used by the once-daily ~6 AM Cron: at Aug 24 6 AM PR → businessDate 2026-08-23.
+ * Used by the once-daily 9:00 AM PR Cron: at Aug 24 9:00 AM PR → businessDate 2026-08-23.
  */
 export function getPreviousPuertoRicoBusinessDate(now: DateTime = DateTime.now()): string {
   const pr = now.setZone(SHIFT_TIMEZONE);

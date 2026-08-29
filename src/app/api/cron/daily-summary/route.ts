@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 /**
- * Once-daily Hobby-compatible Cron (~6 AM Puerto Rico / 10:00 UTC).
+ * Once-daily Hobby-compatible Cron (9:00 AM Puerto Rico / 13:00 UTC).
  * Generates previous PR calendar day's Shift Summaries + Daily Summary.
  */
 export async function GET(request: NextRequest) {

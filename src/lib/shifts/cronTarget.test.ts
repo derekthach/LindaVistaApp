@@ -12,16 +12,16 @@ import { requireCronAuthorization } from '@/lib/server/cronAuth';
 import { HttpError } from '@/lib/server/httpError';
 
 describe('getPreviousPuertoRicoBusinessDate', () => {
-  it('at Aug 24 6:00 AM PR → businessDate Aug 23', () => {
+  it('at Aug 24 9:00 AM PR → businessDate Aug 23', () => {
     const now = DateTime.fromObject(
-      { year: 2026, month: 8, day: 24, hour: 6, minute: 0 },
+      { year: 2026, month: 8, day: 24, hour: 9, minute: 0 },
       { zone: SHIFT_TIMEZONE }
     );
     expect(getPreviousPuertoRicoBusinessDate(now)).toBe('2026-08-23');
   });
 
-  it('does not use UTC calendar date alone (10:00 UTC = 6:00 AM PR)', () => {
-    const now = DateTime.fromISO('2026-08-24T10:00:00.000Z');
+  it('does not use UTC calendar date alone (13:00 UTC = 9:00 AM PR)', () => {
+    const now = DateTime.fromISO('2026-08-24T13:00:00.000Z');
     expect(getPreviousPuertoRicoBusinessDate(now)).toBe('2026-08-23');
   });
 });

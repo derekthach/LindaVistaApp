@@ -13,7 +13,7 @@ import {
 } from '@/lib/server/photon/sendDailyManagementMessage';
 
 /**
- * Once-daily Cron orchestration (~6 AM Puerto Rico).
+ * Once-daily Cron orchestration (9:00 AM Puerto Rico / 13:00 UTC).
  * Generates yesterday's three Shift Summaries + Daily Summary,
  * formats the management message once, then delivers independently to each
  * active recipient (Derek + Dad) with per-recipient idempotency.
