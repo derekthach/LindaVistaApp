@@ -176,6 +176,16 @@ export default function Sidebar({
             {t('nav_add_past_entry')}
           </Link>
         )}
+        {role === 'admin' && (
+          <Link
+            href="/admin/pricing"
+            prefetch={false}
+            style={linkStyle('/admin/pricing')}
+            onClick={onMobileClose}
+          >
+            {t('nav_pricing')}
+          </Link>
+        )}
       </nav>
 
       <div style={{ marginTop: 16, padding: 16 }}>

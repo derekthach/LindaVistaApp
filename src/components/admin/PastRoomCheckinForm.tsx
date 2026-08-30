@@ -106,6 +106,25 @@ export default function PastRoomCheckinForm({ staffNames }: { staffNames: string
 
         <div style={fieldGridStyle}>
           <label style={{ margin: 0, minWidth: 0 }}>
+            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>
+              {t('receipts_captured_label')}
+            </div>
+            <input
+              name="receipts_captured"
+              value={receiptsCaptured}
+              onChange={(e) => setReceiptsCaptured(e.target.value.replace(/[^\d]/g, '').slice(0, 3))}
+              style={inputStyle}
+              inputMode="numeric"
+              min={1}
+              max={100}
+              placeholder="1"
+            />
+            <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4, lineHeight: 1.35 }}>
+              {t('receipts_captured_hint')}
+            </div>
+          </label>
+
+          <label style={{ margin: 0, minWidth: 0 }}>
             <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('room_number')}</div>
             <select
               name="room_id"
@@ -133,7 +152,9 @@ export default function PastRoomCheckinForm({ staffNames }: { staffNames: string
               required
             />
           </label>
+        </div>
 
+        <div style={fieldGridStyle}>
           <label style={{ margin: 0, minWidth: 0 }}>
             <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('past_room_field_checkin_time')}</div>
             <input
@@ -145,9 +166,7 @@ export default function PastRoomCheckinForm({ staffNames }: { staffNames: string
               required
             />
           </label>
-        </div>
 
-        <div style={fieldGridStyle}>
           <label style={{ margin: 0, minWidth: 0 }}>
             <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>{t('past_room_field_staff_attribution')}</div>
             <select
@@ -178,25 +197,6 @@ export default function PastRoomCheckinForm({ staffNames }: { staffNames: string
               placeholder=""
               required
             />
-          </label>
-
-          <label style={{ margin: 0, minWidth: 0 }}>
-            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>
-              {t('receipts_captured_label')}
-            </div>
-            <input
-              name="receipts_captured"
-              value={receiptsCaptured}
-              onChange={(e) => setReceiptsCaptured(e.target.value.replace(/[^\d]/g, '').slice(0, 3))}
-              style={inputStyle}
-              inputMode="numeric"
-              min={1}
-              max={100}
-              placeholder="1"
-            />
-            <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4, lineHeight: 1.35 }}>
-              {t('receipts_captured_hint')}
-            </div>
           </label>
         </div>
 
