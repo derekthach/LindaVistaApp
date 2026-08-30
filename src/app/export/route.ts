@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireSessionApi } from '@/server/auth/session';
 import { requireAdmin } from '@/lib/server/requireAdmin';
 import { listCheckinsByDateRange } from '@/lib/server/checkinsRepo';
+import {
+  applyAdvancedFilters,
+  parseAdvancedFiltersFromSearchParams,
+} from '@/lib/checkins/advancedFilters';
 import { logError, logInfo } from '@/lib/server/log';
 import { HttpError, toErrorResponse } from '@/lib/server/httpError';
 import { requireEnvs } from '@/lib/server/requireEnv';
@@ -29,7 +33,17 @@ export async function GET(request: NextRequest) {
     const startISO = date ?? startDate;
     const endISO = date ?? endDate;
 
-    const checkins = await listCheckinsByDateRange(startISO, endISO);
+    const filters = parseAdvancedFiltersFromSearchParams({
+      receipt: searchParams.get('receipt') ?? undefined,
+      shift: searchParams.get('shift') ?? undefined,
+      type: searchParams.get('type') ?? undefined,
+      room: searchParams.get('room') ?? undefined,
+      staff: searchParams.get('staff') ?? undefined,
+      payment: searchParams.get('payment') ?? undefined,
+    });
+
+    const raw = await listCheckinsByDateRange(startISO, endISO);
+    const checkins = applyAdvancedFilters(raw, filters);
     const includeGrouping = Boolean(startISO && endISO && startISO === endISO);
     const exportRows = buildCheckinsExportRows({ checkins, includeGrouping });
     const csvContent = exportRowsToCsv(exportRows);

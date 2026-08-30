@@ -232,6 +232,50 @@ textarea {
   }
 }
 
+/* Advanced Filters modal */
+.advanced-filters-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.4);
+}
+
+.advanced-filters-modal {
+  width: 100%;
+  max-width: 480px;
+  max-height: 92vh;
+  overflow: auto;
+  margin: 0;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.advanced-filters-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  padding-top: 4px;
+  border-top: 1px solid #e5e7eb;
+}
+
+@media (min-width: 641px) {
+  .advanced-filters-overlay {
+    align-items: center;
+    padding: 16px;
+  }
+
+  .advanced-filters-modal {
+    border-radius: 12px;
+    margin: 16px;
+  }
+}
+
 /* App shell — sidebar collapses on mobile; content uses full viewport width */
 .app-shell {
   display: flex;

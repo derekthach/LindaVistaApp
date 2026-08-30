@@ -36,6 +36,32 @@ export async function getMergedCheckoutStaffDisplayNames(): Promise<string[]> {
   return [...names].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
 }
 
+/**
+ * Staff names for View Check-ins Advanced Filters — includes inactive / hidden employees
+ * so historical check-ins remain filterable after soft-remove.
+ */
+export async function getFilterStaffDisplayNames(): Promise<string[]> {
+  const db = getAdminDb();
+  const snap = await db.collection(USERS_COLLECTION).get();
+  const names = new Set<string>(STAFF_MEMBERS);
+  for (const doc of snap.docs) {
+    const data = doc.data() as Omit<FirestoreUserDoc, 'id'>;
+    if (data.role !== 'employee') continue;
+    names.add(formatEmployeeNameSnapshot(data.fullName, data.nickname));
+  }
+  try {
+    for (const u of getUsers()) {
+      if (u.role !== 'employee') continue;
+      if (isGuestEmployeeUsername(u.username)) continue;
+      const label = (u.name?.trim() || u.username.trim());
+      if (label) names.add(label);
+    }
+  } catch {
+    /* ignore */
+  }
+  return [...names].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
+}
+
 export async function buildCheckoutStaffSet(): Promise<Set<string>> {
   const list = await getMergedCheckoutStaffDisplayNames();
   return new Set(list);

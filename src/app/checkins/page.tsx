@@ -2,10 +2,16 @@ import { requireAuth } from '@/server/auth/session';
 import { DateTime } from 'luxon';
 import { listCheckinsByDateRange, listRecentCheckinsByCreatedAt } from '@/lib/server/checkinsRepo';
 import { loadViewCheckinsRangeOverview } from '@/lib/server/viewCheckinsRangeOverview';
+import { loadFilteredViewCheckinsRangeOverview } from '@/lib/server/filteredViewCheckinsOverview';
 import AppLayout from '@/components/AppLayout';
 import CheckinsList from '@/components/CheckinsList';
 import LocalizedPageHeading from '@/components/LocalizedPageHeading';
 import { resolveViewCheckinsQuery } from '@/lib/checkins/viewCheckinsQuery';
+import {
+  applyAdvancedFilters,
+  hasActiveAdvancedFilters,
+  parseAdvancedFiltersFromSearchParams,
+} from '@/lib/checkins/advancedFilters';
 import type { ViewCheckinsDateRangeErrorCode } from '@/lib/checkins/dateRangeFilter';
 import type { ViewCheckinsRangeOverview } from '@/lib/server/viewCheckinsRangeOverview';
 import type { CheckIn } from '@/types';
@@ -18,6 +24,12 @@ interface SearchParams {
   start_date?: string;
   end_date?: string;
   all?: string;
+  receipt?: string;
+  shift?: string;
+  type?: string;
+  room?: string;
+  staff?: string;
+  payment?: string;
 }
 
 export default async function CheckinsPage({
@@ -29,6 +41,8 @@ export default async function CheckinsPage({
   const params = await searchParams;
   const todayISO = DateTime.now().setZone(ZONE).toISODate() ?? '';
   const resolved = resolveViewCheckinsQuery(params, todayISO);
+  const appliedFilters = parseAdvancedFiltersFromSearchParams(params);
+  const advancedActive = hasActiveAdvancedFilters(appliedFilters);
 
   let checkins: CheckIn[] = [];
   let rangeOverview: ViewCheckinsRangeOverview | null = null;
@@ -38,9 +52,21 @@ export default async function CheckinsPage({
   } else if (resolved.kind === 'invalid') {
     checkins = [];
   } else if (resolved.kind === 'day') {
-    checkins = await listCheckinsByDateRange(resolved.startISO, resolved.endISO);
+    const raw = await listCheckinsByDateRange(resolved.startISO, resolved.endISO);
+    checkins = advancedActive ? applyAdvancedFilters(raw, appliedFilters) : raw;
+  } else if (advancedActive) {
+    const filtered = await loadFilteredViewCheckinsRangeOverview(
+      resolved.startISO,
+      resolved.endISO,
+      appliedFilters
+    );
+    rangeOverview = {
+      startISO: filtered.startISO,
+      endISO: filtered.endISO,
+      days: filtered.days,
+      rangeTotals: filtered.rangeTotals,
+    };
   } else {
-    // Multi-day: summary docs only — no raw check-in range fetch.
     rangeOverview = await loadViewCheckinsRangeOverview(resolved.startISO, resolved.endISO);
   }
 
@@ -63,6 +89,7 @@ export default async function CheckinsPage({
     mode: resolved.kind,
     docsReturned: checkins.length,
     overviewDays: rangeOverview?.days.length ?? null,
+    advancedFilters: advancedActive,
     startISO: resolved.kind === 'all' ? null : resolved.startISO,
     endISO: resolved.kind === 'all' ? null : resolved.endISO,
   });
@@ -83,6 +110,7 @@ export default async function CheckinsPage({
           todayISO={todayISO}
           rangeError={rangeError}
           rangeOverview={rangeOverview}
+          appliedFilters={appliedFilters}
           role={session.role}
           viewingAll={resolved.kind === 'all'}
         />

@@ -37,6 +37,15 @@ import {
 } from '@/lib/checkins/dateRangeFilter';
 import type { ViewCheckinsRangeOverview } from '@/lib/server/viewCheckinsRangeOverview';
 import PaymentMethodTags from '@/components/checkins/PaymentMethodTags';
+import AdvancedFiltersModal from '@/components/checkins/AdvancedFiltersModal';
+import {
+  EMPTY_ADVANCED_FILTERS,
+  appendAdvancedFiltersToSearchParams,
+  clearOneAdvancedFilter,
+  countActiveAdvancedFilters,
+  listActiveAdvancedFilterKeys,
+  type AdvancedCheckinsFilters,
+} from '@/lib/checkins/advancedFilters';
 
 function TrashIcon() {
   return (
@@ -381,6 +390,7 @@ export default function CheckinsList({
   todayISO,
   rangeError: initialRangeError,
   rangeOverview = null,
+  appliedFilters = EMPTY_ADVANCED_FILTERS,
   role,
   viewingAll = false,
 }: {
@@ -395,6 +405,8 @@ export default function CheckinsList({
   rangeError?: ViewCheckinsDateRangeErrorCode;
   /** Multi-day summary-first overview (persisted daily summaries — no raw rows). */
   rangeOverview?: ViewCheckinsRangeOverview | null;
+  /** Applied non-date Advanced Filters from the URL. */
+  appliedFilters?: AdvancedCheckinsFilters;
   role?: UserRole;
   /** Explicit `?all=1` unfiltered newest-created view — not the default View Check-ins path. */
   viewingAll?: boolean;
@@ -422,6 +434,7 @@ export default function CheckinsList({
   const [dayRecordsCache, setDayRecordsCache] = useState<Record<string, CheckIn[]>>({});
   const [loadingRecordsDate, setLoadingRecordsDate] = useState<string | null>(null);
   const [recordsLoadError, setRecordsLoadError] = useState<string | null>(null);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const isAdmin = role === 'admin';
   const colCount = 9;
@@ -437,11 +450,11 @@ export default function CheckinsList({
     setExpandedRecordsDate(null);
     setDayRecordsCache({});
     setRecordsLoadError(null);
-  }, [initialStartDate, initialEndDate, initialRangeError, rangeOverview]);
+  }, [initialStartDate, initialEndDate, initialRangeError, rangeOverview, appliedFilters]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [initialStartDate, initialEndDate, initialCheckins, rangeOverview]);
+  }, [initialStartDate, initialEndDate, initialCheckins, rangeOverview, appliedFilters]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -473,26 +486,38 @@ export default function CheckinsList({
     viewingAll ||
     initialStartDate !== todayISO ||
     initialEndDate !== todayISO ||
-    Boolean(initialRangeError);
+    Boolean(initialRangeError) ||
+    countActiveAdvancedFilters(appliedFilters) > 0;
+
+  const activeAdvancedCount = countActiveAdvancedFilters(appliedFilters);
+
+  const buildCheckinsHref = useCallback(
+    (startISO: string, endISO: string, filters: AdvancedCheckinsFilters) => {
+      const params = new URLSearchParams();
+      if (startISO === endISO) {
+        params.set('date', startISO);
+      } else {
+        params.set('start_date', startISO);
+        params.set('end_date', endISO);
+      }
+      appendAdvancedFiltersToSearchParams(params, filters);
+      return `/checkins?${params.toString()}`;
+    },
+    []
+  );
 
   const navigateToDateRange = useCallback(
-    (startISO: string, endISO: string) => {
+    (startISO: string, endISO: string, filters: AdvancedCheckinsFilters = appliedFilters) => {
       setSelectedStartDate(startISO);
       setSelectedEndDate(endISO);
       setFilterValidationError(null);
-      if (startISO === endISO) {
-        router.push(`/checkins?date=${encodeURIComponent(startISO)}`);
-      } else {
-        router.push(
-          `/checkins?start_date=${encodeURIComponent(startISO)}&end_date=${encodeURIComponent(endISO)}`
-        );
-      }
+      router.push(buildCheckinsHref(startISO, endISO, filters));
     },
-    [router]
+    [router, buildCheckinsHref, appliedFilters]
   );
 
   const navigateToToday = useCallback(() => {
-    navigateToDateRange(todayISO, todayISO);
+    navigateToDateRange(todayISO, todayISO, EMPTY_ADVANCED_FILTERS);
   }, [navigateToDateRange, todayISO]);
 
   const handleFilter = () => {
@@ -503,7 +528,7 @@ export default function CheckinsList({
       setFilterValidationError(validation.code);
       return;
     }
-    navigateToDateRange(validation.startISO, validation.endISO);
+    navigateToDateRange(validation.startISO, validation.endISO, appliedFilters);
   };
 
   const handleClearFilters = () => {
@@ -520,6 +545,7 @@ export default function CheckinsList({
         params.set('start_date', initialStartDate);
         params.set('end_date', initialEndDate);
       }
+      appendAdvancedFiltersToSearchParams(params, appliedFilters);
     } else {
       const start = selectedStartDate.trim();
       const end = selectedEndDate.trim();
@@ -534,6 +560,7 @@ export default function CheckinsList({
         params.set('start_date', validation.startISO);
         params.set('end_date', validation.endISO);
       }
+      appendAdvancedFiltersToSearchParams(params, appliedFilters);
     }
     window.location.href = `/export?${params.toString()}`;
   };
@@ -849,6 +876,10 @@ export default function CheckinsList({
   }, [isSingleDay, initialCheckins]);
 
   const filteredDayEmpty = isSingleDay && initialCheckins.length === 0;
+  const filteredNoMatches =
+    activeAdvancedCount > 0 &&
+    ((isSingleDay && initialCheckins.length === 0) ||
+      (isMultiDay && (rangeOverview?.days.every((d) => d.empty) ?? true)));
   const validationMessage = filterValidationError
     ? t(viewCheckinsDateRangeErrorTranslationKey(filterValidationError))
     : null;
@@ -877,10 +908,11 @@ export default function CheckinsList({
 
       setLoadingRecordsDate(businessDate);
       try {
-        const res = await fetch(
-          `/api/admin/checkins/day-records?date=${encodeURIComponent(businessDate)}`,
-          { credentials: 'include' }
-        );
+        const filterParams = new URLSearchParams({ date: businessDate });
+        appendAdvancedFiltersToSearchParams(filterParams, appliedFilters);
+        const res = await fetch(`/api/admin/checkins/day-records?${filterParams.toString()}`, {
+          credentials: 'include',
+        });
         if (!res.ok) {
           throw new Error(t('list_records_load_error'));
         }
@@ -896,7 +928,7 @@ export default function CheckinsList({
         setLoadingRecordsDate(null);
       }
     },
-    [dayRecordsCache, expandedRecordsDate, t]
+    [dayRecordsCache, expandedRecordsDate, t, appliedFilters]
   );
 
   const renderActionsCell = (checkin: CheckIn) => {
@@ -1141,6 +1173,11 @@ export default function CheckinsList({
             <Button variant="primary" onClick={handleFilter}>
               {t('list_filter')}
             </Button>
+            <Button variant="secondary" onClick={() => setAdvancedOpen(true)}>
+              {activeAdvancedCount > 0
+                ? `${t('list_advanced_filters')} • ${activeAdvancedCount}`
+                : t('list_advanced_filters')}
+            </Button>
             <Button variant="ghost" onClick={handleClearFilters} disabled={!canClearFilters}>
               {t('list_clear_filters')}
             </Button>
@@ -1154,7 +1191,69 @@ export default function CheckinsList({
             {validationMessage}
           </div>
         )}
+        {activeAdvancedCount > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {listActiveAdvancedFilterKeys(appliedFilters).map((key) => {
+              let label = '';
+              if (key === 'receipt') label = `${t('table_receipt')}: ${appliedFilters.receipt}`;
+              else if (key === 'shift')
+                label = t(SECTION_BUCKET_KEYS[Number(appliedFilters.shift)] as TranslationKey);
+              else if (key === 'type') {
+                label =
+                  appliedFilters.type === 'food'
+                    ? t('table_type_food')
+                    : appliedFilters.type === 'beer'
+                      ? t('table_type_beer')
+                      : t('table_type_room');
+              } else if (key === 'room') label = `${t('room')} ${appliedFilters.room}`;
+              else if (key === 'staff') label = appliedFilters.staff;
+              else if (key === 'payment')
+                label = t(getPaymentMethodTranslationKey(appliedFilters.payment) as TranslationKey);
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => {
+                    navigateToDateRange(
+                      initialStartDate,
+                      initialEndDate,
+                      clearOneAdvancedFilter(appliedFilters, key)
+                    );
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '4px 10px',
+                    borderRadius: 999,
+                    border: '1px solid #d1d5db',
+                    background: '#f9fafb',
+                    fontSize: 13,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <span>{label}</span>
+                  <span aria-hidden style={{ fontWeight: 700 }}>
+                    ×
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
+
+      <AdvancedFiltersModal
+        open={advancedOpen}
+        onOpenChange={setAdvancedOpen}
+        todayISO={todayISO}
+        startDate={selectedStartDate}
+        endDate={selectedEndDate}
+        appliedFilters={appliedFilters}
+        onApply={({ startDate, endDate, filters }) => {
+          navigateToDateRange(startDate, endDate, filters);
+        }}
+      />
 
       {errorMessage && (
         <div className="card" style={{ padding: 12, backgroundColor: '#fef2f2', color: '#991b1b' }}>
@@ -1167,7 +1266,13 @@ export default function CheckinsList({
         </div>
       )}
 
-      {isMultiDay && rangeOverview && (
+      {filteredNoMatches && (
+        <div className="card" style={{ padding: 16, textAlign: 'center', color: '#6b7280' }}>
+          {t('list_no_checkins_match_filters')}
+        </div>
+      )}
+
+      {isMultiDay && rangeOverview && !filteredNoMatches && (
         <>
           <div
             className="card"
@@ -1429,7 +1534,9 @@ export default function CheckinsList({
             {filteredDayEmpty ? (
               <tr>
                 <td colSpan={colCount} style={{ padding: 16, textAlign: 'center', color: '#6b7280' }}>
-                  {t('list_no_checkins_for_day')}
+                  {activeAdvancedCount > 0
+                    ? t('list_no_checkins_match_filters')
+                    : t('list_no_checkins_for_day')}
                 </td>
               </tr>
             ) : (
